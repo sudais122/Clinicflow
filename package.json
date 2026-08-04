@@ -1,0 +1,17 @@
+{
+  "name": "fullstack-template",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Full Stack MERN Template",
+  "scripts": {
+    "format": "prettier --write .",
+    "check-format": "prettier --check ."
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^10.8.0",
+    "prettier": "^3.9.6"
+  }
+}
