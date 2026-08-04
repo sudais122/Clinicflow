@@ -1,2 +1,22 @@
-tempCodeRunnerFile.js
-Backend/index.js
+# Dependencies
+node_modules/
+
+# Environment
+.env
+
+# Build output
+dist/
+build/
+
+# Coverage
+coverage/
+
+# Logs
+logs/
+*.log
+
+# Temporary uploads
+public/temp/
+
+# OS files
+.DS_Store
