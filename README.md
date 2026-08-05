@@ -1,6 +1,6 @@
 # ClinicFlow
 
-PatientFlow is a real-time clinic queue and appointment management SaaS that helps clinics reduce patient waiting time through live queue tracking and appointment scheduling.
+ClinicFlow is a real-time clinic queue and appointment management SaaS that helps clinics reduce patient waiting time through live queue tracking and appointment scheduling.
 
 ## Features
 
