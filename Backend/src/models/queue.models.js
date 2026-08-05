@@ -22,7 +22,11 @@ const queueSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
-
+    yourtoken:{
+      type: Number,
+      default:0,
+      required: true,
+    },
     isActive: {
       type: Boolean,
       default: true,
