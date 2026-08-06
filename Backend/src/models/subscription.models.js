@@ -8,7 +8,11 @@ const subscriptionSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-
+    subscriptionId: {
+      type: String,
+      unique: true,
+      required: true
+    },
     plan: {
       type: String,
       enum: ["basic"],

@@ -23,7 +23,7 @@ app.use(cookieParser());
 app.use("/auth", authroutes);
 app.use("/appointments", appointmentroutes);
 
-// Global error handler (must stay after routes)
+// Global error handler 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
   return res.status(statusCode).json({

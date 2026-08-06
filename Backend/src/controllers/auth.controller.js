@@ -6,6 +6,11 @@ import { Doctor } from "../models/doctor.models.js";
 import { Patient } from "../models/patient.models.js";
 import { Subscription } from "../models/subscription.models.js";
 import { Queue } from "../models/queue.models.js";
+import { Counter } from "../models/counter.models.js";
+
+import { generateDoctorId } from "../utils/id's/doctor.js";
+import { generatePatientId } from "../utils/id's/Patient.js";
+import { generateSubscriptionId } from "../utils/id's/subscription.js";
 
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
@@ -65,11 +70,11 @@ const registerDoctor = async (req, res, next) => {
 
     // Email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
+    if (!emailRegex.test(email.trim())) {
       throw new ApiError(400, "Invalid email format");
     }
 
-    // Phone — must be 11 digits and start with 03
+    // Phone 
     if (!/^03\d{9}$/.test(phone)) {
       throw new ApiError(400, "Phone must be 11 digits and start with 03");
     }
@@ -80,7 +85,7 @@ const registerDoctor = async (req, res, next) => {
     if (!passwordRegex.test(password)) {
       throw new ApiError(
         400,
-        "Password must be at least 8 characters and contain uppercase, lowercase, number and special character"
+        "Password must be at least 8 characters and contain uppercase, lowercase, number and special character",
       );
     }
 
@@ -88,7 +93,7 @@ const registerDoctor = async (req, res, next) => {
     if (clinicName.length < 3 || clinicName.length > 100) {
       throw new ApiError(
         400,
-        "Clinic name must be between 3 and 100 characters"
+        "Clinic name must be between 3 and 100 characters",
       );
     }
 
@@ -96,7 +101,7 @@ const registerDoctor = async (req, res, next) => {
     if (clinicAddress.length < 10 || clinicAddress.length > 200) {
       throw new ApiError(
         400,
-        "Clinic address must be between 10 and 200 characters"
+        "Clinic address must be between 10 and 200 characters",
       );
     }
 
@@ -104,7 +109,7 @@ const registerDoctor = async (req, res, next) => {
     if (specialization.length < 3 || specialization.length > 50) {
       throw new ApiError(
         400,
-        "Specialization must be between 3 and 50 characters"
+        "Specialization must be between 3 and 50 characters",
       );
     }
 
@@ -140,29 +145,36 @@ const registerDoctor = async (req, res, next) => {
             role: "doctor",
           },
         ],
-        { session }
+        { session },
       );
+
+      // Human-readable id, e.g. "DR-000125"
+      const doctorId = await generateDoctorId({ session });
 
       const [doctor] = await Doctor.create(
         [
           {
             user: user._id,
+            doctorId,
             clinicName,
             clinicAddress,
             specialization,
             consultationFee: Number(consultationFee),
           },
         ],
-        { session }
+        { session },
       );
 
       const startDate = new Date();
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 30);
 
+      const subscriptionId = await generateSubscriptionId({ session });
+
       await Subscription.create(
         [
           {
+            subscriptionId,
             doctor: doctor._id,
             plan: "basic",
             price: 0,
@@ -171,7 +183,7 @@ const registerDoctor = async (req, res, next) => {
             status: "active",
           },
         ],
-        { session }
+        { session },
       );
 
       await Queue.create([{ doctor: doctor._id }], { session });
@@ -179,14 +191,20 @@ const registerDoctor = async (req, res, next) => {
       await session.commitTransaction();
 
       const createdUser = await User.findById(user._id).select(
-        "-password -refreshToken"
+        "-password -refreshToken",
       );
 
-      return res
-        .status(201)
-        .json(
-          new ApiResponse(201, createdUser, "Doctor registered successfully")
-        );
+      const createdDoctor = await Doctor.findById(doctor._id).select(
+        "doctorId clinicName clinicAddress specialization consultationFee",
+      );
+
+      return res.status(201).json(
+        new ApiResponse(
+          201,
+          { user: createdUser, doctor: createdDoctor },
+          "Doctor registered successfully",
+        ),
+      );
     } catch (error) {
       await session.abortTransaction();
       throw error instanceof ApiError
@@ -194,7 +212,7 @@ const registerDoctor = async (req, res, next) => {
         : new ApiError(
             500,
             error?.message ||
-              "Something went wrong while registering the doctor"
+              "Something went wrong while registering the doctor",
           );
     } finally {
       session.endSession();
@@ -203,7 +221,6 @@ const registerDoctor = async (req, res, next) => {
     next(error);
   }
 };
-
 // registerPatient
 const registerPatient = async (req, res, next) => {
   try {
@@ -220,7 +237,7 @@ const registerPatient = async (req, res, next) => {
     // Required fields
     if (
       [fullname, email, password, phone, gender, bloodGroup].some(
-        (field) => !field || field.trim() === ""
+        (field) => !field || field.trim() === "",
       )
     ) {
       throw new ApiError(400, "All fields are required");
@@ -246,7 +263,7 @@ const registerPatient = async (req, res, next) => {
     if (!passwordRegex.test(password)) {
       throw new ApiError(
         400,
-        "Password must be at least 8 characters and contain uppercase, lowercase, number and special character"
+        "Password must be at least 8 characters and contain uppercase, lowercase, number and special character",
       );
     }
 
@@ -298,25 +315,34 @@ const registerPatient = async (req, res, next) => {
             role: "patient",
           },
         ],
-        { session }
+        { session },
       );
 
-      await Patient.create(
-        [{ user: user._id, dateOfBirth: dob, gender, bloodGroup }],
-        { session }
+      // Human-readable id, e.g. "PT-001245"
+      const patientId = await generatePatientId({ session });
+
+      const [patient] = await Patient.create(
+        [{ user: user._id, patientId, dateOfBirth: dob, gender, bloodGroup }],
+        { session },
       );
 
       await session.commitTransaction();
 
       const createdUser = await User.findById(user._id).select(
-        "-password -refreshToken"
+        "-password -refreshToken",
       );
 
-      return res
-        .status(201)
-        .json(
-          new ApiResponse(201, createdUser, "Patient registered successfully")
-        );
+      const createdPatient = await Patient.findById(patient._id).select(
+        "patientId dateOfBirth gender bloodGroup",
+      );
+
+      return res.status(201).json(
+        new ApiResponse(
+          201,
+          { user: createdUser, patient: createdPatient },
+          "Patient registered successfully",
+        ),
+      );
     } catch (error) {
       await session.abortTransaction();
       throw error instanceof ApiError
@@ -324,7 +350,7 @@ const registerPatient = async (req, res, next) => {
         : new ApiError(
             500,
             error?.message ||
-              "Something went wrong while registering the patient"
+              "Something went wrong while registering the patient",
           );
     } finally {
       session.endSession();
@@ -333,7 +359,6 @@ const registerPatient = async (req, res, next) => {
     next(error);
   }
 };
-
 // login
 const login = async (req, res, next) => {
   try {

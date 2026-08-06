@@ -8,6 +8,8 @@ import { Patient } from "../models/patient.models.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 
+import { generateAppointmentId } from "../utils/id's/appointment.js";
+
 // Allowed status transitions. A status can only move to one listed here.
 const allowedTransitions = {
   waiting: ["in-progress", "cancelled"],
