@@ -368,7 +368,7 @@ const login = async (req, res, next) => {
       throw new ApiError(400, "Email and password are required");
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
       throw new ApiError(404, "User does not exist");
     }
@@ -382,8 +382,22 @@ const login = async (req, res, next) => {
       await generateAccessAndRefreshTokens(user);
 
     const loggedInUser = await User.findById(user._id).select(
-      "-password -refreshToken"
+      "fullname email role",
     );
+
+    // Attach the role-specific readable id (doctorId / patientId).
+    let profileId = null;
+    if (user.role === "doctor") {
+      const doctor = await Doctor.findOne({ user: user._id }).select(
+        "doctorId",
+      );
+      profileId = doctor?.doctorId || null;
+    } else if (user.role === "patient") {
+      const patient = await Patient.findOne({ user: user._id }).select(
+        "patientId",
+      );
+      profileId = patient?.patientId || null;
+    }
 
     return res
       .status(200)
@@ -392,9 +406,14 @@ const login = async (req, res, next) => {
       .json(
         new ApiResponse(
           200,
-          { user: loggedInUser, accessToken, refreshToken },
-          "Logged in successfully"
-        )
+          {
+            user: loggedInUser,
+            profileId,
+            accessToken,
+            refreshToken,
+          },
+          "Logged in successfully",
+        ),
       );
   } catch (error) {
     next(error);

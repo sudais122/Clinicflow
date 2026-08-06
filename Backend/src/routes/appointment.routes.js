@@ -10,7 +10,7 @@ import { verifyJWT } from "../middlewares/auth.middlewares.js";
 
 const router = Router();
 
-// All appointment routes require a logged-in user.
+// All appointment routes require a logged-in user
 router.use(verifyJWT);
 
 // Patient
