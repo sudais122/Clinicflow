@@ -57,11 +57,8 @@ const bookAppointment = async (req, res, next) => {
       if (!queue) {
         throw new ApiError(404, "Doctor queue not found");
       }
-      if (!queue.isActive) {
-        throw new ApiError(400, "This doctor's queue is currently closed");
-      }
 
-      // Issue the next token by bumping lastToken (the ticket counter).
+      // Issue the next token by bumping lastToken 
       const tokenNumber = queue.lastToken + 1;
       queue.lastToken = tokenNumber;
       queue.lastUpdated = new Date();
@@ -98,7 +95,7 @@ const bookAppointment = async (req, res, next) => {
       session.endSession();
     }
 
-    // Re-fetch with the doctor (and doctor's user) details populated.
+    // Re-fetch with the doctor 
     const populatedAppointment = await Appointment.findById(appointmentDocId)
       .populate({
         path: "doctor",
@@ -111,8 +108,8 @@ const bookAppointment = async (req, res, next) => {
     // Pull the doctor's live queue to show the patient where they stand.
     const queue = await Queue.findOne({ doctor: doctorId }).lean();
 
-    const yourToken = populatedAppointment.tokenNumber;   // this patient's token
-    const nowServing = queue?.nowServing ?? 0;            // who the doctor is on
+    const yourToken = populatedAppointment.tokenNumber;   
+    const nowServing = queue?.nowServing ?? 0;            
     const patientsAhead = Math.max(yourToken - nowServing - 1, 0);
     const perPatient = queue?.estimatedTimePerPatient ?? 10;
     const delay = queue?.delayInMinutes ?? 0;
@@ -291,7 +288,7 @@ const updateAppointmentStatus = async (req, res, next) => {
   }
 };
 
-// 5. Cancel Appointment  (patient cancels their own)
+// 5. Cancel Appointment  
 const cancelAppointment = async (req, res, next) => {
   try {
     const { appointmentId } = req.params;

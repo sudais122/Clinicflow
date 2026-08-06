@@ -34,10 +34,15 @@ const doctorSchema = new mongoose.Schema(
       required: true,
       min: 0,
     },
+    clinicStatus: {
+      type: String,
+      enum: ["closed", "open"],
+      default: "closed",
+    },
   },
   {
     timestamps: true,
-  },
+  }
 );
 
 export const Doctor = mongoose.model("Doctor", doctorSchema);
