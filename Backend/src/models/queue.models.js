@@ -8,25 +8,31 @@ const queueSchema = new mongoose.Schema(
       required: true,
       unique: true,
     },
-    currentToken: {
+
+    // Last token number ISSUED. Incremented every time a patient books.
+    // This is the "ticket counter" — it only goes up.
+    lastToken: {
+      type: Number,
+      default: 0,
+    },
+
+    // Token currently BEING SERVED. Starts at 0 (nobody yet) and is
+    // advanced by the doctor as each patient is called in.
+    nowServing: {
       type: Number,
       default: 0,
     },
 
     estimatedTimePerPatient: {
       type: Number,
-      default: 10,
+      default: 10, // minutes
     },
 
     delayInMinutes: {
       type: Number,
       default: 0,
     },
-    yourtoken:{
-      type: Number,
-      default:0,
-      required: true,
-    },
+
     isActive: {
       type: Boolean,
       default: true,
@@ -39,7 +45,7 @@ const queueSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 export const Queue = mongoose.model("Queue", queueSchema);

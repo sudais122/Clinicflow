@@ -10,7 +10,6 @@ import ApiResponse from "../utils/apiresponse.js";
 
 import { generateAppointmentId } from "../utils/id's/appointment.js";
 
-// Allowed status transitions. A status can only move to one listed here.
 const allowedTransitions = {
   waiting: ["in-progress", "cancelled"],
   "in-progress": ["completed", "cancelled"],
@@ -18,7 +17,7 @@ const allowedTransitions = {
   cancelled: [],
 };
 
-// 1. Book Appointment  (patient only)
+// 1. Book Appointment  
 const bookAppointment = async (req, res, next) => {
   try {
     const { doctorId, appointmentDate } = req.body;
@@ -51,9 +50,9 @@ const bookAppointment = async (req, res, next) => {
     const session = await mongoose.startSession();
     session.startTransaction();
 
+    let appointmentDocId;
+
     try {
-      // Read + update the queue inside the transaction so two concurrent
-      // bookings can't grab the same token number.
       const queue = await Queue.findOne({ doctor: doctorId }).session(session);
       if (!queue) {
         throw new ApiError(404, "Doctor queue not found");
@@ -62,14 +61,18 @@ const bookAppointment = async (req, res, next) => {
         throw new ApiError(400, "This doctor's queue is currently closed");
       }
 
-      const tokenNumber = queue.currentToken + 1;
-      queue.currentToken = tokenNumber;
+      // Issue the next token by bumping lastToken (the ticket counter).
+      const tokenNumber = queue.lastToken + 1;
+      queue.lastToken = tokenNumber;
       queue.lastUpdated = new Date();
       await queue.save({ session });
+
+      const appointmentId = await generateAppointmentId({ session });
 
       const [appointment] = await Appointment.create(
         [
           {
+            appointmentId,
             doctor: doctorId,
             patient: patient._id,
             appointmentDate: date,
@@ -80,13 +83,9 @@ const bookAppointment = async (req, res, next) => {
         { session },
       );
 
-      await session.commitTransaction();
+      appointmentDocId = appointment._id;
 
-      return res
-        .status(201)
-        .json(
-          new ApiResponse(201, appointment, "Appointment booked successfully"),
-        );
+      await session.commitTransaction();
     } catch (error) {
       await session.abortTransaction();
       throw error instanceof ApiError
@@ -98,32 +97,122 @@ const bookAppointment = async (req, res, next) => {
     } finally {
       session.endSession();
     }
+
+    // Re-fetch with the doctor (and doctor's user) details populated.
+    const populatedAppointment = await Appointment.findById(appointmentDocId)
+      .populate({
+        path: "doctor",
+        select:
+          "doctorId clinicName clinicAddress specialization consultationFee user",
+        populate: { path: "user", select: "fullname email phone" },
+      })
+      .lean();
+
+    // Pull the doctor's live queue to show the patient where they stand.
+    const queue = await Queue.findOne({ doctor: doctorId }).lean();
+
+    const yourToken = populatedAppointment.tokenNumber;   // this patient's token
+    const nowServing = queue?.nowServing ?? 0;            // who the doctor is on
+    const patientsAhead = Math.max(yourToken - nowServing - 1, 0);
+    const perPatient = queue?.estimatedTimePerPatient ?? 10;
+    const delay = queue?.delayInMinutes ?? 0;
+    const estimatedWaitMinutes = patientsAhead * perPatient + delay;
+
+    const responseData = {
+      appointment: populatedAppointment,
+      queue: {
+        yourToken,
+        nowServing,
+        patientsAhead,
+        estimatedTimePerPatient: perPatient,
+        delayInMinutes: delay,
+        estimatedWaitMinutes,
+        isActive: queue?.isActive ?? false,
+      },
+    };
+
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(201, responseData, "Appointment booked successfully"),
+      );
   } catch (error) {
     next(error);
   }
 };
 
-// 2. Get Patient Appointments  (patient only)
+// 2. Get Patient Appointments  
 const getPatientAppointments = async (req, res, next) => {
   try {
+    // Resolve the Patient profile from the logged-in user (JWT -> req.user).
     const patient = await Patient.findOne({ user: req.user._id });
+    console.log("Logged-in patient _id:", patient?._id);
+
     if (!patient) {
       throw new ApiError(404, "Patient profile not found");
     }
 
+    // Only THIS patient's appointments, newest first.
     const appointments = await Appointment.find({ patient: patient._id })
       .populate({
         path: "doctor",
-        select: "clinicName specialization user",
-        populate: { path: "user", select: "fullname email" },
+        select:
+          "doctorId clinicName clinicAddress specialization consultationFee user",
+        populate: { path: "user", select: "fullname email phone" },
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+      console.log("Found appointments:", appointments.length);
+
+    // Load each involved doctor's live queue once, so we can compute the
+    // patient's position per appointment without querying in a loop.
+    const doctorIds = [
+      ...new Set(
+        appointments
+          .map((a) => a.doctor?._id?.toString())
+          .filter(Boolean),
+      ),
+    ];
+
+    const queues = await Queue.find({ doctor: { $in: doctorIds } }).lean();
+    const queueByDoctor = {};
+    for (const q of queues) {
+      queueByDoctor[q.doctor.toString()] = q;
+    }
+
+    // Attach live queue info only to active appointments; past ones don't need it.
+    const data = appointments.map((appt) => {
+      const isActive =
+        appt.status === "waiting" || appt.status === "in-progress";
+
+      const queue = queueByDoctor[appt.doctor?._id?.toString()];
+
+      let queueInfo = null;
+      if (isActive && queue) {
+        const yourToken = appt.tokenNumber;
+        const nowServing = queue.nowServing ?? 0;
+        const patientsAhead = Math.max(yourToken - nowServing - 1, 0);
+        const perPatient = queue.estimatedTimePerPatient ?? 10;
+        const delay = queue.delayInMinutes ?? 0;
+
+        queueInfo = {
+          yourToken,
+          nowServing,
+          patientsAhead,
+          estimatedTimePerPatient: perPatient,
+          delayInMinutes: delay,
+          estimatedWaitMinutes: patientsAhead * perPatient + delay,
+          isActive: queue.isActive ?? false,
+        };
+      }
+
+      return { ...appt, queue: queueInfo };
+    });
 
     return res
       .status(200)
-      .json(
-        new ApiResponse(200, appointments, "Patient appointments fetched"),
-      );
+      .json(new ApiResponse(200, data, "Patient appointments fetched"));
   } catch (error) {
     next(error);
   }
@@ -147,16 +236,13 @@ const getDoctorAppointments = async (req, res, next) => {
 
     return res
       .status(200)
-      .json(
-        new ApiResponse(200, appointments, "Doctor appointments fetched"),
-      );
+      .json(new ApiResponse(200, appointments, "Doctor appointments fetched"));
   } catch (error) {
     next(error);
   }
 };
 
-// 4. Update Appointment Status  (doctor only)
-//    waiting -> in-progress -> completed   |   waiting/in-progress -> cancelled
+// 4. Update Appointment Status  
 const updateAppointmentStatus = async (req, res, next) => {
   try {
     const { appointmentId } = req.params;
@@ -190,7 +276,7 @@ const updateAppointmentStatus = async (req, res, next) => {
     if (!allowedTransitions[current].includes(status)) {
       throw new ApiError(
         400,
-        `Cannot change status from "${current}" to "${status}"`,
+        `Cannot change status from "${current}" to "${status}"`
       );
     }
 
@@ -240,7 +326,9 @@ const cancelAppointment = async (req, res, next) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(200, appointment, "Appointment cancelled successfully"));
+      .json(
+        new ApiResponse(200, appointment, "Appointment cancelled successfully")
+      );
   } catch (error) {
     next(error);
   }

@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
+import bcrypt from "bcrypt";
+
 
 import { User } from "../models/user.models.js";
 import { Doctor } from "../models/doctor.models.js";
@@ -372,8 +374,15 @@ const login = async (req, res, next) => {
     if (!user) {
       throw new ApiError(404, "User does not exist");
     }
+    console.log(user);
 
-    const isPasswordValid = await user.isPasswordCorrect(password);
+
+const isPasswordValid = await bcrypt.compare(
+  password,
+  user.password
+);
+
+console.log("Password Match:", isPasswordValid);
     if (!isPasswordValid) {
       throw new ApiError(401, "Invalid credentials");
     }
