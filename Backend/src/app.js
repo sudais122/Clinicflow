@@ -5,6 +5,9 @@ import cookieParser from "cookie-parser";
 import authroutes from "./routes/auth.routes.js";
 import appointmentroutes from "./routes/appointment.routes.js";
 import queueroutes from "./routes/queue.routes.js";
+import doctorroutes from "./routes/doctor.routes.js";
+import patientroutes from "./routes/patient.routes.js";
+import dashboardroutes from "./routes/doctorDashboard.routes.js";
 
 const app = express();
 
@@ -24,6 +27,9 @@ app.use(cookieParser());
 app.use("/auth", authroutes);
 app.use("/appointments", appointmentroutes);
 app.use("/queue", queueroutes);
+app.use("/doctor", doctorroutes);
+app.use("/patient", patientroutes);
+app.use("/dashboard", dashboardroutes);
 
 // Global error handler 
 app.use((err, req, res, next) => {
