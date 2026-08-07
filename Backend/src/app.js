@@ -8,6 +8,7 @@ import queueroutes from "./routes/queue.routes.js";
 import doctorroutes from "./routes/doctor.routes.js";
 import patientroutes from "./routes/patient.routes.js";
 import dashboardroutes from "./routes/doctorDashboard.routes.js";
+import subscriptionroutes from "./routes/subscription.routes.js";
 
 const app = express();
 
@@ -30,6 +31,7 @@ app.use("/queue", queueroutes);
 app.use("/doctor", doctorroutes);
 app.use("/patient", patientroutes);
 app.use("/dashboard", dashboardroutes);
+app.use("/subscription", subscriptionroutes);
 
 // Global error handler 
 app.use((err, req, res, next) => {
