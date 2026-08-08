@@ -10,7 +10,7 @@ import patientroutes from "./routes/patient.routes.js";
 import dashboardroutes from "./routes/doctorDashboard.routes.js";
 import subscriptionroutes from "./routes/subscription.routes.js";
 import adminroutes from "./routes/admin.routes.js";
-
+import forgotPasswordRoutes from "./routes/Forgotpassword.routes.js";
 
 const app = express();
 
@@ -28,6 +28,7 @@ app.use(cookieParser());
 
 // Routes
 app.use("/auth", authroutes);
+app.use("/auth/password", forgotPasswordRoutes);
 app.use("/appointments", appointmentroutes);
 app.use("/queue", queueroutes);
 app.use("/doctor", doctorroutes);

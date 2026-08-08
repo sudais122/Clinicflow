@@ -32,7 +32,18 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-
+    resetOtp: {
+      type: String,
+      default: undefined,
+    },
+    resetOtpExpiry: {
+      type: Date,
+      default: undefined,
+    },
+    resetOtpLastSent: {
+      type: Date,
+      default: undefined,
+    },
     refreshToken: {
       type: String,
       default: "",
