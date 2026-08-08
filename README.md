@@ -48,8 +48,4 @@ client/
 server/
 README.md
 package.json
-```
 
-## License
-
-MIT
