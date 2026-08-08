@@ -7,6 +7,13 @@ import { Appointment } from "../models/appointment.models.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 
+import {
+  emitClinicStarted,
+  emitClinicClosed,
+  emitQueueUpdated,
+  emitDelayUpdated,
+} from "../socket/socketEvents.js";
+
 // Helper: resolve the logged-in doctor and their queue (mutations only).
 const getOwnQueue = async (userId) => {
   const doctor = await Doctor.findOne({ user: userId });
@@ -20,7 +27,7 @@ const getOwnQueue = async (userId) => {
   return { doctor, queue };
 };
 
-// 1. Get Queue Status  
+// 1. Get Queue Status
 const getQueueStatus = async (req, res, next) => {
   try {
     const { doctorId } = req.params;
@@ -54,15 +61,14 @@ const getQueueStatus = async (req, res, next) => {
 // 2. Start Clinic  —  PATCH /queue/start  (doctor)
 const startClinic = async (req, res, next) => {
   try {
-    const result = await getOwnQueue(req.user._id);
-
-    const { queue } = result;
+    const { doctor, queue } = await getOwnQueue(req.user._id);
 
     queue.clinicStatus = "open";
     queue.lastUpdated = new Date();
-
     await queue.save();
 
+    // Real-time: tell everyone in this doctor's room the clinic is open.
+    emitClinicStarted(doctor._id, { clinicStatus: "open" });
 
     return res
       .status(200)
@@ -72,7 +78,7 @@ const startClinic = async (req, res, next) => {
   }
 };
 
-// 3. Next Patient  
+// 3. Next Patient
 const nextPatient = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
@@ -82,6 +88,8 @@ const nextPatient = async (req, res, next) => {
 
     const session = await mongoose.startSession();
     session.startTransaction();
+
+    let updatedQueue;
 
     try {
       const queue = await Queue.findOne({ doctor: doctor._id }).session(session);
@@ -126,13 +134,7 @@ const nextPatient = async (req, res, next) => {
 
       await session.commitTransaction();
 
-      return res.status(200).json(
-        new ApiResponse(
-          200,
-          { currentToken: queue.nowServing, lastToken: queue.lastToken },
-          "Moved to next patient",
-        ),
-      );
+      updatedQueue = queue;
     } catch (error) {
       await session.abortTransaction();
       throw error instanceof ApiError
@@ -141,12 +143,29 @@ const nextPatient = async (req, res, next) => {
     } finally {
       session.endSession();
     }
+
+    // Real-time: broadcast the shared queue state; each patient computes
+    // their own "patients ahead" and wait time from their own token.
+    emitQueueUpdated(doctor._id, {
+      nowServing: updatedQueue.nowServing,
+      lastToken: updatedQueue.lastToken,
+      estimatedTimePerPatient: updatedQueue.estimatedTimePerPatient,
+      delayInMinutes: updatedQueue.delayInMinutes,
+    });
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        { currentToken: updatedQueue.nowServing, lastToken: updatedQueue.lastToken },
+        "Moved to next patient",
+      ),
+    );
   } catch (error) {
     next(error);
   }
 };
 
-// 4. Update Delay  
+// 4. Update Delay
 const updateDelay = async (req, res, next) => {
   try {
     const { delay } = req.body;
@@ -158,11 +177,18 @@ const updateDelay = async (req, res, next) => {
       throw new ApiError(400, "Delay cannot be negative");
     }
 
-    const { queue } = await getOwnQueue(req.user._id);
+    const { doctor, queue } = await getOwnQueue(req.user._id);
 
     queue.delayInMinutes = Number(delay);
     queue.lastUpdated = new Date();
     await queue.save();
+
+    // Real-time: tell patients about the new delay.
+    emitDelayUpdated(doctor._id, {
+      delayInMinutes: queue.delayInMinutes,
+      nowServing: queue.nowServing,
+      estimatedTimePerPatient: queue.estimatedTimePerPatient,
+    });
 
     return res
       .status(200)
@@ -172,7 +198,7 @@ const updateDelay = async (req, res, next) => {
   }
 };
 
-// 5. Update Estimated Time 
+// 5. Update Estimated Time
 const updateTime = async (req, res, next) => {
   try {
     const { estimatedTimePerPatient } = req.body;
@@ -188,11 +214,19 @@ const updateTime = async (req, res, next) => {
       throw new ApiError(400, "Estimated time must be greater than 0");
     }
 
-    const { queue } = await getOwnQueue(req.user._id);
+    const { doctor, queue } = await getOwnQueue(req.user._id);
 
     queue.estimatedTimePerPatient = Number(estimatedTimePerPatient);
     queue.lastUpdated = new Date();
     await queue.save();
+
+    // Real-time: estimated time affects everyone's wait, so broadcast it too.
+    emitQueueUpdated(doctor._id, {
+      nowServing: queue.nowServing,
+      lastToken: queue.lastToken,
+      estimatedTimePerPatient: queue.estimatedTimePerPatient,
+      delayInMinutes: queue.delayInMinutes,
+    });
 
     return res
       .status(200)
@@ -202,14 +236,17 @@ const updateTime = async (req, res, next) => {
   }
 };
 
-// 6. End Clinic  
+// 6. End Clinic
 const endClinic = async (req, res, next) => {
   try {
-    const { queue } = await getOwnQueue(req.user._id);
+    const { doctor, queue } = await getOwnQueue(req.user._id);
 
     queue.clinicStatus = "closed";
     queue.lastUpdated = new Date();
     await queue.save();
+
+    // Real-time: tell everyone the clinic is closed.
+    emitClinicClosed(doctor._id, { clinicStatus: "closed" });
 
     return res
       .status(200)
@@ -219,10 +256,10 @@ const endClinic = async (req, res, next) => {
   }
 };
 
-// 7. Reset Queue  
+// 7. Reset Queue
 const resetQueue = async (req, res, next) => {
   try {
-    const { queue } = await getOwnQueue(req.user._id);
+    const { doctor, queue } = await getOwnQueue(req.user._id);
 
     queue.lastToken = 0;
     queue.nowServing = 0;
@@ -230,6 +267,9 @@ const resetQueue = async (req, res, next) => {
     queue.clinicStatus = "closed";
     queue.lastUpdated = new Date();
     await queue.save();
+
+    // Real-time: reset means closed + counters zeroed.
+    emitClinicClosed(doctor._id, { clinicStatus: "closed" });
 
     return res
       .status(200)

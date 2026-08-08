@@ -9,6 +9,8 @@ import doctorroutes from "./routes/doctor.routes.js";
 import patientroutes from "./routes/patient.routes.js";
 import dashboardroutes from "./routes/doctorDashboard.routes.js";
 import subscriptionroutes from "./routes/subscription.routes.js";
+import adminroutes from "./routes/admin.routes.js";
+
 
 const app = express();
 
@@ -32,6 +34,7 @@ app.use("/doctor", doctorroutes);
 app.use("/patient", patientroutes);
 app.use("/dashboard", dashboardroutes);
 app.use("/subscription", subscriptionroutes);
+app.use("/admin", adminroutes);
 
 // Global error handler 
 app.use((err, req, res, next) => {

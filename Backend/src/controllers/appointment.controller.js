@@ -58,7 +58,7 @@ const bookAppointment = async (req, res, next) => {
         throw new ApiError(404, "Doctor queue not found");
       }
 
-      // Issue the next token by bumping lastToken 
+      // Issue the next token by bumping lastToken
       const tokenNumber = queue.lastToken + 1;
       queue.lastToken = tokenNumber;
       queue.lastUpdated = new Date();
@@ -95,7 +95,7 @@ const bookAppointment = async (req, res, next) => {
       session.endSession();
     }
 
-    // Re-fetch with the doctor 
+    // Re-fetch with the doctor
     const populatedAppointment = await Appointment.findById(appointmentDocId)
       .populate({
         path: "doctor",
@@ -108,12 +108,18 @@ const bookAppointment = async (req, res, next) => {
     // Pull the doctor's live queue to show the patient where they stand.
     const queue = await Queue.findOne({ doctor: doctorId }).lean();
 
-    const yourToken = populatedAppointment.tokenNumber;   
-    const nowServing = queue?.nowServing ?? 0;            
+    const yourToken = populatedAppointment.tokenNumber;
+    const nowServing = queue?.nowServing ?? 0;
     const patientsAhead = Math.max(yourToken - nowServing - 1, 0);
     const perPatient = queue?.estimatedTimePerPatient ?? 10;
     const delay = queue?.delayInMinutes ?? 0;
     const estimatedWaitMinutes = patientsAhead * perPatient + delay;
+
+    // Real-time: a new booking grew the queue — tell the doctor's room.
+    emitQueueLengthUpdated(doctorId, {
+      lastToken: queue?.lastToken ?? yourToken,
+      nowServing,
+    });
 
     const responseData = {
       appointment: populatedAppointment,
@@ -124,7 +130,7 @@ const bookAppointment = async (req, res, next) => {
         estimatedTimePerPatient: perPatient,
         delayInMinutes: delay,
         estimatedWaitMinutes,
-        isActive: queue?.isActive ?? false,
+        clinicStatus: queue?.clinicStatus ?? "closed",
       },
     };
 

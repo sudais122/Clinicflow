@@ -374,17 +374,18 @@ const login = async (req, res, next) => {
     if (!user) {
       throw new ApiError(404, "User does not exist");
     }
-    console.log(user);
 
-
-const isPasswordValid = await bcrypt.compare(
-  password,
-  user.password
-);
-
-console.log("Password Match:", isPasswordValid);
+    const isPasswordValid = await user.isPasswordCorrect(password);
     if (!isPasswordValid) {
       throw new ApiError(401, "Invalid credentials");
+    }
+
+    // Blocked-account check (admin can deactivate a user).
+    if (user.isActive === false) {
+      throw new ApiError(
+        403,
+        "Your account has been deactivated. Please contact the administrator.",
+      );
     }
 
     const { accessToken, refreshToken } =
@@ -397,14 +398,10 @@ console.log("Password Match:", isPasswordValid);
     // Attach the role-specific readable id (doctorId / patientId).
     let profileId = null;
     if (user.role === "doctor") {
-      const doctor = await Doctor.findOne({ user: user._id }).select(
-        "doctorId",
-      );
+      const doctor = await Doctor.findOne({ user: user._id }).select("doctorId");
       profileId = doctor?.doctorId || null;
     } else if (user.role === "patient") {
-      const patient = await Patient.findOne({ user: user._id }).select(
-        "patientId",
-      );
+      const patient = await Patient.findOne({ user: user._id }).select("patientId");
       profileId = patient?.patientId || null;
     }
 
@@ -415,12 +412,7 @@ console.log("Password Match:", isPasswordValid);
       .json(
         new ApiResponse(
           200,
-          {
-            user: loggedInUser,
-            profileId,
-            accessToken,
-            refreshToken,
-          },
+          { user: loggedInUser, profileId, accessToken, refreshToken },
           "Logged in successfully",
         ),
       );
@@ -428,7 +420,6 @@ console.log("Password Match:", isPasswordValid);
     next(error);
   }
 };
-
 // refreshAccessToken
 const refreshAccessToken = async (req, res, next) => {
   try {
