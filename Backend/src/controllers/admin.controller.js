@@ -180,38 +180,125 @@ const getAllSubscriptions = async (req, res, next) => {
 
 // 6. GET /admin/dashboard
 const getAdminDashboard = async (req, res, next) => {
+ // Resolve a ?range= query into a { startDate, endDate } window (or null for all-time).
+//   ?range=today | 7d | 30d | all | custom(&startDate=&endDate=)
+const resolveDateRange = (query) => {
+  const range = query.range || "all";
+
+  if (range === "all") {
+    return null; // no date filter
+  }
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+
+  const start = new Date();
+
+  if (range === "today") {
+    start.setHours(0, 0, 0, 0);
+  } else if (range === "7d") {
+    start.setDate(start.getDate() - 6); // last 7 days incl. today
+    start.setHours(0, 0, 0, 0);
+  } else if (range === "30d") {
+    start.setDate(start.getDate() - 29);
+    start.setHours(0, 0, 0, 0);
+  } else if (range === "custom") {
+    if (!query.startDate || !query.endDate) {
+      throw new ApiError(400, "custom range requires startDate and endDate");
+    }
+    const s = new Date(query.startDate);
+    const e = new Date(query.endDate);
+    if (isNaN(s.getTime()) || isNaN(e.getTime())) {
+      throw new ApiError(400, "Invalid startDate or endDate");
+    }
+    if (s > e) {
+      throw new ApiError(400, "startDate cannot be after endDate");
+    }
+    s.setHours(0, 0, 0, 0);
+    e.setHours(23, 59, 59, 999);
+    return { startDate: s, endDate: e };
+  } else {
+    throw new ApiError(400, "Invalid range. Use today, 7d, 30d, custom, or all");
+  }
+
+  return { startDate: start, endDate: end };
+};
+
+const getAdminDashboard = async (req, res, next) => {
   try {
+    const dateRange = resolveDateRange(req.query);
+
+    // Build a createdAt match if a date range was requested (else empty = all-time).
+    const dateMatch = dateRange
+      ? { createdAt: { $gte: dateRange.startDate, $lte: dateRange.endDate } }
+      : {};
+
+    // ---- Current system stats (all-time totals; not date-filtered) ----
+    // ---- Historical analytics (scoped to the selected range) ----
     const [
       totalUsers,
       totalDoctors,
       totalPatients,
-      totalAppointments,
+      activeClinics,
       appointmentsByStatus,
+      appointmentsByDate,
+      newDoctors,
+      newPatients,
+      doctorsBySpecialization,
       subscriptionsByPlan,
       subscriptionsByStatus,
       revenueAgg,
     ] = await Promise.all([
+      // Current stats
       User.countDocuments(),
       Doctor.countDocuments(),
       Patient.countDocuments(),
-      Appointment.countDocuments(),
+      Queue.countDocuments({ clinicStatus: "open" }),
+
+      // Appointments grouped by status, within range
       Appointment.aggregate([
+        { $match: dateMatch },
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
+
+      // Appointments per day, within range (for the line/bar chart)
+      Appointment.aggregate([
+        { $match: dateMatch },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: "%Y-%m-%d", date: "$createdAt" },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        { $sort: { _id: 1 } },
+      ]),
+
+      // New doctors / patients within range
+      Doctor.countDocuments(dateMatch),
+      Patient.countDocuments(dateMatch),
+
+      // Doctors grouped by specialization (all-time trend)
+      Doctor.aggregate([
+        { $group: { _id: "$specialization", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]),
+
+      // Subscriptions (all-time)
       Subscription.aggregate([
         { $group: { _id: "$plan", count: { $sum: 1 } } },
       ]),
       Subscription.aggregate([
         { $group: { _id: "$status", count: { $sum: 1 } } },
       ]),
-      // Revenue from currently-active paid subscriptions.
       Subscription.aggregate([
         { $match: { plan: "paid", status: "active" } },
         { $group: { _id: null, total: { $sum: "$price" } } },
       ]),
     ]);
 
-    // Turn the aggregate arrays into simple keyed objects.
+    // Turn [{_id, count}] arrays into simple keyed objects.
     const toMap = (arr) =>
       arr.reduce((acc, item) => {
         acc[item._id] = item.count;
@@ -222,37 +309,68 @@ const getAdminDashboard = async (req, res, next) => {
     const subPlan = toMap(subscriptionsByPlan);
     const subStatus = toMap(subscriptionsByStatus);
 
+    // Total appointments in range 
+    const totalAppointmentsInRange = Object.values(apptStatus).reduce(
+      (a, b) => a + b,
+      0,
+    );
+
     return res.status(200).json(
       new ApiResponse(
         200,
         {
-          users: { total: totalUsers },
-          doctors: { total: totalDoctors },
-          patients: { total: totalPatients },
-          appointments: {
-            total: totalAppointments,
-            waiting: apptStatus.waiting || 0,
-            inProgress: apptStatus["in-progress"] || 0,
-            completed: apptStatus.completed || 0,
-            cancelled: apptStatus.cancelled || 0,
+          range: req.query.range || "all",
+          dateWindow: dateRange
+            ? {
+                startDate: dateRange.startDate,
+                endDate: dateRange.endDate,
+              }
+            : null,
+
+          // Current, all-time system stats
+          currentStats: {
+            totalUsers,
+            totalDoctors,
+            totalPatients,
+            activeClinics,
           },
-          subscriptions: {
-            free: subPlan.free || 0,
-            paid: subPlan.paid || 0,
-            active: subStatus.active || 0,
-            expired: subStatus.expired || 0,
-            cancelled: subStatus.cancelled || 0,
+
+          // Date-filtered analytics
+          analytics: {
+            appointments: {
+              total: totalAppointmentsInRange,
+              waiting: apptStatus.waiting || 0,
+              inProgress: apptStatus["in-progress"] || 0,
+              completed: apptStatus.completed || 0,
+              cancelled: apptStatus.cancelled || 0,
+            },
+            appointmentsByDate, 
+            newDoctors,
+            newPatients,
           },
-          revenue: {
-            activePaidTotal: revenueAgg[0]?.total || 0,
+
+          // All-time breakdowns for pie/bar charts
+          breakdowns: {
+            doctorsBySpecialization, // [{ _id: "Cardiologist", count: 4 }, ...]
+            subscriptions: {
+              free: subPlan.free || 0,
+              paid: subPlan.paid || 0,
+              active: subStatus.active || 0,
+              expired: subStatus.expired || 0,
+              cancelled: subStatus.cancelled || 0,
+            },
+            revenue: {
+              activePaidTotal: revenueAgg[0]?.total || 0,
+            },
           },
         },
-        "Admin dashboard fetched"
-      )
+        "Admin dashboard fetched",
+      ),
     );
   } catch (error) {
     next(error);
   }
+};
 };
 
 // deactive user
