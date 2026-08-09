@@ -36,10 +36,11 @@ const forgotPassword = async (req, res, next) => {
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
-
-    if (user) {
-      await issueOtp(user);
+    if (!user) {
+      throw new ApiError(404, "Email not found");
     }
+
+    await issueOtp(user);
 
     return res
       .status(200)
@@ -47,14 +48,13 @@ const forgotPassword = async (req, res, next) => {
         new ApiResponse(
           200,
           {},
-          "If that email is registered, a reset code has been sent",
+          "A reset code has been sent to your email",
         ),
       );
   } catch (error) {
     next(error);
   }
 };
-
 //POST /auth/resend-otp   
 const resendOtp = async (req, res, next) => {
   try {

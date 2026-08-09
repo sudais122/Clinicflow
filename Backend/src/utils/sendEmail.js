@@ -1,21 +1,26 @@
 import nodemailer from "nodemailer";
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD,
-  },
-});
+let transporter;
 
-/**
- * Send an email.
- * @param {string} to       
- * @param {string} subject
- * @param {string} html     
- */
+const getTransporter = () => {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: {
+        user: process.env.GMAIL_USER,
+        pass: process.env.GMAIL_APP_PASSWORD,
+      },
+    });
+  }
+  return transporter;
+};
+
 export const sendEmail = async ({ to, subject, html }) => {
-  await transporter.sendMail({
+  // temporary debug — remove once it works
+  console.log("GMAIL_USER:", process.env.GMAIL_USER);
+  console.log("GMAIL_APP_PASSWORD set?:", !!process.env.GMAIL_APP_PASSWORD);
+
+  await getTransporter().sendMail({
     from: `"PatientFlow" <${process.env.GMAIL_USER}>`,
     to,
     subject,
@@ -23,11 +28,10 @@ export const sendEmail = async ({ to, subject, html }) => {
   });
 };
 
-// Small helper to build the OTP email body.
 export const otpEmailTemplate = (otp) => `
   <div style="font-family: Arial, sans-serif; max-width: 480px; margin: auto;">
     <h2>PatientFlow Password Reset</h2>
-    <p>Use the code below to reset your password. It expires in 1 minutes.</p>
+    <p>Use the code below to reset your password. It expires in 1 minute.</p>
     <p style="font-size: 28px; font-weight: bold; letter-spacing: 4px;">${otp}</p>
     <p>If you didn't request this, you can safely ignore this email.</p>
   </div>

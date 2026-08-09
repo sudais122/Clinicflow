@@ -4,7 +4,7 @@ import {
   resendOtp,
   verifyResetOtp,
   resetPassword,
-} from "../controllers/auth.controller.js";
+} from "../controllers/Forgotpassword.controller.js";
 
 const router = Router();
 
