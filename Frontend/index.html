@@ -2,12 +2,585 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>frontend</title>
+    <title>ClinicFlow — Smart healthcare. Better flow.</title>
+    <meta
+      name="description"
+      content="ClinicFlow connects appointments, patients, and live queues into one seamless experience for modern clinics."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,500;12..96,600;12..96,700;12..96,800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./shared/css/global.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
+    <!-- NAV -->
+    <header class="nav" id="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="#top" aria-label="ClinicFlow home">
+           <img src="./images/logo.png" alt="">
+          <span class="b-clinic">Clinic</span><span class="b-flow">Flow</span>
+        </a>
+        <nav class="nav-links">
+          <a class="link" href="#hero">Home</a>
+          <a class="link" href="#features">Features</a>
+          <a class="link" href="#how">How it works</a>
+          <a class="link" href="#pricing">Pricing</a>
+          <a class="link" href="#faq">FAQ</a>
+        </nav>
+        <div class="nav-cta">
+          <a class="login" href="./Auth/login/login.html">Log in</a>
+          <a class="btn btn-primary" href="./Auth/register/register.html"
+            >Get started <span class="arrow">→</span></a
+          >
+        </div>
+        <button
+          class="menu-btn"
+          id="menuBtn"
+          aria-label="Menu"
+          aria-expanded="false"
+        >
+          <svg
+            class="icon-open"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#17202A"
+            stroke-width="2"
+          >
+            <path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round" />
+          </svg>
+          <svg
+            class="icon-close"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#17202A"
+            stroke-width="2"
+          >
+            <path d="M6 6l12 12M18 6L6 18" stroke-linecap="round" />
+          </svg>
+        </button>
+      </div>
+<div class="mobile-menu" id="mobileMenu">
+  <a class="m-link" href="#hero">Home</a>
+  <a class="m-link" href="#features">Features</a>
+  <a class="m-link" href="#how">How it works</a>
+  <a class="m-link" href="#pricing">Pricing</a>
+  <a class="m-link" href="#faq">FAQ</a>
+  <div class="m-actions">
+    <a class="login" href="#">Log in</a>
+    <a class="btn btn-primary" href="#">Get started <span class="arrow">→</span></a>
+  </div>
+</div>
+    </header>
+
+    <a id="top"></a>
+
+    <!-- HERO -->
+    <section class="hero" id="hero">
+      <div class="wrap hero-grid">
+        <div data-reveal="left">
+          <span class="badge"
+            ><span class="spark">✦</span> Healthcare, simplified</span
+          >
+          <h1>
+            Smart healthcare.<br />Better <span class="b-flow">flow.</span>
+          </h1>
+          <p class="lead">
+            ClinicFlow connects appointments, patients, and live queues into one
+            seamless experience for modern clinics.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#"
+              >Get started free <span class="arrow">→</span></a
+            >
+            <a class="explore" href="#features">Explore ClinicFlow </a>
+          </div>
+        </div>
+        <div class="hero-visual" data-reveal="right" aria-hidden="true">
+          <div class="orbit-ring"></div>
+          <div class="orbit">
+            <div class="orbit-core">
+              <div class="label">Now serving</div>
+              <div class="token"><span class="hash">#</span>18</div>
+            </div>
+          </div>
+          <div class="float confirm">
+            <span class="dot"></span> Appointment confirmed
+          </div>
+          <div class="float queue">
+            <div class="row">
+              <span class="k">Current token</span><span class="v">#18</span>
+            </div>
+            <div class="sub">4 patients ahead</div>
+          </div>
+          <div class="float wait">
+            <div class="big">12 min</div>
+            <div class="sub">estimated wait</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PROBLEM -->
+    <section class="sec-mint">
+      <div class="wrap problem-grid">
+        <div data-reveal="left">
+          <span class="eyebrow">The waiting room problem</span>
+          <h2 style="font-size: clamp(30px, 4vw, 44px); margin-top: 16px">
+            Clinics run on paper, guesswork, and crowded hallways.
+          </h2>
+          <ul class="problem-list">
+            <li>
+              <span class="ic">✕</span>
+              <div>
+                <div class="t">Patients don't know when they'll be seen</div>
+                <div class="d">
+                  So they arrive early and wait for hours, just in case.
+                </div>
+              </div>
+            </li>
+            <li>
+              <span class="ic">✕</span>
+              <div>
+                <div class="t">
+                  Front desks juggle calls and walk-ins by hand
+                </div>
+                <div class="d">
+                  Double bookings and lost slips are a daily cost.
+                </div>
+              </div>
+            </li>
+            <li>
+              <span class="ic">✕</span>
+              <div>
+                <div class="t">Doctors have no live view of their day</div>
+                <div class="d">
+                  The queue lives in someone's head, not on a screen.
+                </div>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <div class="stat-panel" data-reveal="right">
+          <span class="eyebrow">A typical clinic day</span>
+          <div class="stat-row">
+            <div>
+              <div class="big blue">
+                2.4<small style="font-size: 20px">h</small>
+              </div>
+              <div class="lbl">Avg wait</div>
+            </div>
+            <div>
+              <div class="big" style="color: var(--orange)">31%</div>
+              <div class="lbl">No-shows</div>
+            </div>
+          </div>
+          <div class="motion-line"></div>
+          <div class="stat-row">
+            <div>
+              <div class="big green">−72%</div>
+              <div class="lbl">Wait, with ClinicFlow</div>
+            </div>
+            <div>
+              <div class="big green">+40%</div>
+              <div class="lbl">Slots kept</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FEATURES -->
+    <section id="features">
+      <div class="wrap">
+        <div class="sec-head" data-reveal style="margin-bottom: 56px">
+          <span class="eyebrow">What ClinicFlow does</span>
+          <h2>One system for the whole visit.</h2>
+          <p>
+            From the moment a patient books to the moment they're called in —
+            appointments, patients, and queue stay in sync.
+          </p>
+        </div>
+
+        <div class="feature">
+          <div data-reveal="left">
+            <span class="num">01 — Appointments</span>
+            <h3>Booking without the back-and-forth.</h3>
+            <p>
+              Patients pick a doctor and a time; ClinicFlow assigns their token
+              and confirms instantly. No phone tag, no paper slips, no double
+              bookings.
+            </p>
+          </div>
+          <div class="fviz" data-reveal="right">
+            <div class="cal-head">
+              <span class="m">August 2026</span
+              ><span class="mono" style="font-size: 12px; color: var(--muted)"
+                >‹ ›</span
+              >
+            </div>
+            <div class="cal-grid">
+              <div class="d">M</div>
+              <div class="d">T</div>
+              <div class="d">W</div>
+              <div class="d">T</div>
+              <div class="d">F</div>
+              <div class="d">S</div>
+              <div class="d">S</div>
+              <div class="d">4</div>
+              <div class="d on">5</div>
+              <div class="d">6</div>
+              <div class="d on">7</div>
+              <div class="d">8</div>
+              <div class="d">9</div>
+              <div class="d">10</div>
+              <div class="d">11</div>
+              <div class="d">12</div>
+              <div class="d sel">13</div>
+              <div class="d on">14</div>
+              <div class="d">15</div>
+              <div class="d">16</div>
+              <div class="d">17</div>
+            </div>
+            <div class="slots">
+              <span class="slot">09:00</span><span class="slot">09:30</span
+              ><span class="slot pick">10:30</span
+              ><span class="slot">11:00</span><span class="slot">11:30</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature">
+          <div class="flip" data-reveal="left">
+            <span class="num">02 — Live queue</span>
+            <h3>Patients always know where they stand.</h3>
+            <p>
+              Every token updates in real time as the doctor calls the next
+              patient. People see their place and their wait — from the waiting
+              room or from home.
+            </p>
+          </div>
+          <div class="fviz" data-reveal="right">
+            <div class="status-item">
+              <span class="avatar">AK</span>
+              <div class="pt">
+                <div class="nm">Ayesha Khan</div>
+                <div class="id">APT-000181</div>
+              </div>
+              <span class="pill done">completed</span>
+            </div>
+            <div class="status-item">
+              <span class="avatar" style="background: var(--blue-tint)"
+                >MR</span
+              >
+              <div class="pt">
+                <div class="nm">Mahad Raza</div>
+                <div class="id">APT-000182</div>
+              </div>
+              <span class="pill prog">in progress</span>
+            </div>
+            <div class="status-item">
+              <span
+                class="avatar"
+                style="background: #fef3e2; color: var(--orange)"
+                >SN</span
+              >
+              <div class="pt">
+                <div class="nm">Sana Noor</div>
+                <div class="id">APT-000183</div>
+              </div>
+              <span class="pill wait">waiting</span>
+            </div>
+            <div class="status-item">
+              <span
+                class="avatar"
+                style="background: #fef3e2; color: var(--orange)"
+                >FA</span
+              >
+              <div class="pt">
+                <div class="nm">Farhan Ali</div>
+                <div class="id">APT-000184</div>
+              </div>
+              <span class="pill wait">waiting</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- QUEUE SIGNATURE -->
+    <section class="sec-blue" id="queue">
+      <div class="wrap">
+        <div class="queue-head" data-reveal>
+          <span class="eyebrow" style="justify-content: center"
+            >The signature of ClinicFlow</span
+          >
+          <h2>Know your place.<br />Not your waiting&nbsp;time.</h2>
+          <p>
+            A live token board every patient can follow. Watch it move — this is
+            exactly what your patients see.
+          </p>
+        </div>
+        <div class="queue-stage" data-reveal>
+          <div class="now-label">Now serving</div>
+          <div class="now-token" id="nowToken">
+            <span class="hash">#</span><span id="nowNum">18</span>
+          </div>
+          <div class="queue-rule"></div>
+          <div class="tokens" id="tokens">
+            <div class="tok">
+              <div class="tn">#19</div>
+              <div class="ts">waiting</div>
+            </div>
+            <div class="tok">
+              <div class="tn">#20</div>
+              <div class="ts">waiting</div>
+            </div>
+            <div class="tok">
+              <div class="tn">#21</div>
+              <div class="ts">waiting</div>
+            </div>
+            <div class="tok you">
+              <div class="tn">#22</div>
+              <div class="ts">you</div>
+            </div>
+          </div>
+          <div class="queue-meta">
+            <div class="qm">
+              <div class="v blue" id="aheadN">3</div>
+              <div class="k">Patients ahead</div>
+            </div>
+            <div class="qm">
+              <div class="v green" id="waitN">30 min</div>
+              <div class="k">Estimated wait</div>
+            </div>
+            <div class="qm">
+              <div class="v" id="clinicState" style="color: var(--green)">
+                Open
+              </div>
+              <div class="k">Clinic status</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HOW IT WORKS -->
+    <section id="how">
+      <div class="wrap">
+        <div class="sec-head" data-reveal style="margin-bottom: 48px">
+          <span class="eyebrow">How it works</span>
+          <h2>Three steps to a calmer clinic.</h2>
+        </div>
+        <div class="steps">
+          <div class="step" data-reveal>
+            <span class="sn">Step 01</span>
+            <div class="arrowline"></div>
+            <h3>Set up your clinic</h3>
+            <p>
+              Add your details, consultation time, and you're live. A queue is
+              created for you automatically.
+            </p>
+          </div>
+          <div class="step" data-reveal class="d1">
+            <span class="sn">Step 02</span>
+            <div class="arrowline"></div>
+            <h3>Patients book & get a token</h3>
+            <p>
+              Each booking issues the next token in line and confirms it to the
+              patient right away.
+            </p>
+          </div>
+          <div class="step" data-reveal class="d2">
+            <span class="sn">Step 03</span>
+            <div class="arrowline"></div>
+            <h3>Call next, everyone updates</h3>
+            <p>
+              Tap "next patient" and every screen moves forward — no
+              announcements, no crowding.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING -->
+    <section class="sec-mint" id="pricing">
+      <div class="wrap">
+        <div class="sec-head" data-reveal style="margin-bottom: 44px">
+          <span class="eyebrow">Pricing</span>
+          <h2>Start free. Upgrade when you grow.</h2>
+          <p>One clinic, one clear price. No setup fees, cancel anytime.</p>
+        </div>
+        <div class="price-grid">
+          <div class="plan" data-reveal="left">
+            <span class="pname">Free</span>
+            <div class="amt">Rs 0<small> /forever</small></div>
+            <div class="pdesc">
+              Everything a single doctor needs to run a live queue.
+            </div>
+            <ul>
+              <li><span class="ck">✓</span> Appointment booking & tokens</li>
+              <li><span class="ck">✓</span> Live queue for patients</li>
+              <li><span class="ck">✓</span> Start / close clinic controls</li>
+              <li><span class="ck">✓</span> Basic daily dashboard</li>
+            </ul>
+            <a
+              class="btn btn-ghost"
+              href="#"
+              style="width: 100%; justify-content: center"
+              >Get started</a
+            >
+          </div>
+          <div class="plan paid" data-reveal="right">
+            <span class="tag">Popular</span>
+            <span class="pname">Paid</span>
+            <div class="amt">Rs 5,000<small> /month</small></div>
+            <div class="pdesc">
+              For busy clinics that want analytics and real-time everywhere.
+            </div>
+            <ul>
+              <li><span class="ck">✓</span> Everything in Free</li>
+              <li>
+                <span class="ck">✓</span> Real-time updates via web sockets
+              </li>
+              <li><span class="ck">✓</span> Delay & wait-time estimates</li>
+              <li><span class="ck">✓</span> Date-range analytics & reports</li>
+            </ul>
+            <a
+              class="btn btn-primary"
+              href="#"
+              style="width: 100%; justify-content: center"
+              >Upgrade to Paid <span class="arrow">→</span></a
+            >
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq">
+      <div class="wrap" style="max-width: 820px">
+        <div class="sec-head" data-reveal style="margin-bottom: 30px">
+          <span class="eyebrow">Questions</span>
+          <h2>Good to know.</h2>
+        </div>
+        <div class="faq" data-reveal>
+          <div class="faq-item">
+            <button class="faq-q">
+              Do patients need to install an app? <span class="pm"></span>
+            </button>
+            <div class="faq-a">
+              <p>
+                No. Patients open a link and see their token and live position
+                in the browser. The clinic side works the same way on any
+                device.
+              </p>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">
+              How does the live queue stay in sync? <span class="pm"></span>
+            </button>
+            <div class="faq-a">
+              <p>
+                When a doctor calls the next patient, ClinicFlow broadcasts the
+                change over web sockets to everyone watching that clinic's queue
+                — no refresh needed.
+              </p>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">
+              Can I run more than one doctor? <span class="pm"></span>
+            </button>
+            <div class="faq-a">
+              <p>
+                Each doctor gets their own queue and dashboard. Patients only
+                ever see updates for the doctor they booked with.
+              </p>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-q">
+              What happens at the end of the day? <span class="pm"></span>
+            </button>
+            <div class="faq-a">
+              <p>
+                Close the clinic with one tap and reset the queue for tomorrow.
+                Today's appointments stay in your history for reporting.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FINAL CTA -->
+    <section class="cta">
+      <span class="ring r1" aria-hidden="true"></span>
+      <span class="ring r2" aria-hidden="true"></span>
+      <div class="wrap" data-reveal>
+        <h2>Let your clinic <span class="b-flow">flow better</span>.</h2>
+        <p>Start with ClinicFlow today — set up your queue in minutes.</p>
+        <a
+          class="btn btn-primary"
+          href="#"
+          style="font-size: 16px; padding: 15px 26px"
+          >Get started free <span class="arrow">→</span></a
+        >
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="site">
+      <div class="wrap">
+        <div class="foot-grid">
+          <div class="foot-brand">
+            <a class="brand" href="#top" aria-label="ClinicFlow home">
+        <a class="brand" href="#top" aria-label="ClinicFlow home">
+           <img src="./images/logo.png" alt="">
+          <span class="b-clinic">Clinic</span><span class="b-flow">Flow</span>
+        </a>
+            </a>
+            <p>
+              Appointments, patients, and live queues in one calm system for
+              modern clinics.
+            </p>
+          </div>
+          <div class="foot-cols">
+            <div class="foot-col">
+              <h4>Product</h4>
+              <a href="#features">Features</a><a href="#queue">Live queue</a
+              ><a href="#pricing">Pricing</a>
+            </div>
+            <div class="foot-col">
+              <h4>Company</h4>
+              <a href="#">About</a><a href="#">Contact</a
+              ><a href="#">Careers</a>
+            </div>
+            <div class="foot-col">
+              <h4>Legal</h4>
+              <a href="#">Privacy</a><a href="#">Terms</a>
+            </div>
+          </div>
+        </div>
+        <div class="foot-bottom">
+          <span>© 2026 ClinicFlow. All rights reserved.</span>
+          <span class="status-live"
+            ><span class="dot"></span> All systems operational</span
+          >
+        </div>
+      </div>
+    </footer>
+
+    <script src="./shared/css/js/script.js"></script>
   </body>
 </html>

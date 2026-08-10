@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Log in — ClinicFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../css/auth.css" />
+</head>
+<body>
+<div class="page">
+  <aside class="aside">
+    <span class="aside-ring ar1"></span>
+    <span class="aside-ring ar2"></span>
+    <a class="brand" href="./index.html">
+      <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <path d="M2.6 13.4H7.6" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>
+        <path d="M1.6 17H6.4" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>
+        <path d="M3.1 20.6H7.9" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>
+        <path d="M8.9 22.6 A10 10 0 1 1 20 6.2" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+        <path d="M16.2 3.5 L21.8 5.0 L19.4 10.2 Z" fill="#fff"/>
+        <path d="M21.6 7.2 A10 10 0 1 1 8.6 22.8" stroke="rgba(255,255,255,.75)" stroke-width="3" stroke-linecap="round"/>
+        <path d="M16 11.2V20.8M11.2 16H20.8" stroke="rgba(255,255,255,.75)" stroke-width="4.4" stroke-linecap="round"/>
+      </svg>
+      ClinicFlow
+    </a>
+    <div class="aside-inner">
+      <h2>Welcome back to a calmer clinic.</h2>
+      <p>Pick up right where your queue left off.</p>
+    </div>
+    <div class="aside-foot">&ldquo;Our waiting room finally feels under control.&rdquo;</div>
+  </aside>
+
+  <div class="form-side">
+    <form class="card" id="loginForm" novalidate>
+      <h1>Log in</h1>
+      <p class="sub">Enter your details to access your dashboard.</p>
+
+      <div class="alert" id="alert"></div>
+
+      <div class="field" id="f-email">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" placeholder="you@clinic.com" autocomplete="email" />
+        <div class="err"></div>
+      </div>
+
+      <div class="field" id="f-password">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" placeholder="••••••••" autocomplete="current-password" />
+        <div class="err"></div>
+      </div>
+      <div class="forgot"><a href="../forgotpassword/forgotpassword.html">Forgot password?</a></div>
+
+      <button type="submit" class="btn" id="submitBtn">
+        <svg class="spinner" viewBox="0 0 32 32" fill="none"><g class="spin"><path d="M8.9 22.6 A10 10 0 1 1 20 6.2" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M21.6 7.2 A10 10 0 1 1 8.6 22.8" stroke="rgba(255,255,255,.5)" stroke-width="3" stroke-linecap="round"/></g></svg>
+        <span class="label">Log in</span>
+      </button>
+
+      <div class="foot">New to ClinicFlow? <a href="../register/register.html">Create an account</a></div>
+    </form>
+  </div>
+</div>
+
+<script src="./config.js"></script>
+<script src="./auth.js"></script>
+<script>
+  const form = document.getElementById("loginForm");
+  const alertBox = document.getElementById("alert");
+  const btn = document.getElementById("submitBtn");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    clearAlert(alertBox);
+    const fEmail = document.getElementById("f-email");
+    const fPass = document.getElementById("f-password");
+    [fEmail, fPass].forEach(clearFieldError);
+
+    const email = form.email.value;
+    const password = form.password.value;
+
+    let ok = true;
+    const ev = validators.email(email);
+    if (ev !== true) { setFieldError(fEmail, ev); ok = false; }
+    if (validators.required(password) !== true) { setFieldError(fPass, "Password is required"); ok = false; }
+    if (!ok) return;
+
+    setLoading(btn, true);
+    try {
+      const data = await apiPost("/auth/login", { email, password });
+      const role = data?.data?.user?.role;
+      showAlert(alertBox, "success", "Logged in! Redirecting\u2026");
+      setTimeout(() => {
+        if (role === "doctor") window.location.href = "./dashboard-doctor.html";
+        else if (role === "patient") window.location.href = "./dashboard-patient.html";
+        else window.location.href = "./index.html";
+      }, 700);
+    } catch (err) {
+      showAlert(alertBox, "error", err.message);
+    } finally {
+      setLoading(btn, false);
+    }
+  });
+</script>
+</body>
+</html>
