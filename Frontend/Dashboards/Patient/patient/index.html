@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Queue — ClinicFlow</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="./style.css" />
+<link rel="stylesheet" href="./dashboard-patient.css" />
+</head>
+<body>
+<div class="dash">
+  <header class="dash-top">
+    <div class="inner">
+      <a class="dash-brand" href="./index.html">
+        <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <path d="M2.6 13.4H7.6" stroke="#1769E8" stroke-width="2.1" stroke-linecap="round"/>
+          <path d="M1.6 17H6.4" stroke="#1769E8" stroke-width="2.1" stroke-linecap="round"/>
+          <path d="M3.1 20.6H7.9" stroke="#1769E8" stroke-width="2.1" stroke-linecap="round"/>
+          <path d="M8.9 22.6 A10 10 0 1 1 20 6.2" stroke="#1769E8" stroke-width="3" stroke-linecap="round"/>
+          <path d="M16.2 3.5 L21.8 5.0 L19.4 10.2 Z" fill="#1769E8"/>
+          <path d="M21.6 7.2 A10 10 0 1 1 8.6 22.8" stroke="#1FB674" stroke-width="3" stroke-linecap="round"/>
+          <path d="M16 11.2V20.8M11.2 16H20.8" stroke="#1FB674" stroke-width="4.4" stroke-linecap="round"/>
+        </svg>
+        <span><span class="b-clinic">Clinic</span><span class="b-flow">Flow</span></span>
+      </a>
+      <div class="dash-user">
+        <div class="who"><div class="nm" id="userName">Ali Ahmed</div><div class="id" id="userId">PT-000042</div></div>
+        <div class="av" id="userAvatar">AA</div>
+        <button class="logout-btn" id="logoutBtn">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="dash-body">
+    <div class="dash-h">
+      <div>
+        <h1>Hi <span class="greet" id="greetName">Ali</span>, you're in the queue</h1>
+        <p class="sub">Keep this open — your place updates as the doctor calls each patient.</p>
+      </div>
+      <button class="refresh" id="refreshBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        Refresh
+      </button>
+    </div>
+
+    <!-- SIGNATURE: live queue hero -->
+    <section class="queue-hero">
+      <div class="qh-inner">
+        <div class="ring-wrap">
+          <svg width="208" height="208" viewBox="0 0 208 208">
+            <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1769E8"/><stop offset="1" stop-color="#1FB674"/></linearGradient></defs>
+            <circle class="ring-track" cx="104" cy="104" r="94" fill="none" stroke-width="12"/>
+            <circle class="ring-fill" id="ringFill" cx="104" cy="104" r="94" fill="none" stroke-width="12" stroke-dasharray="590.6" stroke-dashoffset="590.6"/>
+          </svg>
+          <div class="ring-center">
+            <div class="lbl">Your token</div>
+            <div class="tok"><span class="h">#</span><span id="yourToken">22</span></div>
+            <div class="pos" id="posText">4th in line</div>
+          </div>
+        </div>
+
+        <div class="qh-right">
+          <div class="qh-top">
+            <div class="eta">
+              <div class="val"><span id="etaVal">30</span><span class="unit" id="etaUnit">min</span></div>
+              <div class="cap">Estimated wait</div>
+            </div>
+            <span class="badge-live" id="clinicBadge"><span class="dot"></span> Clinic open</span>
+          </div>
+
+          <div class="track">
+            <div class="track-head"><span>Now serving</span><span>Your turn</span></div>
+            <div class="track-rail" id="trackRail"><!-- chips injected --></div>
+          </div>
+
+          <div class="mini-metrics">
+            <div class="mini"><div class="v blue" id="nowServing">#18</div><div class="k">Now serving</div></div>
+            <div class="mini"><div class="v" id="patientsAhead">3</div><div class="k">Ahead of you</div></div>
+            <div class="mini"><div class="v green" id="avgPace">10 min</div><div class="k">Avg per patient</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="turn-banner" id="turnBanner">🔔 It's your turn — please proceed to the doctor's room.</div>
+    </section>
+
+    <!-- appointment progress -->
+    <section class="progress-card">
+      <h2>Appointment progress</h2>
+      <div class="stepper" id="stepper">
+        <div class="pstep done"><div class="node">✓</div><div class="plabel">Booked</div><div class="ptime">09:12 AM</div></div>
+        <div class="pstep done"><div class="node">✓</div><div class="plabel">Checked in</div><div class="ptime">09:40 AM</div></div>
+        <div class="pstep active"><div class="node">3</div><div class="plabel">In queue</div><div class="ptime">~30 min</div></div>
+        <div class="pstep"><div class="node">4</div><div class="plabel">With doctor</div><div class="ptime">—</div></div>
+      </div>
+    </section>
+
+    <!-- doctor + history -->
+    <div class="cols">
+      <section class="panel">
+        <h2>Your appointment</h2>
+        <div class="doc-row">
+          <div class="doc-av" id="docAvatar">HQ</div>
+          <div><div class="doc-name" id="docName">Dr Hassan Qureshi</div><div class="doc-spec" id="docSpec">Cardiologist</div></div>
+        </div>
+        <div class="doc-meta">
+          <div class="item"><span class="k">Clinic</span><span class="val" id="clinicName">Care Point Clinic</span></div>
+          <div class="item"><span class="k">Appointment</span><span class="val mono" id="aptId">APT-000188</span></div>
+          <div class="item"><span class="k">Date</span><span class="val" id="aptDate">10 Aug 2026</span></div>
+          <div class="item"><span class="k">Status</span><span class="pill waiting" id="aptStatus">waiting</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Appointment history</h2>
+        <div id="historyList"></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="./config.js"></script>
+<script src="./auth.js"></script>
+<script>
+  // ============================================================
+  //  PLACEHOLDER DATA (design-only)
+  //  Wire later: GET {API_BASE}/appointments/patient (JWT cookie).
+  //  Map the newest waiting/in-progress appointment + its queue
+  //  block onto renderQueue/renderDoctor; the rest to history.
+  // ============================================================
+  const PLACEHOLDER = {
+    user: { fullname: "Ali Ahmed", patientId: "PT-000042" },
+    current: {
+      appointmentId: "APT-000188", status: "waiting", date: "10 Aug 2026",
+      yourToken: 22, joinedAhead: 8,   // how many were ahead when you booked (for ring progress)
+      doctor: { name: "Dr Hassan Qureshi", specialization: "Cardiologist", clinicName: "Care Point Clinic" },
+      queue: { nowServing: 18, patientsAhead: 3, estimatedWaitMinutes: 30, perPatientMinutes: 10, clinicStatus: "open" },
+    },
+    history: [
+      { appointmentId: "APT-000181", doctor: "Dr Fatima Noor",    date: "05 Aug 2026", status: "completed" },
+      { appointmentId: "APT-000164", doctor: "Dr Hassan Qureshi", date: "28 Jul 2026", status: "completed" },
+      { appointmentId: "APT-000140", doctor: "Dr Fatima Noor",    date: "14 Jul 2026", status: "cancelled" },
+    ],
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const initials = (n) => n.split(" ").filter(Boolean).slice(0,2).map(w=>w[0]).join("").toUpperCase();
+  const ordinal = (n) => { const s=["th","st","nd","rd"], v=n%100; return n+(s[(v-20)%10]||s[v]||s[0]); };
+
+  // animate a number counting up
+  function countUp(el, to, suffix="", ms=900) {
+    const start = performance.now(); const from = 0;
+    function frame(t){ const p = Math.min((t-start)/ms, 1); const e = 1-Math.pow(1-p,3);
+      el.textContent = Math.round(from+(to-from)*e)+suffix; if(p<1) requestAnimationFrame(frame); }
+    requestAnimationFrame(frame);
+  }
+
+  function renderQueue(c) {
+    const q = c.queue;
+    const ahead = q.patientsAhead;
+    // ring progress: how far you've moved from your join position
+    const done = Math.max(c.joinedAhead - ahead, 0);
+    const pct = c.joinedAhead > 0 ? Math.min(done / c.joinedAhead, 1) : 1;
+    const circ = 2 * Math.PI * 94;
+    $("ringFill").style.strokeDashoffset = circ * (1 - pct);
+
+    $("yourToken").textContent = c.yourToken;
+    $("posText").textContent = ahead === 0 ? "You're next" : ordinal(ahead + 1) + " in line";
+    $("nowServing").textContent = "#" + q.nowServing;
+    countUp($("patientsAhead"), ahead);
+    $("avgPace").textContent = q.perPatientMinutes + " min";
+
+    // ETA
+    if (ahead === 0) { $("etaVal").textContent = "You're"; $("etaUnit").textContent = " up"; }
+    else { countUp($("etaVal"), q.estimatedWaitMinutes); $("etaUnit").textContent = "min"; }
+
+    // clinic badge
+    const b = $("clinicBadge");
+    if (q.clinicStatus === "open") { b.className = "badge-live"; b.innerHTML = '<span class="dot"></span> Clinic open'; }
+    else { b.className = "badge-live closed"; b.innerHTML = '<span class="dot"></span> Clinic closed'; }
+
+    // token track: now-serving up to you (cap ~6 chips)
+    renderTrack(c);
+
+    // turn banner
+    $("turnBanner").classList.toggle("show", ahead === 0 && q.nowServing >= c.yourToken);
+  }
+
+  function renderTrack(c) {
+    const rail = $("trackRail");
+    const serving = c.queue.nowServing;
+    const you = c.yourToken;
+    const span = you - serving;              // tokens between now and you
+    let tokens = [];
+    if (span <= 5) {
+      for (let n = serving; n <= you; n++) tokens.push(n);
+    } else {
+      tokens = [serving, serving+1, "…", you-1, you];
+    }
+    rail.innerHTML = tokens.map((n) => {
+      if (n === "…") return `<div class="chip" style="flex:.5"><div class="dots">···</div></div>`;
+      let cls = "chip", s = "waiting";
+      if (n === serving) { cls += " serving"; s = "serving"; }
+      else if (n === you) { cls += " you"; s = "you"; }
+      else if (n < serving) { cls += " served"; s = "done"; }
+      return `<div class="${cls}"><div class="n">#${n}</div><div class="s">${s}</div></div>`;
+    }).join("");
+  }
+
+  function renderStepper(c) {
+    // active node shows patients-ahead count; time shows ETA
+    const nodes = $("stepper").querySelectorAll(".pstep");
+    if (nodes[2]) { nodes[2].querySelector(".node").textContent = c.queue.patientsAhead || "•";
+      nodes[2].querySelector(".ptime").textContent = c.queue.patientsAhead === 0 ? "now" : "~"+c.queue.estimatedWaitMinutes+" min"; }
+  }
+
+  function renderDoctor(c) {
+    $("docName").textContent = c.doctor.name;
+    $("docSpec").textContent = c.doctor.specialization;
+    $("docAvatar").textContent = initials(c.doctor.name.replace(/^Dr\s+/, ""));
+    $("clinicName").textContent = c.doctor.clinicName;
+    $("aptId").textContent = c.appointmentId;
+    $("aptDate").textContent = c.date;
+    const st = $("aptStatus"); st.textContent = c.status;
+    st.className = "pill " + (c.status === "in-progress" ? "progress" : c.status);
+  }
+
+  function renderHistory(list) {
+    const wrap = $("historyList");
+    if (!list.length) { wrap.innerHTML = '<div class="empty">No past appointments yet. Book one to get started.</div>'; return; }
+    wrap.innerHTML = list.map((h) => {
+      const cls = h.status === "in-progress" ? "progress" : h.status;
+      return `<div class="hist-item"><span class="apt">${h.appointmentId}</span>
+        <div class="info"><div class="dr">${h.doctor}</div><div class="dt">${h.date}</div></div>
+        <span class="pill ${cls}">${h.status}</span></div>`;
+    }).join("");
+  }
+
+  function renderUser(u) {
+    $("userName").textContent = u.fullname;
+    $("userId").textContent = u.patientId;
+    $("userAvatar").textContent = initials(u.fullname);
+    $("greetName").textContent = u.fullname.split(" ")[0];
+  }
+
+  async function loadDashboard() {
+    // TODO (real): const data = await apiGet("/appointments/patient");
+    const d = PLACEHOLDER;
+    renderUser(d.user);
+    renderQueue(d.current);
+    renderStepper(d.current);
+    renderDoctor(d.current);
+    renderHistory(d.history);
+  }
+
+  $("refreshBtn").addEventListener("click", async () => {
+    const btn = $("refreshBtn"); btn.classList.add("spinning"); btn.disabled = true;
+    await new Promise((r) => setTimeout(r, 550));
+    await loadDashboard();
+    setTimeout(() => { btn.classList.remove("spinning"); btn.disabled = false; }, 200);
+  });
+
+  $("logoutBtn").addEventListener("click", () => {
+    // TODO (real): await apiPost("/auth/logout", {});
+    window.location.href = "./login.html";
+  });
+
+  loadDashboard();
+</script>
+</body>
+</html>
