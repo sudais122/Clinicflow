@@ -20,7 +20,12 @@ const allowedTransitions = {
 // 1. Book Appointment  
 const bookAppointment = async (req, res, next) => {
   try {
-    const { doctorId, appointmentDate } = req.body;
+    const {
+      doctorId,
+      appointmentDate,
+      bookFor,
+      patientName,
+    } = req.body;
 
     if (!doctorId) {
       throw new ApiError(400, "Doctor id is required");
@@ -29,51 +34,154 @@ const bookAppointment = async (req, res, next) => {
       throw new ApiError(400, "Invalid doctor id");
     }
 
-    // Resolve the Patient profile from the logged-in user.
-    const patient = await Patient.findOne({ user: req.user._id });
+    if (!bookFor) {
+      throw new ApiError(
+        400,
+        "Please specify whether the appointment is for yourself or someone else",
+      );
+    }
+
+    if (!["self", "other"].includes(bookFor)) {
+      throw new ApiError(
+        400,
+        'bookFor must be either "self" or "other"',
+      );
+    }
+    //Get logged-in patient's profile
+
+    const patient = await Patient.findOne({
+      user: req.user._id,
+    });
+
     if (!patient) {
       throw new ApiError(404, "Patient profile not found");
     }
 
-    // Make sure the doctor exists.
+    //Determine actual patient name
+    let actualPatientName;
+
+    if (bookFor === "self") {
+      actualPatientName = req.user.fullname;
+
+      if (!actualPatientName) {
+        throw new ApiError(
+          400,
+          "Your profile name is not available",
+        );
+      }
+    }
+
+    if (bookFor === "other") {
+      if (!patientName || !patientName.trim()) {
+        throw new ApiError(
+          400,
+          "Patient name is required when booking for someone else",
+        );
+      }
+
+      actualPatientName = patientName.trim();
+    }
+
+    // Make sure doctor exists
+
     const doctor = await Doctor.findById(doctorId);
+
     if (!doctor) {
       throw new ApiError(404, "Doctor not found");
     }
 
-    // appointmentDate is required by the schema; default to now if not sent.
-    const date = appointmentDate ? new Date(appointmentDate) : new Date();
+    // --------------------------------------------------
+    // 6. Validate appointment date
+    // --------------------------------------------------
+
+    const date = appointmentDate
+      ? new Date(appointmentDate)
+      : new Date();
+
     if (isNaN(date.getTime())) {
       throw new ApiError(400, "Invalid appointment date");
     }
 
+    // --------------------------------------------------
+    // 7. Start transaction
+    // --------------------------------------------------
+
     const session = await mongoose.startSession();
+
     session.startTransaction();
 
     let appointmentDocId;
 
     try {
-      const queue = await Queue.findOne({ doctor: doctorId }).session(session);
+      // ------------------------------------------------
+      // 8. Get doctor's queue
+      // ------------------------------------------------
+
+      const queue = await Queue.findOne({
+        doctor: doctorId,
+      }).session(session);
+
       if (!queue) {
-        throw new ApiError(404, "Doctor queue not found");
+        throw new ApiError(
+          404,
+          "Doctor queue not found",
+        );
       }
 
-      // Issue the next token by bumping lastToken
+      // ------------------------------------------------
+      // 9. Check clinic status
+      // ------------------------------------------------
+
+      if (queue.clinicStatus !== "open") {
+        throw new ApiError(
+          400,
+          "Clinic is currently closed",
+        );
+      }
+
+      // ------------------------------------------------
+      // 10. Generate next token
+      // ------------------------------------------------
+
       const tokenNumber = queue.lastToken + 1;
+
       queue.lastToken = tokenNumber;
       queue.lastUpdated = new Date();
+
       await queue.save({ session });
 
-      const appointmentId = await generateAppointmentId({ session });
+      // ------------------------------------------------
+      // 11. Generate appointment ID
+      // ------------------------------------------------
+
+      const appointmentId = await generateAppointmentId({
+        session,
+      });
+
+      // ------------------------------------------------
+      // 12. Create appointment
+      // ------------------------------------------------
 
       const [appointment] = await Appointment.create(
         [
           {
             appointmentId,
-            doctor: doctorId,
+
+            // Logged-in account that booked it
+            bookedBy: req.user._id,
+
+            // Patient profile/account holder
             patient: patient._id,
+
+            // Actual person attending
+            patientName: actualPatientName,
+
+            doctor: doctorId,
+
             appointmentDate: date,
+
             tokenNumber,
+
             status: "waiting",
           },
         ],
@@ -85,44 +193,88 @@ const bookAppointment = async (req, res, next) => {
       await session.commitTransaction();
     } catch (error) {
       await session.abortTransaction();
+
       throw error instanceof ApiError
         ? error
         : new ApiError(
             500,
-            error?.message || "Something went wrong while booking the appointment",
+            error?.message ||
+              "Something went wrong while booking the appointment",
           );
     } finally {
-      session.endSession();
+      await session.endSession();
     }
 
-    // Re-fetch with the doctor
-    const populatedAppointment = await Appointment.findById(appointmentDocId)
-      .populate({
-        path: "doctor",
-        select:
-          "doctorId clinicName clinicAddress specialization consultationFee user",
-        populate: { path: "user", select: "fullname email phone" },
-      })
-      .lean();
+    // --------------------------------------------------
+    // 13. Get created appointment with doctor details
+    // --------------------------------------------------
 
-    // Pull the doctor's live queue to show the patient where they stand.
-    const queue = await Queue.findOne({ doctor: doctorId }).lean();
+    const populatedAppointment =
+      await Appointment.findById(appointmentDocId)
+        .populate({
+          path: "doctor",
+          select:
+            "doctorId clinicName clinicAddress specialization consultationFee user",
+
+          populate: {
+            path: "user",
+            select: "fullname email phone",
+          },
+        })
+        .populate({
+          path: "bookedBy",
+          select: "fullname email phone",
+        })
+        .lean();
+
+    if (!populatedAppointment) {
+      throw new ApiError(
+        404,
+        "Appointment could not be retrieved",
+      );
+    }
+
+    // --------------------------------------------------
+    // 14. Get latest queue information
+    // --------------------------------------------------
+
+    const queue = await Queue.findOne({
+      doctor: doctorId,
+    }).lean();
 
     const yourToken = populatedAppointment.tokenNumber;
-    const nowServing = queue?.nowServing ?? 0;
-    const patientsAhead = Math.max(yourToken - nowServing - 1, 0);
-    const perPatient = queue?.estimatedTimePerPatient ?? 10;
-    const delay = queue?.delayInMinutes ?? 0;
-    const estimatedWaitMinutes = patientsAhead * perPatient + delay;
 
-    // Real-time: a new booking grew the queue — tell the doctor's room.
+    const nowServing = queue?.nowServing ?? 0;
+
+    const patientsAhead = Math.max(
+      yourToken - nowServing - 1,
+      0,
+    );
+
+    const perPatient =
+      queue?.estimatedTimePerPatient ?? 10;
+
+    const delay = queue?.delayInMinutes ?? 0;
+
+    const estimatedWaitMinutes =
+      patientsAhead * perPatient + delay;
+
+    // --------------------------------------------------
+    // 15. Notify doctor's room
+    // --------------------------------------------------
+
     emitQueueLengthUpdated(doctorId, {
       lastToken: queue?.lastToken ?? yourToken,
       nowServing,
     });
 
+    // --------------------------------------------------
+    // 16. Response
+    // --------------------------------------------------
+
     const responseData = {
       appointment: populatedAppointment,
+
       queue: {
         yourToken,
         nowServing,
@@ -130,15 +282,18 @@ const bookAppointment = async (req, res, next) => {
         estimatedTimePerPatient: perPatient,
         delayInMinutes: delay,
         estimatedWaitMinutes,
-        clinicStatus: queue?.clinicStatus ?? "closed",
+        clinicStatus:
+          queue?.clinicStatus ?? "closed",
       },
     };
 
-    return res
-      .status(201)
-      .json(
-        new ApiResponse(201, responseData, "Appointment booked successfully"),
-      );
+    return res.status(201).json(
+      new ApiResponse(
+        201,
+        responseData,
+        "Appointment booked successfully",
+      ),
+    );
   } catch (error) {
     next(error);
   }
