@@ -19,7 +19,8 @@ import ApiResponse from "../utils/apiresponse.js";
 
 const cookieOptions = {
   httpOnly: true,
-  secure: true,
+  secure: process.env.NODE_ENV === "production", // false on local http
+  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
 };
 
 // generateAccessAndRefreshTokens

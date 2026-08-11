@@ -1,3 +1,5 @@
+
+console.log("NODE_ENV:", process.env.NODE_ENV);
 import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -14,12 +16,10 @@ import forgotPasswordRoutes from "./routes/Forgotpassword.routes.js";
 
 const app = express();
 
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || "*",
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin: ["http://127.0.0.1:5500", "http://localhost:5500"],
+  credentials: true,
+}));
 
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));

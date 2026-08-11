@@ -54,7 +54,7 @@ form.addEventListener("submit", async (e) => {
       "Account created! Redirecting to login\u2026",
     );
     setTimeout(() => {
-      window.location.href = "./login.html";
+      window.location.href = "../login/login.html";
     }, 900);
   } catch (err) {
     showAlert(alertBox, "error", err.message);
