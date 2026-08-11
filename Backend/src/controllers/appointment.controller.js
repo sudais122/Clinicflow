@@ -59,7 +59,6 @@ const bookAppointment = async (req, res, next) => {
 
     //Determine actual patient name
     let actualPatientName;
-
     if (bookFor === "self") {
       actualPatientName = req.user.fullname;
 
@@ -82,17 +81,11 @@ const bookAppointment = async (req, res, next) => {
       actualPatientName = patientName.trim();
     }
 
-    // Make sure doctor exists
-
     const doctor = await Doctor.findById(doctorId);
 
     if (!doctor) {
       throw new ApiError(404, "Doctor not found");
     }
-
-    // --------------------------------------------------
-    // 6. Validate appointment date
-    // --------------------------------------------------
 
     const date = appointmentDate
       ? new Date(appointmentDate)
@@ -102,10 +95,6 @@ const bookAppointment = async (req, res, next) => {
       throw new ApiError(400, "Invalid appointment date");
     }
 
-    // --------------------------------------------------
-    // 7. Start transaction
-    // --------------------------------------------------
-
     const session = await mongoose.startSession();
 
     session.startTransaction();
@@ -113,10 +102,6 @@ const bookAppointment = async (req, res, next) => {
     let appointmentDocId;
 
     try {
-      // ------------------------------------------------
-      // 8. Get doctor's queue
-      // ------------------------------------------------
-
       const queue = await Queue.findOne({
         doctor: doctorId,
       }).session(session);
@@ -128,10 +113,6 @@ const bookAppointment = async (req, res, next) => {
         );
       }
 
-      // ------------------------------------------------
-      // 9. Check clinic status
-      // ------------------------------------------------
-
       if (queue.clinicStatus !== "open") {
         throw new ApiError(
           400,
@@ -139,49 +120,27 @@ const bookAppointment = async (req, res, next) => {
         );
       }
 
-      // ------------------------------------------------
-      // 10. Generate next token
-      // ------------------------------------------------
-
       const tokenNumber = queue.lastToken + 1;
 
       queue.lastToken = tokenNumber;
       queue.lastUpdated = new Date();
 
       await queue.save({ session });
-
-      // ------------------------------------------------
-      // 11. Generate appointment ID
-      // ------------------------------------------------
-
       const appointmentId = await generateAppointmentId({
         session,
       });
-
-      // ------------------------------------------------
-      // 12. Create appointment
-      // ------------------------------------------------
 
       const [appointment] = await Appointment.create(
         [
           {
             appointmentId,
 
-            // Logged-in account that booked it
             bookedBy: req.user._id,
-
-            // Patient profile/account holder
             patient: patient._id,
-
-            // Actual person attending
             patientName: actualPatientName,
-
             doctor: doctorId,
-
             appointmentDate: date,
-
             tokenNumber,
-
             status: "waiting",
           },
         ],
@@ -204,11 +163,7 @@ const bookAppointment = async (req, res, next) => {
     } finally {
       await session.endSession();
     }
-
-    // --------------------------------------------------
-    // 13. Get created appointment with doctor details
-    // --------------------------------------------------
-
+    // Get created appointment with doctor details
     const populatedAppointment =
       await Appointment.findById(appointmentDocId)
         .populate({
@@ -234,10 +189,6 @@ const bookAppointment = async (req, res, next) => {
       );
     }
 
-    // --------------------------------------------------
-    // 14. Get latest queue information
-    // --------------------------------------------------
-
     const queue = await Queue.findOne({
       doctor: doctorId,
     }).lean();
@@ -258,19 +209,12 @@ const bookAppointment = async (req, res, next) => {
 
     const estimatedWaitMinutes =
       patientsAhead * perPatient + delay;
-
-    // --------------------------------------------------
-    // 15. Notify doctor's room
-    // --------------------------------------------------
-
+    // Notify doctor's room
     emitQueueLengthUpdated(doctorId, {
       lastToken: queue?.lastToken ?? yourToken,
       nowServing,
     });
-
-    // --------------------------------------------------
-    // 16. Response
-    // --------------------------------------------------
+    // Response
 
     const responseData = {
       appointment: populatedAppointment,
