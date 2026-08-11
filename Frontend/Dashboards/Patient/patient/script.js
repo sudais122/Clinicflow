@@ -1,7 +1,10 @@
 /* ============================================================
    ClinicFlow — Patient Dashboard (behavior)
-   Wired to the real backend. Every network call goes through
-   the `api()` helper below.
+   Wired to the real backend. There is no shared network helper —
+   every call site below does its own `fetch`, sends cookies
+   (credentials: "include"), parses the ApiResponse envelope
+   ({ statusCode, data, message, success }), and throws/toasts
+   on failure.
    Privacy rule (spec §19): other patients appear as token
    numbers only — never names.
 
@@ -14,7 +17,7 @@
    ============================================================ */
 (function () {
   const CFG = window.CLINICFLOW_CONFIG || {};
-  const API_BASE = CFG.API_BASE || "http://localhost:8000";
+  const API_BASE = "http://localhost:8000";
   const $ = (s, r = document) => r.querySelector(s);
   const $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const initials = (n) =>
@@ -25,44 +28,6 @@
       .map((w) => w[0])
       .join("")
       .toUpperCase();
-
-  /* ---------------- API HELPER ----------------
-   Wraps fetch: sends cookies (JWT), unwraps the ApiResponse
-   envelope { statusCode, data, message, success }, and throws
-   a normal Error (with the backend's message) on failure so
-   callers can just try/catch and toast(err.message).
---------------------------------------------- */
-  async function api(path, { method = "GET", body, headers = {} } = {}) {
-    let res;
-    try {
-      res = await fetch(API_BASE + path, {
-        method,
-        credentials: "include", // send accessToken/refreshToken cookies
-        headers: { "Content-Type": "application/json", ...headers },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
-      });
-    } catch (networkErr) {
-      throw new Error("Could not reach the server. Check your connection.");
-    }
-
-    // Session expired — bounce to login.
-    if (res.status === 401) {
-      window.location.href = "../../../Auth/login/login.html";
-      throw new Error("Session expired. Please log in again.");
-    }
-
-    let json = null;
-    try {
-      json = await res.json();
-    } catch {
-      /* empty body */
-    }
-
-    if (!res.ok) {
-      throw new Error(json?.message || `Request failed (${res.status})`);
-    }
-    return json?.data;
-  }
 
   /* ---------------- STATE ----------------
    Populated from the API on load. Nothing here is mock data
@@ -149,8 +114,39 @@
 
   /* ---------------- LOADERS ---------------- */
   async function loadUser() {
-    // GET /auth/me returns the User doc (fullname, email, role, ...).
-    const user = await api("/auth/me");
+    // GET /auth/me returns the User doc (fullname, email, role, ...)
+    // wrapped in the { data } envelope.
+    let userRes;
+    try {
+      userRes = await fetch(API_BASE + "/auth/me", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      console.log(userRes);
+    } catch (networkErr) {
+      throw new Error("Could not reach the server. Check your connection.");
+    }
+
+    if (userRes.status === 401) {
+      window.location.href = "../../../Auth/login/login.html";
+      throw new Error("Session expired. Please log in again.");
+    }
+
+    let userJson = null;
+    try {
+      userJson = await userRes.json();
+    } catch {
+      /* empty body */
+    }
+
+    if (!userRes.ok) {
+      throw new Error(
+        userJson?.message || `Request failed (${userRes.status})`,
+      );
+    }
+
+    const user = userJson?.data || {};
     STATE.user.fullname = user.fullname || "";
     STATE.user.email = user.email || "";
 
@@ -160,8 +156,36 @@
     // (mirroring updatePatientProfile's shape) and this will pick it up
     // automatically. Until then those fields stay blank.
     try {
-      const patient = await api("/patient/profile");
-      applyPatientProfile(patient);
+      let res;
+      try {
+        res = await fetch(API_BASE + "/patient/profile", {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        conosle.log(res);
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        /* empty body */
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      applyPatientProfile(json?.data);
     } catch {
       /* endpoint not available yet — non-fatal */
     }
@@ -185,8 +209,35 @@
   }
 
   async function loadAppointments() {
-    const data = await api("/appointments/patient");
-    STATE.appointments = (data || []).map(mapAppointment);
+    let res;
+    try {
+      res = await fetch(API_BASE + "/appointments/patient", {
+        method: "GET",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+      });
+      console.log(res);
+    } catch (networkErr) {
+      throw new Error("Could not reach the server. Check your connection.");
+    }
+
+    if (res.status === 401) {
+      window.location.href = "../../../Auth/login/login.html";
+      throw new Error("Session expired. Please log in again.");
+    }
+
+    let json = null;
+    try {
+      json = await res.json();
+    } catch {
+      /* empty body */
+    }
+
+    if (!res.ok) {
+      throw new Error(json?.message || `Request failed (${res.status})`);
+    }
+
+    STATE.appointments = (json?.data || []).map(mapAppointment);
   }
 
   async function loadDoctors() {
@@ -195,8 +246,35 @@
     // with `user` (fullname/email/phone). Add that route/controller and
     // booking will work as-is; until then Step 2 of the wizard is empty.
     try {
-      const data = await api("/doctors");
-      STATE.doctors = (data || []).map(mapDoctor);
+      let res;
+      try {
+        res = await fetch(API_BASE + "/doctors", {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+        cconsole.log(res);
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        /* empty body */
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      STATE.doctors = (json?.data || []).map(mapDoctor);
     } catch {
       STATE.doctors = [];
     }
@@ -516,11 +594,35 @@
     submitBtn.disabled = true;
     submitBtn.textContent = "Saving…";
     try {
-      const updated = await api("/patient/profile", {
-        method: "PATCH",
-        body: payload,
-      });
-      applyPatientProfile(updated);
+      let res;
+      try {
+        res = await fetch(API_BASE + "/patient/profile", {
+          method: "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        /* empty body */
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      applyPatientProfile(json?.data);
       $("#editOverlay").classList.remove("open");
       renderProfile();
       syncUserChrome();
@@ -697,22 +799,47 @@
         `${book.date}T${to24h(book.time)}`,
       ).toISOString();
 
-      const res = await api("/appointments/book", {
-        method: "POST",
-        body: {
-          doctorId: d.id,
-          appointmentDate,
-          bookFor: book.forWhom,
-          ...(book.forWhom === "other"
-            ? { patientName: book.patientName }
-            : {}),
-        },
-      });
+      const payload = {
+        doctorId: d.id,
+        appointmentDate,
+        bookFor: book.forWhom,
+        ...(book.forWhom === "other" ? { patientName: book.patientName } : {}),
+      };
+
+      let res;
+      try {
+        res = await fetch(API_BASE + "/appointments/book", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        /* empty body */
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      const resData = json?.data;
 
       $("#bookOverlay").classList.remove("open");
       toast(
         "Appointment confirmed",
-        `Token #${res.queue?.yourToken ?? "—"} — ${d.name}, ${niceDate(book.date)}.`,
+        `Token #${resData?.queue?.yourToken ?? "—"} — ${d.name}, ${niceDate(book.date)}.`,
       );
       await loadAppointments();
       renderOverview();
@@ -787,9 +914,36 @@
       btn.disabled = true;
       btn.textContent = "Cancelling…";
       try {
-        await api(`/appointments/${c.dataset.cancel}/cancel`, {
-          method: "PATCH",
-        });
+        let res;
+        try {
+          res = await fetch(
+            `${API_BASE}/appointments/${c.dataset.cancel}/cancel`,
+            {
+              method: "PATCH",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        } catch (networkErr) {
+          throw new Error("Could not reach the server. Check your connection.");
+        }
+
+        if (res.status === 401) {
+          window.location.href = "../../../Auth/login/login.html";
+          throw new Error("Session expired. Please log in again.");
+        }
+
+        let json = null;
+        try {
+          json = await res.json();
+        } catch {
+          /* empty body */
+        }
+
+        if (!res.ok) {
+          throw new Error(json?.message || `Request failed (${res.status})`);
+        }
+
         await loadAppointments();
         closeDetails();
         renderOverview();
@@ -923,7 +1077,11 @@
       b.addEventListener("click", async (e) => {
         e.preventDefault();
         try {
-          await api("/auth/logout", { method: "POST" });
+          await fetch(API_BASE + "/auth/logout", {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+          });
         } catch {
           /* even if the call fails, still send them to login */
         }

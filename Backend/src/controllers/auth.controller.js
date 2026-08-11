@@ -17,10 +17,11 @@ import { generateSubscriptionId } from "../utils/id's/subscription.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 
-const cookieOptions = {
+const isProd = process.env.NODE_ENV === "production";
+const options = {
   httpOnly: true,
-  secure: process.env.NODE_ENV === "production", // false on local http
-  sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+  secure: false,              
+  sameSite: isProd ? "none" : "lax", 
 };
 
 // generateAccessAndRefreshTokens
@@ -371,17 +372,21 @@ const login = async (req, res, next) => {
       throw new ApiError(400, "Email and password are required");
     }
 
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const user = await User.findOne({
+      email: email.toLowerCase(),
+    });
+
     if (!user) {
       throw new ApiError(404, "User does not exist");
     }
 
-    const isPasswordValid = await user.isPasswordCorrect(password);
+    const isPasswordValid =
+      await user.isPasswordCorrect(password);
+
     if (!isPasswordValid) {
       throw new ApiError(401, "Invalid credentials");
     }
 
-    // Blocked-account check (admin can deactivate a user).
     if (user.isActive === false) {
       throw new ApiError(
         403,
@@ -389,38 +394,84 @@ const login = async (req, res, next) => {
       );
     }
 
-    const { accessToken, refreshToken } =
-      await generateAccessAndRefreshTokens(user);
+    // Generate tokens using User model methods
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
 
+    console.log(
+      "ACCESS TOKEN GENERATED:",
+      !!accessToken,
+    );
+
+    console.log(
+      "REFRESH TOKEN GENERATED:",
+      !!refreshToken,
+    );
+
+    // Save refresh token
+    user.refreshToken = refreshToken;
+
+    await user.save({
+      validateBeforeSave: false,
+    });
+
+    // Get safe user data
     const loggedInUser = await User.findById(user._id).select(
       "fullname email role",
     );
 
-    // Attach the role-specific readable id (doctorId / patientId).
     let profileId = null;
+
     if (user.role === "doctor") {
-      const doctor = await Doctor.findOne({ user: user._id }).select("doctorId");
+      const doctor = await Doctor.findOne({
+        user: user._id,
+      }).select("doctorId");
+
       profileId = doctor?.doctorId || null;
     } else if (user.role === "patient") {
-      const patient = await Patient.findOne({ user: user._id }).select("patientId");
+      const patient = await Patient.findOne({
+        user: user._id,
+      }).select("patientId");
+
       profileId = patient?.patientId || null;
     }
 
+    // Cookie options for localhost development
+    const cookieOptions = {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+    };
+
     return res
       .status(200)
-      .cookie("accessToken", accessToken, cookieOptions)
-      .cookie("refreshToken", refreshToken, cookieOptions)
+      .cookie(
+        "accessToken",
+        accessToken,
+        options,
+      )
+      .cookie(
+        "refreshToken",
+        refreshToken,
+        options,
+      )
       .json(
         new ApiResponse(
           200,
-          { user: loggedInUser, profileId, accessToken, refreshToken },
+          {
+            user: loggedInUser,
+            profileId,
+          },
           "Logged in successfully",
         ),
       );
+
   } catch (error) {
-    next(error);
+    console.log("LOGIN ERROR:", error.message);
+    return next(error);
   }
 };
+
 // refreshAccessToken
 const refreshAccessToken = async (req, res, next) => {
   try {

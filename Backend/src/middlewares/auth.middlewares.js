@@ -1,3 +1,7 @@
+import jwt from "jsonwebtoken";
+import { User } from "../models/user.models.js";
+import ApiError from "../utils/apierror.js"; // confirm apierror.js has `export default`
+
 const verifyJWT = async (req, res, next) => {
   try {
     const token =
@@ -10,10 +14,7 @@ const verifyJWT = async (req, res, next) => {
       throw new ApiError(401, "Unauthorized request");
     }
 
-    const decodedToken = jwt.verify(
-      token,
-      process.env.ACCESS_TOKEN_SECRET
-    );
+    const decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
     console.log("DECODED TOKEN:", decodedToken);
 
@@ -33,12 +34,8 @@ const verifyJWT = async (req, res, next) => {
   } catch (error) {
     console.log("VERIFY JWT ERROR:", error.message);
 
-    next(
-      new ApiError(
-        401,
-        error?.message || "Invalid access token"
-      )
-    );
+    next(new ApiError(401, error?.message || "Invalid access token"));
   }
 };
- export {verifyJWT}
+
+export { verifyJWT };

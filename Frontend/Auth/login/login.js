@@ -1,6 +1,5 @@
-
-
 console.log("LOGIN.JS FILE EXECUTED");
+
 
 const form = document.getElementById("loginForm");
 console.log("FORM FOUND:", form);
@@ -11,7 +10,7 @@ const btn = document.getElementById("submitBtn");
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
   console.log("LOGIN JS LOADED");
-    console.log("LOGIN FORM SUBMITTED");
+  console.log("LOGIN FORM SUBMITTED");
 
   clearAlert(alertBox);
   const fEmail = document.getElementById("f-email");
@@ -35,11 +34,30 @@ form.addEventListener("submit", async (e) => {
 
   setLoading(btn, true);
   try {
-    const data = await apiPost("/auth/login", {
-      email,
-      password,
-    });
+    let res;
+    try {
+      res = await fetch("http://localhost:8000/auth/login", {
+        method: "POST",
+        credentials: "include", // required so the Set-Cookie on the response is actually stored
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch (networkErr) {
+      throw new Error("Could not reach the server. Check your connection.");
+    }
 
+    let json = null;
+    try {
+      json = await res.json();
+    } catch {
+      /* empty body */
+    }
+
+    if (!res.ok) {
+      throw new Error(json?.message || `Request failed (${res.status})`);
+    }
+
+    const data = json;
     console.log("Login response:", data);
 
     const role = data?.data?.user?.role;
