@@ -29,10 +29,7 @@
       .join("")
       .toUpperCase();
 
-  /* ---------------- STATE ----------------
-   Populated from the API on load. Nothing here is mock data
-   anymore — see loadUser()/loadAppointments()/loadDoctors().
---------------------------------------------- */
+  /* ---------------- STATE ---------------- */
   const STATE = {
     user: {
       fullname: "",
@@ -46,28 +43,20 @@
     },
     doctors: [],
     appointments: [],
-    // NOTE: there's no notifications endpoint in the routes provided,
-    // so this stays empty until that API exists.
     notifications: [],
   };
 
-  /* the patient's ACTIVE appointment drives Overview + Queue.
-   Backend statuses are: waiting, in-progress, completed, cancelled. */
   const activeAppt = () =>
     STATE.appointments.find((a) => a.status === "waiting") ||
     STATE.appointments.find((a) => a.status === "in-progress");
 
-  /* ---------------- DATA MAPPING ----------------
-   Converts backend shapes (Appointment/Doctor documents) into
-   the flat shape the existing render functions expect.
---------------------------------------------- */
   function mapAppointment(a) {
     const doc = a.doctor || {};
     const docUser = doc.user || {};
     const dt = a.appointmentDate ? new Date(a.appointmentDate) : null;
     const q = a.queue;
     return {
-      _id: a._id, // real Mongo id — needed for PATCH /:id/cancel
+      _id: a._id,
       id: a.appointmentId || a._id,
       patient: a.patientName,
       bookedBy: a.bookedBy?.fullname || "",
@@ -114,16 +103,19 @@
 
   /* ---------------- LOADERS ---------------- */
   async function loadUser() {
-    // GET /auth/me returns the User doc (fullname, email, role, ...)
-    // wrapped in the { data } envelope.
+    // GET /patient/me returns the User doc AND the Patient-only
+    // fields together, under `data.profile`. One request, not two —
+    // the previous second fetch to /patient/profile with
+    // method:"PATCH" and no body was never a valid "read" call;
+    // it was hitting updatePatientProfile with an empty body and
+    // getting a 400 back every time. Removed entirely.
     let userRes;
     try {
-      userRes = await fetch(API_BASE + "/auth/me", {
+      userRes = await fetch(API_BASE + "/patient/me", {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
-      console.log(userRes);
     } catch (networkErr) {
       throw new Error("Could not reach the server. Check your connection.");
     }
@@ -149,46 +141,11 @@
     const user = userJson?.data || {};
     STATE.user.fullname = user.fullname || "";
     STATE.user.email = user.email || "";
+    STATE.user.phone = user.phone || "";
 
-    // Patient-specific fields (patientId, dateOfBirth, gender, bloodGroup)
-    // aren't on the User doc and there's no GET /patient/profile route in
-    // what was provided — only PATCH. Add a GET /patient/profile endpoint
-    // (mirroring updatePatientProfile's shape) and this will pick it up
-    // automatically. Until then those fields stay blank.
-    try {
-      let res;
-      try {
-        res = await fetch(API_BASE + "/patient/profile", {
-          method: "GET",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-        });
-
-        conosle.log(res);
-      } catch (networkErr) {
-        throw new Error("Could not reach the server. Check your connection.");
-      }
-
-      if (res.status === 401) {
-        window.location.href = "../../../Auth/login/login.html";
-        throw new Error("Session expired. Please log in again.");
-      }
-
-      let json = null;
-      try {
-        json = await res.json();
-      } catch {
-        /* empty body */
-      }
-
-      if (!res.ok) {
-        throw new Error(json?.message || `Request failed (${res.status})`);
-      }
-
-      applyPatientProfile(json?.data);
-    } catch {
-      /* endpoint not available yet — non-fatal */
-    }
+    // Patient-only fields arrive nested under `profile` in this
+    // same response (from getCurrentUser's { ...user, profile }).
+    applyPatientProfile(user.profile);
   }
 
   function applyPatientProfile(patient) {
@@ -203,6 +160,10 @@
           day: "numeric",
         })
       : STATE.user.dob;
+    // updatePatientProfile's response (from the edit form, below)
+    // nests a populated `user` object; getCurrentUser's `profile`
+    // does not. These no-op harmlessly when absent, so this
+    // function works for both response shapes.
     if (patient.user?.fullname) STATE.user.fullname = patient.user.fullname;
     if (patient.user?.email) STATE.user.email = patient.user.email;
     if (patient.user?.phone) STATE.user.phone = patient.user.phone;
@@ -216,7 +177,6 @@
         credentials: "include",
         headers: { "Content-Type": "application/json" },
       });
-      console.log(res);
     } catch (networkErr) {
       throw new Error("Could not reach the server. Check your connection.");
     }
@@ -241,10 +201,6 @@
   }
 
   async function loadDoctors() {
-    // NOTE: no "list doctors" route was included in the routes you shared.
-    // This assumes GET /doctors returns an array of Doctor docs populated
-    // with `user` (fullname/email/phone). Add that route/controller and
-    // booking will work as-is; until then Step 2 of the wizard is empty.
     try {
       let res;
       try {
@@ -253,7 +209,6 @@
           credentials: "include",
           headers: { "Content-Type": "application/json" },
         });
-        cconsole.log(res);
       } catch (networkErr) {
         throw new Error("Could not reach the server. Check your connection.");
       }
@@ -275,7 +230,8 @@
       }
 
       STATE.doctors = (json?.data || []).map(mapDoctor);
-    } catch {
+    } catch (err) {
+      console.warn("GET /doctors failed:", err.message);
       STATE.doctors = [];
     }
   }
@@ -359,7 +315,6 @@
     </div>`;
     }
 
-    // recent history (latest 4)
     $("#recentHistory").innerHTML = STATE.appointments
       .slice(0, 4)
       .map(
@@ -372,7 +327,6 @@
       .join("");
   }
 
-  /* visual queue chips: now-serving -> you */
   function chipTrack(a) {
     const q = a.queue || { nowServing: null, patientsAhead: 0 };
     const serving = q.nowServing || a.token - q.patientsAhead - 1;
@@ -459,8 +413,6 @@
       $("#qStepper").innerHTML = "";
       $("#queueSub").textContent = "No active appointment";
       $("#qStatus").textContent = "—";
-      // Replace the two queue cards with a single empty state instead of
-      // leaving blank boxes on screen.
       if (cards[0]) {
         cards[0].innerHTML = `<div class="empty-state">
         <div class="ei"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" stroke-linecap="round"/></svg></div>
@@ -493,7 +445,6 @@
     <div class="q-metric"><div class="mk">Estimated wait</div><div class="mv">~${q.wait} min</div></div>`;
     $("#qChips").innerHTML = chipTrack(a);
 
-    // progress rows — PRIVACY: other patients shown as token numbers only
     const serving = q.nowServing || a.token - q.patientsAhead - 1;
     let rows = "";
     for (let n = serving; n <= a.token; n++) {
@@ -519,8 +470,6 @@
     $("#qStepper").innerHTML = stepperHTML(a.status);
   }
 
-  /* horizontal status stepper — matches backend statuses:
-   waiting -> in-progress -> completed (or cancelled) */
   const STEPS = ["Waiting", "In Progress", "Completed"];
   function stepIndex(status) {
     return (
@@ -556,16 +505,12 @@
       <div class="pc-field"><div class="fk">Email</div><div class="fv">${u.email}</div></div>
       <div class="pc-field"><div class="fk">Phone</div><div class="fv">${u.phone || "—"}</div></div>
       <div class="pc-field"><div class="fk">Date of birth</div><div class="fv">${u.dob || "—"}</div></div>
-      <div class="pc-field"><div class="fk">Blood group</div><div class="fv">${u.bloodGroup || "—"}</div></div>
-      <div class="pc-field"><div class="fk">Emergency contact</div><div class="fv">${u.emergency || "—"}</div></div>
+      <div class="pc-field"><div class="fk">Gender</div><div class="fv">${u.gender ? cap(u.gender) : "—"}</div></div>
+      <div class="pc-field"><div class="fk">Blood Group</div><div class="fv">${u.bloodGroup || "—"}</div></div>
+      <div class="pc-field"><div class="fk">Patient ID</div><div class="fv">${u.patientId || "—"}</div></div>
     </div>`;
   }
 
-  /* edit profile modal
-   NOTE: the PATCH /patient/profile controller you shared only accepts
-   fullname, dateOfBirth, gender, bloodGroup — there's no field for
-   phone or an emergency contact. Phone/emergency are shown for
-   reference but aren't sent to the API until that's added. */
   $("#editProfileBtn").addEventListener("click", () => {
     const u = STATE.user;
     $("#editForm").innerHTML = `
@@ -596,6 +541,9 @@
     try {
       let res;
       try {
+        // FIX: was PATCHing /patient/me, which only has a GET
+        // handler registered. The route that actually accepts
+        // PATCH is /patient/profile.
         res = await fetch(API_BASE + "/patient/profile", {
           method: "PATCH",
           credentials: "include",
@@ -779,7 +727,6 @@
     }
   }
 
-  /* "10:30 AM" -> "10:30:00" (24h) for building an ISO datetime */
   function to24h(t) {
     if (!t) return "00:00:00";
     const [time, ampm] = t.split(" ");
@@ -1121,27 +1068,9 @@
     $("#ddEmail").textContent = u.email;
   }
 
-  /* ============================================================
-   SOCKET.IO wiring (spec §12) — connect and update live.
-   Uncomment when socket.io-client is loaded:
-
-   const socket = io(API_BASE, { withCredentials: true });
-   const a0 = activeAppt();
-   if (a0) socket.emit("joinQueue", { doctorId: a0.doctorId });
-   socket.on("queueUpdated", (data) => {
-     const a = activeAppt(); if (!a) return;
-     a.queue.nowServing    = data.nowServing;
-     a.queue.patientsAhead = Math.max(a.token - data.nowServing - 1, 0);
-     a.queue.wait          = a.queue.patientsAhead * (data.perPatient || 10);
-     renderOverview(); if (!$("#view-queue").hidden) renderQueue();
-   });
-   socket.on("clinicStarted", () => { activeAppt().queue.clinicStatus = "active"; renderQueue(); });
-   socket.on("clinicClosed",  () => loadAppointments().then(() => { renderOverview(); renderQueue(); }));
-   ============================================================ */
-
   /* ---------------- INIT ---------------- */
   async function init() {
-    showView(location.hash.replace("#", "") || "overview"); // show shell immediately
+    showView(location.hash.replace("#", "") || "overview");
     try {
       await loadUser();
       syncUserChrome();

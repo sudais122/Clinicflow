@@ -660,18 +660,6 @@
 
     <!-- ================= TOASTS ================= -->
     <div class="toast-wrap" id="toasts"></div>
-
-    <!--
-      NOTE: auth.js is intentionally NOT loaded here.
-      script.js already implements its own api()/loadUser()/
-      logout logic with the correct relative paths for this
-      page's folder depth. Loading auth.js too caused a
-      duplicate top-level `const API_BASE` declaration, which
-      is a SyntaxError that silently killed script.js entirely
-      — that's why clicks on nav links, profile, appointments,
-      etc. did nothing.
-    -->
-    <script src="./config.js"></script>
     <script src="./script.js"></script>
   </body>
 </html>

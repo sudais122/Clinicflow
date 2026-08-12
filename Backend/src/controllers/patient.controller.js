@@ -109,4 +109,26 @@ const updatePatientProfile = async (req, res, next) => {
   }
 };
 
-export { updatePatientProfile };
+// getCurrentUser
+const getCurrentUser = async (req, res, next) => {
+  try {
+    let profile = null;
+    if (req.user.role === "patient") {
+      profile = await Patient.findOne({ user: req.user._id })
+        .select("patientId dateOfBirth gender bloodGroup")
+        .lean();
+    } else if (req.user.role === "doctor") {
+      profile = await Doctor.findOne({ user: req.user._id })
+        .select("doctorId clinicName clinicAddress specialization consultationFee")
+        .lean();
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, { ...req.user.toObject(), profile }, "Current user fetched successfully"));
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { updatePatientProfile ,getCurrentUser};

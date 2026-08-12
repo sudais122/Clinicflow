@@ -538,24 +538,10 @@ const logout = async (req, res, next) => {
   }
 };
 
-// getCurrentUser
-const getCurrentUser = async (req, res, next) => {
-  try {
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, req.user, "Current user fetched successfully")
-      );
-  } catch (error) {
-    next(error);
-  }
-};
-
 export {
   registerDoctor,
   registerPatient,
   login,
   refreshAccessToken,
-  logout,
-  getCurrentUser,
+  logout
 };

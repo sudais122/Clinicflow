@@ -5,7 +5,6 @@ import {
   login,
   refreshAccessToken,
   logout,
-  getCurrentUser,
 } from "../controllers/auth.controller.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
 
@@ -19,6 +18,5 @@ router.post("/refresh-token", refreshAccessToken);
 
 // Protected Routes
 router.post("/logout", verifyJWT, logout);
-router.get("/me", verifyJWT, getCurrentUser);
 
 export default router;
