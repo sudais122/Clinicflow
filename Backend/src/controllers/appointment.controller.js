@@ -30,6 +30,7 @@ const bookAppointment = async (req, res, next) => {
     if (!doctorId) {
       throw new ApiError(400, "Doctor id is required");
     }
+
     if (!mongoose.isValidObjectId(doctorId)) {
       throw new ApiError(400, "Invalid doctor id");
     }
@@ -47,7 +48,6 @@ const bookAppointment = async (req, res, next) => {
         'bookFor must be either "self" or "other"',
       );
     }
-    //Get logged-in patient's profile
 
     const patient = await Patient.findOne({
       user: req.user._id,
@@ -57,8 +57,8 @@ const bookAppointment = async (req, res, next) => {
       throw new ApiError(404, "Patient profile not found");
     }
 
-    //Determine actual patient name
     let actualPatientName;
+
     if (bookFor === "self") {
       actualPatientName = req.user.fullname;
 
@@ -113,19 +113,13 @@ const bookAppointment = async (req, res, next) => {
         );
       }
 
-      if (queue.clinicStatus !== "open") {
-        throw new ApiError(
-          400,
-          "Clinic is currently closed",
-        );
-      }
-
       const tokenNumber = queue.lastToken + 1;
 
       queue.lastToken = tokenNumber;
       queue.lastUpdated = new Date();
 
       await queue.save({ session });
+
       const appointmentId = await generateAppointmentId({
         session,
       });
@@ -134,7 +128,6 @@ const bookAppointment = async (req, res, next) => {
         [
           {
             appointmentId,
-
             bookedBy: req.user._id,
             patient: patient._id,
             patientName: actualPatientName,
@@ -163,14 +156,13 @@ const bookAppointment = async (req, res, next) => {
     } finally {
       await session.endSession();
     }
-    // Get created appointment with doctor details
+
     const populatedAppointment =
       await Appointment.findById(appointmentDocId)
         .populate({
           path: "doctor",
           select:
             "doctorId clinicName clinicAddress specialization consultationFee user",
-
           populate: {
             path: "user",
             select: "fullname email phone",
@@ -195,47 +187,75 @@ const bookAppointment = async (req, res, next) => {
 
     const yourToken = populatedAppointment.tokenNumber;
 
-    const nowServing = queue?.nowServing ?? 0;
+    const clinicStatus =
+      queue?.clinicStatus ?? "closed";
 
-    const patientsAhead = Math.max(
-      yourToken - nowServing - 1,
-      0,
-    );
+    const nowServing =
+      queue?.nowServing ?? 0;
 
     const perPatient =
       queue?.estimatedTimePerPatient ?? 10;
 
-    const delay = queue?.delayInMinutes ?? 0;
+    const delay =
+      queue?.delayInMinutes ?? 0;
 
-    const estimatedWaitMinutes =
-      patientsAhead * perPatient + delay;
-    // Notify doctor's room
+    let patientsAhead = 0;
+    let estimatedWaitMinutes = 0;
+
+    if (clinicStatus === "open") {
+      patientsAhead = Math.max(
+        yourToken - nowServing - 1,
+        0,
+      );
+
+      estimatedWaitMinutes =
+        patientsAhead * perPatient + delay;
+    }
+
     emitQueueLengthUpdated(doctorId, {
       lastToken: queue?.lastToken ?? yourToken,
       nowServing,
     });
-    // Response
 
     const responseData = {
       appointment: populatedAppointment,
 
       queue: {
         yourToken,
-        nowServing,
-        patientsAhead,
-        estimatedTimePerPatient: perPatient,
-        delayInMinutes: delay,
-        estimatedWaitMinutes,
-        clinicStatus:
-          queue?.clinicStatus ?? "closed",
+        nowServing:
+          clinicStatus === "open"
+            ? nowServing
+            : null,
+        patientsAhead:
+          clinicStatus === "open"
+            ? patientsAhead
+            : null,
+        estimatedTimePerPatient:
+          clinicStatus === "open"
+            ? perPatient
+            : null,
+        delayInMinutes:
+          clinicStatus === "open"
+            ? delay
+            : null,
+        estimatedWaitMinutes:
+          clinicStatus === "open"
+            ? estimatedWaitMinutes
+            : null,
+        clinicStatus,
       },
+
+      message:
+        clinicStatus === "open"
+          ? "Appointment booked successfully"
+          : "Appointment booked successfully. The clinic is currently closed. Queue information will be available when the clinic opens.",
     };
 
     return res.status(201).json(
       new ApiResponse(
         201,
         responseData,
-        "Appointment booked successfully",
+        responseData.message,
       ),
     );
   } catch (error) {
