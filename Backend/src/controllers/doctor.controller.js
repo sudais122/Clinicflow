@@ -119,4 +119,38 @@ const updateDoctorProfile = async (req, res, next) => {
   }
 };
 
-export { updateDoctorProfile };
+const getAvailableDoctors = async (req, res, next) => {
+  try {
+    const doctors = await Doctor.find()
+      .select(
+        "doctorId specialization clinicName clinicAddress consultationFee user"
+      )
+      .populate({
+        path: "user",
+        select: "fullname email",
+      })
+      .lean();
+
+    const formattedDoctors = doctors.map((doctor) => ({
+      id: doctor._id,
+      doctorId: doctor.doctorId,
+      fullname: doctor.user?.fullname || "Unknown Doctor",
+      specialization: doctor.specialization,
+      clinicName: doctor.clinicName,
+      clinicAddress: doctor.clinicAddress,
+      consultationFee: doctor.consultationFee,
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        formattedDoctors,
+        "Doctors fetched successfully"
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
+export { updateDoctorProfile,getAvailableDoctors };

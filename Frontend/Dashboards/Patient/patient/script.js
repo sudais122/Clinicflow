@@ -204,7 +204,7 @@
     try {
       let res;
       try {
-        res = await fetch(API_BASE + "/doctors", {
+        res = await fetch(API_BASE + "/doctor", {
           method: "GET",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
@@ -314,17 +314,40 @@
       </div>
     </div>`;
     }
+const recentHistory = $("#recentHistory");
 
-    $("#recentHistory").innerHTML = STATE.appointments
-      .slice(0, 4)
-      .map(
-        (a) => `
-    <div class="hrow" data-details="${a.id}" style="cursor:pointer">
-      <div><div class="dn">${a.doctor}</div><div class="dsub">${a.patient} · ${a.date} · ${a.time}</div></div>
-      <span class="pill ${a.status}"><span class="d"></span> ${cap(a.status)}</span>
-    </div>`,
-      )
-      .join("");
+if (!STATE.appointments || STATE.appointments.length === 0) {
+  recentHistory.innerHTML = `
+    <div class="empty-history">
+      <h3>No appointment history</h3>
+      <p>You don't have any previous appointments yet.</p>
+      <button class="btn btn-primary" data-book>
+        Book New Appointment
+      </button>
+    </div>
+  `;
+} else {
+  recentHistory.innerHTML = STATE.appointments
+    .slice(0, 4)
+    .map(
+      (a) => `
+        <div class="hrow" data-details="${a.id}" style="cursor:pointer">
+          <div>
+            <div class="dn">${a.doctor}</div>
+            <div class="dsub">
+              ${a.patient} · ${a.date} · ${a.time}
+            </div>
+          </div>
+
+          <span class="pill ${a.status}">
+            <span class="d"></span>
+            ${cap(a.status)}
+          </span>
+        </div>
+      `,
+    )
+    .join("");
+}
   }
 
   function chipTrack(a) {
@@ -489,316 +512,933 @@
   }
 
   /* ---------------- PROFILE ---------------- */
-  function renderProfile() {
-    const u = STATE.user;
-    $("#profileCard").innerHTML = `
+function renderProfile() {
+  const u = STATE.user;
+
+  $("#profileCard").innerHTML = `
     <div class="pc-head">
       <div class="pc-avatar">${initials(u.fullname)}</div>
-      <div><div class="pn">${u.fullname}</div><div class="pe">${u.email}</div></div>
+      <div>
+        <div class="pn">${u.fullname}</div>
+        <div class="pe">${u.email}</div>
+      </div>
+
       <div class="pc-stats">
-        <div><div class="sk">Appointments</div><div class="sv">${STATE.appointments.length}</div></div>
-        <div><div class="sk">Blood group</div><div class="sv blood">${u.bloodGroup || "—"}</div></div>
+        <div>
+          <div class="sk">Appointments</div>
+          <div class="sv">${STATE.appointments.length}</div>
+        </div>
+
+        <div>
+          <div class="sk">Blood group</div>
+          <div class="sv blood">${u.bloodGroup || "—"}</div>
+        </div>
       </div>
     </div>
+
     <div class="pc-grid">
-      <div class="pc-field"><div class="fk">Full name</div><div class="fv">${u.fullname}</div></div>
-      <div class="pc-field"><div class="fk">Email</div><div class="fv">${u.email}</div></div>
-      <div class="pc-field"><div class="fk">Phone</div><div class="fv">${u.phone || "—"}</div></div>
-      <div class="pc-field"><div class="fk">Date of birth</div><div class="fv">${u.dob || "—"}</div></div>
-      <div class="pc-field"><div class="fk">Gender</div><div class="fv">${u.gender ? cap(u.gender) : "—"}</div></div>
-      <div class="pc-field"><div class="fk">Blood Group</div><div class="fv">${u.bloodGroup || "—"}</div></div>
-      <div class="pc-field"><div class="fk">Patient ID</div><div class="fv">${u.patientId || "—"}</div></div>
-    </div>`;
-  }
+      <div class="pc-field">
+        <div class="fk">Full name</div>
+        <div class="fv">${u.fullname}</div>
+      </div>
 
-  $("#editProfileBtn").addEventListener("click", () => {
-    const u = STATE.user;
-    $("#editForm").innerHTML = `
-    <div class="field" style="margin-bottom:16px"><label>Full name</label><input name="fullname" value="${u.fullname}"></div>
-    <div class="field" style="margin-bottom:16px"><label>Phone <span style="opacity:.6">(not saved yet — no API field)</span></label><input name="phone" value="${u.phone}" disabled></div>
-    <div class="field" style="margin-bottom:16px"><label>Emergency contact <span style="opacity:.6">(not saved yet — no API field)</span></label><input name="emergency" value="${u.emergency}" disabled></div>
-    <div class="field" style="margin-bottom:22px"><label>Blood group</label>
-      <select name="bloodGroup">${["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((b) => `<option ${b === u.bloodGroup ? "selected" : ""}>${b}</option>`).join("")}</select></div>
+      <div class="pc-field">
+        <div class="fk">Email</div>
+        <div class="fv">${u.email}</div>
+      </div>
+
+      <div class="pc-field">
+        <div class="fk">Phone</div>
+        <div class="fv">${u.phone || "—"}</div>
+      </div>
+
+      <div class="pc-field">
+        <div class="fk">Date of birth</div>
+        <div class="fv">${u.dob || "—"}</div>
+      </div>
+
+      <div class="pc-field">
+        <div class="fk">Gender</div>
+        <div class="fv">${u.gender ? cap(u.gender) : "—"}</div>
+      </div>
+
+      <div class="pc-field">
+        <div class="fk">Patient ID</div>
+        <div class="fv">${u.patientId || "—"}</div>
+      </div>
+    </div>
+  `;
+}
+
+
+$("#editProfileBtn").addEventListener("click", () => {
+  const u = STATE.user;
+
+  $("#editForm").innerHTML = `
+    <div class="field" style="margin-bottom:16px">
+      <label>Full name</label>
+      <input
+        name="fullname"
+        value="${u.fullname || ""}"
+      >
+    </div>
+
+    <div class="field" style="margin-bottom:16px">
+      <label>Phone</label>
+      <input
+        name="phone"
+        value="${u.phone || ""}"
+        disabled
+      >
+    </div>
+
+    <div class="field" style="margin-bottom:16px">
+      <label>Date of birth</label>
+      <input
+        type="date"
+        name="dateOfBirth"
+        value="${u.dob || ""}"
+      >
+    </div>
+
+    <div class="field" style="margin-bottom:16px">
+      <label>Gender</label>
+      <select name="gender">
+        <option value="">Select gender</option>
+        <option value="male" ${u.gender === "male" ? "selected" : ""}>
+          Male
+        </option>
+        <option value="female" ${u.gender === "female" ? "selected" : ""}>
+          Female
+        </option>
+        <option value="other" ${u.gender === "other" ? "selected" : ""}>
+          Other
+        </option>
+      </select>
+    </div>
+
+    <div class="field" style="margin-bottom:22px">
+      <label>Blood group</label>
+      <select name="bloodGroup">
+        ${["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
+          .map(
+            (b) =>
+              `<option ${
+                b === u.bloodGroup ? "selected" : ""
+              }>${b}</option>`,
+          )
+          .join("")}
+      </select>
+    </div>
+
     <div class="wfoot" style="border:none;padding:0;margin:0">
-      <button type="button" class="link-btn" id="editCancel">Cancel</button>
-      <button type="submit" class="btn btn-primary">Save changes</button></div>`;
-    $("#editOverlay").classList.add("open");
-    $("#editCancel").onclick = () => $("#editOverlay").classList.remove("open");
-  });
-  $("#editClose").addEventListener("click", () =>
-    $("#editOverlay").classList.remove("open"),
+      <button type="button" class="link-btn" id="editCancel">
+        Cancel
+      </button>
+
+      <button type="submit" class="btn btn-primary">
+        Save changes
+      </button>
+    </div>
+  `;
+
+  $("#editOverlay").classList.add("open");
+
+  $("#editCancel").onclick = () =>
+    $("#editOverlay").classList.remove("open");
+});
+
+
+$("#editClose").addEventListener("click", () =>
+  $("#editOverlay").classList.remove("open"),
+);
+
+
+$("#editForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const fd = new FormData(e.target);
+
+  const payload = {
+    fullname: fd.get("fullname"),
+    dateOfBirth: fd.get("dateOfBirth"),
+    gender: fd.get("gender"),
+    bloodGroup: fd.get("bloodGroup"),
+  };
+
+  const submitBtn = e.target.querySelector(
+    'button[type="submit"]',
   );
-  $("#editForm").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const fd = new FormData(e.target);
-    const payload = {
-      fullname: fd.get("fullname"),
-      bloodGroup: fd.get("bloodGroup"),
-    };
-    const submitBtn = e.target.querySelector('button[type="submit"]');
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Saving…";
+
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Saving…";
+
+  try {
+    let res;
+
     try {
-      let res;
-      try {
-        // FIX: was PATCHing /patient/me, which only has a GET
-        // handler registered. The route that actually accepts
-        // PATCH is /patient/profile.
-        res = await fetch(API_BASE + "/patient/profile", {
-          method: "PATCH",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } catch (networkErr) {
-        throw new Error("Could not reach the server. Check your connection.");
-      }
-
-      if (res.status === 401) {
-        window.location.href = "../../../Auth/login/login.html";
-        throw new Error("Session expired. Please log in again.");
-      }
-
-      let json = null;
-      try {
-        json = await res.json();
-      } catch {
-        /* empty body */
-      }
-
-      if (!res.ok) {
-        throw new Error(json?.message || `Request failed (${res.status})`);
-      }
-
-      applyPatientProfile(json?.data);
-      $("#editOverlay").classList.remove("open");
-      renderProfile();
-      syncUserChrome();
-      toast("Profile updated successfully.");
-    } catch (err) {
-      toast("Couldn't update profile", err.message, true);
-    } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Save changes";
+      res = await fetch(API_BASE + "/patient/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (networkErr) {
+      throw new Error(
+        "Could not reach the server. Check your connection.",
+      );
     }
-  });
+
+    if (res.status === 401) {
+      window.location.href =
+        "../../../Auth/login/login.html";
+
+      throw new Error(
+        "Session expired. Please log in again.",
+      );
+    }
+
+    let json = null;
+
+    try {
+      json = await res.json();
+    } catch {
+      // Empty response body
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        json?.message || `Request failed (${res.status})`,
+      );
+    }
+
+    applyPatientProfile(json?.data);
+
+    $("#editOverlay").classList.remove("open");
+
+    renderProfile();
+    syncUserChrome();
+
+    toast("Profile updated successfully.");
+  } catch (err) {
+    toast(
+      "Couldn't update profile",
+      err.message,
+      true,
+    );
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Save changes";
+  }
+});
 
   /* ---------------- BOOKING WIZARD ---------------- */
   const book = {
-    step: 1,
-    forWhom: "self",
-    patientName: "",
-    doctor: null,
-    date: "",
-    time: "",
-  };
-  function openBooking() {
-    book.step = 1;
-    book.forWhom = "self";
-    book.patientName = STATE.user.fullname;
-    book.doctor = null;
-    book.date = "";
-    book.time = "";
-    $("#bookOverlay").classList.add("open");
-    renderWizard();
-    if (!STATE.doctors.length) loadDoctors().then(() => renderWizard());
+  step: 1,
+  forWhom: "self",
+  patientName: "",
+  doctor: null,
+  date: "",
+};
+
+async function loadDoctors() {
+  try {
+    const res = await fetch(API_BASE + "/doctor/getalldoctors", {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (res.status === 401) {
+      window.location.href = "../../../Auth/login/login.html";
+      throw new Error("Session expired. Please log in again.");
+    }
+
+    let json = null;
+
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error("Invalid server response.");
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        json?.message || `Request failed (${res.status})`,
+      );
+    }
+
+    const doctors = json?.data?.doctors || json?.data || [];
+
+    STATE.doctors = doctors.map((doctor) => ({
+      id: doctor._id || doctor.id,
+      doctorId: doctor.doctorId,
+      name:
+        doctor.user?.fullname ||
+        doctor.fullname ||
+        "Unknown Doctor",
+      spec: doctor.specialization || "—",
+      clinic: doctor.clinicName || "—",
+      area: doctor.clinicAddress || "—",
+      fee: Number(doctor.consultationFee || 0),
+    }));
+
+    return STATE.doctors;
+  } catch (error) {
+    STATE.doctors = [];
+
+    toast(
+      "Unable to load doctors",
+      error.message,
+      true,
+    );
+
+    return [];
   }
-  $("#bookClose").addEventListener("click", () =>
-    $("#bookOverlay").classList.remove("open"),
-  );
-  $("#bookOverlay").addEventListener("click", (e) => {
-    if (e.target.id === "bookOverlay")
-      $("#bookOverlay").classList.remove("open");
+}
+
+async function openBooking() {
+  book.step = 1;
+  book.forWhom = "self";
+  book.patientName = STATE.user.fullname;
+  book.doctor = null;
+  book.date = "";
+
+  $("#bookOverlay").classList.add("open");
+
+  renderWizard();
+
+  if (!STATE.doctors.length) {
+    await loadDoctors();
+    renderWizard();
+  }
+}
+
+$("#bookClose").addEventListener("click", () => {
+  $("#bookOverlay").classList.remove("open");
+});
+
+$("#bookOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "bookOverlay") {
+    $("#bookOverlay").classList.remove("open");
+  }
+});
+
+function renderWizard() {
+  $$("#wsteps .wstep").forEach((s) => {
+    const n = Number(s.dataset.s);
+
+    s.classList.toggle(
+      "active",
+      n === book.step,
+    );
+
+    s.classList.toggle(
+      "done",
+      n < book.step,
+    );
+
+    s.querySelector(".num").innerHTML =
+      n < book.step ? "✓" : n;
   });
 
-  function renderWizard() {
-    $$("#wsteps .wstep").forEach((s) => {
-      const n = +s.dataset.s;
-      s.classList.toggle("active", n === book.step);
-      s.classList.toggle("done", n < book.step);
-      s.querySelector(".num").innerHTML = n < book.step ? "✓" : n;
-    });
-    const body = $("#wbody"),
-      foot = $("#wfoot");
+  const body = $("#wbody");
+  const foot = $("#wfoot");
 
-    if (book.step === 1) {
-      body.innerHTML = `
+  if (book.step === 1) {
+    body.innerHTML = `
       <h3>Who is this appointment for?</h3>
+
       <div class="who-grid">
-        <div class="who-opt ${book.forWhom === "self" ? "sel" : ""}" data-who="self"><span class="radio"></span><div><div class="wt">Book for Myself</div><div class="ws">${STATE.user.fullname}</div></div></div>
-        <div class="who-opt ${book.forWhom === "other" ? "sel" : ""}" data-who="other"><span class="radio"></span><div><div class="wt">Book for Someone Else</div><div class="ws">Family member, child, parent</div></div></div>
+
+        <div
+          class="who-opt ${
+            book.forWhom === "self" ? "sel" : ""
+          }"
+          data-who="self"
+        >
+          <span class="radio"></span>
+
+          <div>
+            <div class="wt">
+              Book for Myself
+            </div>
+
+            <div class="ws">
+              ${STATE.user.fullname}
+            </div>
+          </div>
+        </div>
+
+        <div
+          class="who-opt ${
+            book.forWhom === "other" ? "sel" : ""
+          }"
+          data-who="other"
+        >
+          <span class="radio"></span>
+
+          <div>
+            <div class="wt">
+              Book for Someone Else
+            </div>
+
+            <div class="ws">
+              Family member, child, parent
+            </div>
+          </div>
+        </div>
+
       </div>
-      <div class="field"><label>Patient name</label><input id="wPatient" value="${book.patientName}">
-        <div class="hint">Booked by ${STATE.user.fullname} — the account holder. The patient name can be edited.</div></div>`;
-      foot.innerHTML = `<button class="link-btn" id="wCancel">Cancel</button><button class="btn btn-primary" id="wNext">Continue</button>`;
-      $$(".who-opt", body).forEach(
-        (o) =>
-          (o.onclick = () => {
-            book.forWhom = o.dataset.who;
-            book.patientName =
-              o.dataset.who === "self" ? STATE.user.fullname : "";
-            renderWizard();
-          }),
-      );
-      $("#wPatient").oninput = (e) => (book.patientName = e.target.value);
-      $("#wCancel").onclick = () => $("#bookOverlay").classList.remove("open");
-      $("#wNext").onclick = () => {
-        if (!book.patientName.trim())
-          return toast("Enter a patient name.", "", true);
-        book.step = 2;
-        renderWizard();
-      };
-    } else if (book.step === 2) {
-      body.innerHTML = STATE.doctors.length
-        ? STATE.doctors
-            .map(
-              (d) => `
-      <div class="doc-opt ${book.doctor?.id === d.id ? "sel" : ""}" data-doc="${d.id}">
-        <div><div class="dname">${d.name}</div><div class="dspec">${d.spec}</div>
-          <div class="dloc"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-5.2-7-11a7 7 0 0 1 14 0c0 5.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg> ${d.clinic} — ${d.area}</div></div>
-        <div class="dfee">PKR ${d.fee.toLocaleString()}</div></div>`,
-            )
-            .join("")
-        : `<div class="empty-state" style="padding:20px 0"><p>No doctors found. (Waiting on a GET /doctors endpoint.)</p></div>`;
-      foot.innerHTML = `<button class="wback" id="wBack"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg> Back</button><button class="btn btn-primary" id="wNext" ${book.doctor ? "" : "disabled"}>Continue</button>`;
-      $$(".doc-opt", body).forEach(
-        (o) =>
-          (o.onclick = () => {
-            book.doctor = STATE.doctors.find((d) => d.id === o.dataset.doc);
-            renderWizard();
-          }),
-      );
-      $("#wBack").onclick = () => {
-        book.step = 1;
-        renderWizard();
-      };
-      $("#wNext").onclick = () => {
-        if (book.doctor) {
-          book.step = 3;
-          renderWizard();
+
+      <div class="field">
+
+        <label>
+          Patient name
+        </label>
+
+        <input
+          id="wPatient"
+          value="${book.patientName}"
+          placeholder="Enter patient name"
+        />
+
+        <div class="hint">
+          Booked by ${STATE.user.fullname}.
+          The patient name can be edited.
+        </div>
+
+      </div>
+    `;
+
+    foot.innerHTML = `
+      <button
+        class="link-btn"
+        id="wCancel"
+      >
+        Cancel
+      </button>
+
+      <button
+        class="btn btn-primary"
+        id="wNext"
+      >
+        Continue
+      </button>
+    `;
+
+    $$(".who-opt", body).forEach((option) => {
+      option.onclick = () => {
+        book.forWhom = option.dataset.who;
+
+        if (book.forWhom === "self") {
+          book.patientName =
+            STATE.user.fullname;
+        } else {
+          book.patientName = "";
         }
+
+        renderWizard();
       };
-    } else if (book.step === 3) {
-      body.innerHTML = `
-      <div class="field" style="margin-bottom:22px"><label>Appointment date</label><input type="date" id="wDate" value="${book.date}"></div>
-      <div class="field"><label>Preferred time</label>
-        <div class="time-grid">${["09:00 AM", "10:30 AM", "12:15 PM", "04:45 PM"].map((t) => `<button type="button" class="time-chip ${book.time === t ? "sel" : ""}" data-time="${t}">${t}</button>`).join("")}</div></div>`;
-      foot.innerHTML = `<button class="wback" id="wBack"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg> Back</button><button class="btn btn-primary" id="wNext" ${book.date ? "" : "disabled"}>Continue</button>`;
-      $("#wDate").onchange = (e) => {
-        book.date = e.target.value;
-        $("#wNext").disabled = !book.date;
-      };
-      $$(".time-chip", body).forEach(
-        (c) =>
-          (c.onclick = () => {
-            book.time = c.dataset.time;
-            renderWizard();
-          }),
+    });
+
+    $("#wPatient").oninput = (e) => {
+      book.patientName =
+        e.target.value;
+    };
+
+    $("#wCancel").onclick = () => {
+      $("#bookOverlay").classList.remove(
+        "open",
       );
-      $("#wBack").onclick = () => {
-        book.step = 2;
-        renderWizard();
-      };
-      $("#wNext").onclick = () => {
-        if (book.date) {
-          book.step = 4;
-          renderWizard();
-        }
-      };
-    } else if (book.step === 4) {
-      const d = book.doctor;
-      const dateNice = book.date ? niceDate(book.date) : "—";
-      body.innerHTML = `
-      <div class="review-row"><span class="rk">Patient</span><span class="rv">${book.patientName}</span></div>
-      <div class="review-row"><span class="rk">Booked by</span><span class="rv">${STATE.user.fullname}</span></div>
-      <div class="review-row"><span class="rk">Doctor</span><span class="rv">${d.name}</span></div>
-      <div class="review-row"><span class="rk">Specialization</span><span class="rv">${d.spec}</span></div>
-      <div class="review-row"><span class="rk">Clinic</span><span class="rv">${d.clinic} — ${d.area}</span></div>
-      <div class="review-row"><span class="rk">Appointment date</span><span class="rv">${dateNice}</span></div>
-      <div class="review-row"><span class="rk">Appointment time</span><span class="rv">${book.time || "—"}</span></div>
-      <div class="review-row"><span class="rk">Consultation fee</span><span class="rv">PKR ${d.fee.toLocaleString()}</span></div>
-      <div class="review-row"><span class="rk">Token</span><span class="rv">Assigned on confirmation</span></div>`;
-      foot.innerHTML = `<button class="wback" id="wBack"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg> Back</button><button class="btn btn-primary" id="wConfirm">Confirm Appointment</button>`;
-      $("#wBack").onclick = () => {
-        book.step = 3;
-        renderWizard();
-      };
-      $("#wConfirm").onclick = confirmBooking;
-    }
+    };
+
+    $("#wNext").onclick = () => {
+      if (!book.patientName.trim()) {
+        return toast(
+          "Enter a patient name.",
+          "",
+          true,
+        );
+      }
+
+      book.patientName =
+        book.patientName.trim();
+
+      book.step = 2;
+
+      renderWizard();
+    };
   }
 
-  function to24h(t) {
-    if (!t) return "00:00:00";
-    const [time, ampm] = t.split(" ");
-    let [h, m] = time.split(":").map(Number);
-    if (ampm === "PM" && h !== 12) h += 12;
-    if (ampm === "AM" && h === 12) h = 0;
-    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+  else if (book.step === 2) {
+    body.innerHTML = STATE.doctors.length
+      ? STATE.doctors
+          .map(
+            (d) => `
+              <div
+                class="doc-opt ${
+                  book.doctor?.id === d.id
+                    ? "sel"
+                    : ""
+                }"
+                data-doc="${d.id}"
+              >
+
+                <div>
+
+                  <div class="dname">
+                    ${d.name}
+                  </div>
+
+                  <div class="dspec">
+                    ${d.spec}
+                  </div>
+
+                  <div class="dloc">
+                    ${d.clinic}
+                    —
+                    ${d.area}
+                  </div>
+
+                </div>
+
+                <div class="dfee">
+                  PKR ${d.fee.toLocaleString()}
+                </div>
+
+              </div>
+            `,
+          )
+          .join("")
+      : `
+          <div
+            class="empty-state"
+            style="padding:20px 0"
+          >
+            <p>
+              No doctors available.
+            </p>
+          </div>
+        `;
+
+    foot.innerHTML = `
+      <button
+        class="wback"
+        id="wBack"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            d="m15 18-6-6 6-6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+
+        Back
+      </button>
+
+      <button
+        class="btn btn-primary"
+        id="wNext"
+        ${book.doctor ? "" : "disabled"}
+      >
+        Continue
+      </button>
+    `;
+
+    $$(".doc-opt", body).forEach(
+      (option) => {
+        option.onclick = () => {
+          book.doctor =
+            STATE.doctors.find(
+              (d) =>
+                d.id ===
+                option.dataset.doc,
+            );
+
+          renderWizard();
+        };
+      },
+    );
+
+    $("#wBack").onclick = () => {
+      book.step = 1;
+      renderWizard();
+    };
+
+    $("#wNext").onclick = () => {
+      if (!book.doctor) return;
+
+      book.step = 3;
+
+      renderWizard();
+    };
   }
 
-  async function confirmBooking() {
+  else if (book.step === 3) {
+    body.innerHTML = `
+      <div
+        class="field"
+        style="margin-bottom:22px"
+      >
+
+        <label>
+          Appointment date
+        </label>
+
+        <input
+          type="date"
+          id="wDate"
+          value="${book.date}"
+        />
+
+      </div>
+    `;
+
+    foot.innerHTML = `
+      <button
+        class="wback"
+        id="wBack"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            d="m15 18-6-6 6-6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+
+        Back
+      </button>
+
+      <button
+        class="btn btn-primary"
+        id="wNext"
+        ${book.date ? "" : "disabled"}
+      >
+        Continue
+      </button>
+    `;
+
+    const dateInput =
+      $("#wDate");
+
+    dateInput.onchange = (e) => {
+      book.date =
+        e.target.value;
+
+      $("#wNext").disabled =
+        !book.date;
+    };
+
+    $("#wBack").onclick = () => {
+      book.step = 2;
+      renderWizard();
+    };
+
+    $("#wNext").onclick = () => {
+      if (!book.date) {
+        return toast(
+          "Select an appointment date.",
+          "",
+          true,
+        );
+      }
+
+      book.step = 4;
+
+      renderWizard();
+    };
+  }
+
+  else if (book.step === 4) {
     const d = book.doctor;
-    const confirmBtn = $("#wConfirm");
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = "Booking…";
+
+    const dateNice =
+      book.date
+        ? niceDate(book.date)
+        : "—";
+
+    body.innerHTML = `
+      <div class="review-row">
+        <span class="rk">
+          Patient
+        </span>
+
+        <span class="rv">
+          ${book.patientName}
+        </span>
+      </div>
+
+      <div class="review-row">
+        <span class="rk">
+          Booked by
+        </span>
+
+        <span class="rv">
+          ${STATE.user.fullname}
+        </span>
+      </div>
+
+      <div class="review-row">
+        <span class="rk">
+          Doctor
+        </span>
+
+        <span class="rv">
+          ${d.name}
+        </span>
+      </div>
+
+      <div class="review-row">
+        <span class="rk">
+          Specialization
+        </span>
+
+        <span class="rv">
+          ${d.spec}
+        </span>
+      </div>
+
+      <div class="review-row">
+        <span class="rk">
+          Clinic
+        </span>
+
+        <span class="rv">
+          ${d.clinic}
+          —
+          ${d.area}
+        </span>
+      </div>
+
+      <div class="review-row">
+        <span class="rk">
+          Appointment date
+        </span>
+
+        <span class="rv">
+          ${dateNice}
+        </span>
+      </div>
+
+      <div class="review-row">
+        <span class="rk">
+          Consultation fee
+        </span>
+
+        <span class="rv">
+          PKR ${d.fee.toLocaleString()}
+        </span>
+      </div>
+
+      <div class="review-row">
+        <span class="rk">
+          Token
+        </span>
+
+        <span class="rv">
+          Assigned on confirmation
+        </span>
+      </div>
+    `;
+
+    foot.innerHTML = `
+      <button
+        class="wback"
+        id="wBack"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path
+            d="m15 18-6-6 6-6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+
+        Back
+      </button>
+
+      <button
+        class="btn btn-primary"
+        id="wConfirm"
+      >
+        Confirm Appointment
+      </button>
+    `;
+
+    $("#wBack").onclick = () => {
+      book.step = 3;
+      renderWizard();
+    };
+
+    $("#wConfirm").onclick =
+      confirmBooking;
+  }
+}
+
+async function confirmBooking() {
+  const d = book.doctor;
+  const confirmBtn =
+    $("#wConfirm");
+
+  if (!d) {
+    return toast(
+      "Please select a doctor.",
+      "",
+      true,
+    );
+  }
+
+  if (!book.date) {
+    return toast(
+      "Please select an appointment date.",
+      "",
+      true,
+    );
+  }
+
+  if (!book.patientName.trim()) {
+    return toast(
+      "Patient name is required.",
+      "",
+      true,
+    );
+  }
+
+  confirmBtn.disabled = true;
+  confirmBtn.textContent =
+    "Booking…";
+
+  try {
+    const payload = {
+      doctorId: d.id,
+      appointmentDate: new Date(
+        `${book.date}T00:00:00`,
+      ).toISOString(),
+
+      bookFor: book.forWhom,
+
+      ...(book.forWhom === "other"
+        ? {
+            patientName:
+              book.patientName.trim(),
+          }
+        : {}),
+    };
+
+    let res;
+
     try {
-      const appointmentDate = new Date(
-        `${book.date}T${to24h(book.time)}`,
-      ).toISOString();
-
-      const payload = {
-        doctorId: d.id,
-        appointmentDate,
-        bookFor: book.forWhom,
-        ...(book.forWhom === "other" ? { patientName: book.patientName } : {}),
-      };
-
-      let res;
-      try {
-        res = await fetch(API_BASE + "/appointments/book", {
+      res = await fetch(
+        API_BASE +
+          "/appointments/book",
+        {
           method: "POST",
           credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-      } catch (networkErr) {
-        throw new Error("Could not reach the server. Check your connection.");
-      }
-
-      if (res.status === 401) {
-        window.location.href = "../../../Auth/login/login.html";
-        throw new Error("Session expired. Please log in again.");
-      }
-
-      let json = null;
-      try {
-        json = await res.json();
-      } catch {
-        /* empty body */
-      }
-
-      if (!res.ok) {
-        throw new Error(json?.message || `Request failed (${res.status})`);
-      }
-
-      const resData = json?.data;
-
-      $("#bookOverlay").classList.remove("open");
-      toast(
-        "Appointment confirmed",
-        `Token #${resData?.queue?.yourToken ?? "—"} — ${d.name}, ${niceDate(book.date)}.`,
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify(
+            payload,
+          ),
+        },
       );
-      await loadAppointments();
-      renderOverview();
-      renderAppointments();
-    } catch (err) {
-      toast("Booking failed", err.message, true);
-    } finally {
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = "Confirm Appointment";
+    } catch (networkErr) {
+      throw new Error(
+        "Could not reach the server. Check your connection.",
+      );
     }
-  }
 
+    if (res.status === 401) {
+      window.location.href =
+        "../../../Auth/login/login.html";
+
+      throw new Error(
+        "Session expired. Please log in again.",
+      );
+    }
+
+    let json = null;
+
+    try {
+      json = await res.json();
+    } catch {
+      throw new Error(
+        "Invalid server response.",
+      );
+    }
+
+    if (!res.ok) {
+      throw new Error(
+        json?.message ||
+          `Request failed (${res.status})`,
+      );
+    }
+
+    const resData =
+      json?.data;
+
+    $("#bookOverlay").classList.remove(
+      "open",
+    );
+
+    toast(
+      "Appointment confirmed",
+      `Token #${
+        resData?.queue?.yourToken ??
+        "—"
+      } — ${d.name}, ${niceDate(
+        book.date,
+      )}.`,
+    );
+
+    await loadAppointments();
+
+    renderOverview();
+    renderAppointments();
+
+    book.step = 1;
+    book.forWhom = "self";
+    book.patientName = "";
+    book.doctor = null;
+    book.date = "";
+  } catch (err) {
+    toast(
+      "Booking failed",
+      err.message,
+      true,
+    );
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent =
+      "Confirm Appointment";
+  }
+}
   /* ---------------- DETAILS SLIDE-OVER ---------------- */
   document.addEventListener("click", (e) => {
     const el = e.target.closest("[data-details]");

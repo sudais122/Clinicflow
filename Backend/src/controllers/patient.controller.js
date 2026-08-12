@@ -22,41 +22,68 @@ const updatePatientProfile = async (req, res, next) => {
       throw new ApiError(400, "No fields provided to update");
     }
 
-    // Validate the sent fields.
     if (fullname !== undefined) {
+      fullname = String(fullname).trim();
+
       if (fullname.length < 3 || fullname.length > 50) {
-        throw new ApiError(400, "Full name must be between 3 and 50 characters");
+        throw new ApiError(
+          400,
+          "Full name must be between 3 and 50 characters",
+        );
       }
+
       if (!/^[A-Za-z\s]+$/.test(fullname)) {
-        throw new ApiError(400, "Full name can contain only letters and spaces");
+        throw new ApiError(
+          400,
+          "Full name can contain only letters and spaces",
+        );
       }
     }
 
     let dob;
-    if (dateOfBirth !== undefined) {
+
+    if (dateOfBirth !== undefined && dateOfBirth !== "") {
       dob = new Date(dateOfBirth);
+
       if (isNaN(dob.getTime())) {
         throw new ApiError(400, "Invalid date of birth");
       }
+
       if (dob >= new Date()) {
-        throw new ApiError(400, "Date of birth must be in the past");
+        throw new ApiError(
+          400,
+          "Date of birth must be in the past",
+        );
       }
     }
 
-    if (gender !== undefined) {
-      gender = String(gender).toLowerCase(); // normalize "Male" -> "male"
+    if (gender !== undefined && gender !== "") {
+      gender = String(gender).toLowerCase();
+
       if (!["male", "female", "other"].includes(gender)) {
-        throw new ApiError(400, "Gender must be male, female or other");
+        throw new ApiError(
+          400,
+          "Gender must be male, female or other",
+        );
       }
     }
 
-    if (bloodGroup !== undefined && !validBloodGroups.includes(bloodGroup)) {
+    if (
+      bloodGroup !== undefined &&
+      !validBloodGroups.includes(bloodGroup)
+    ) {
       throw new ApiError(400, "Invalid blood group");
     }
 
-    const patient = await Patient.findOne({ user: req.user._id });
+    const patient = await Patient.findOne({
+      user: req.user._id,
+    });
+
     if (!patient) {
-      throw new ApiError(403, "Only a patient can update the patient profile");
+      throw new ApiError(
+        403,
+        "Only a patient can update the patient profile",
+      );
     }
 
     const session = await mongoose.startSession();
@@ -67,43 +94,61 @@ const updatePatientProfile = async (req, res, next) => {
         await User.findByIdAndUpdate(
           req.user._id,
           { $set: { fullname } },
-          { session },
+          { session, new: true },
         );
       }
 
       const patientUpdates = {};
-      if (dob !== undefined) patientUpdates.dateOfBirth = dob;
-      if (gender !== undefined) patientUpdates.gender = gender;
-      if (bloodGroup !== undefined) patientUpdates.bloodGroup = bloodGroup;
+
+      if (dob !== undefined) {
+        patientUpdates.dateOfBirth = dob;
+      }
+
+      if (gender !== undefined && gender !== "") {
+        patientUpdates.gender = gender;
+      }
+
+      if (bloodGroup !== undefined) {
+        patientUpdates.bloodGroup = bloodGroup;
+      }
 
       if (Object.keys(patientUpdates).length > 0) {
         await Patient.findByIdAndUpdate(
           patient._id,
           { $set: patientUpdates },
-          { session },
+          { session, new: true },
         );
       }
 
       await session.commitTransaction();
     } catch (error) {
       await session.abortTransaction();
+
       throw error instanceof ApiError
         ? error
-        : new ApiError(500, error?.message || "Failed to update patient profile");
+        : new ApiError(
+            500,
+            error?.message || "Failed to update patient profile",
+          );
     } finally {
-      session.endSession();
+      await session.endSession();
     }
 
     const updatedPatient = await Patient.findById(patient._id)
       .select("patientId dateOfBirth gender bloodGroup user")
-      .populate({ path: "user", select: "fullname email phone role" })
+      .populate({
+        path: "user",
+        select: "fullname email phone role",
+      })
       .lean();
 
-    return res
-      .status(200)
-      .json(
-        new ApiResponse(200, updatedPatient, "Patient profile updated successfully"),
-      );
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        updatedPatient,
+        "Patient profile updated successfully",
+      ),
+    );
   } catch (error) {
     next(error);
   }

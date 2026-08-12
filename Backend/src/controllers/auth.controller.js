@@ -436,13 +436,6 @@ const login = async (req, res, next) => {
       profileId = patient?.patientId || null;
     }
 
-    // Cookie options for localhost development
-    const cookieOptions = {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-    };
-
     return res
       .status(200)
       .cookie(
@@ -461,6 +454,7 @@ const login = async (req, res, next) => {
           {
             user: loggedInUser,
             profileId,
+            accessToken,
           },
           "Logged in successfully",
         ),

@@ -2218,7 +2218,30 @@ h3 {
     color: #12c98b;
 }
 
+.empty-history {
+  display: flex;
+  gap: 0.5rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px 20px;
+  min-height: 180px;
+}
 
+.empty-history h3 {
+  margin: 0 0 8px;
+  color: #17202A;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.empty-history p {
+  margin: 0;
+  color: #667085;
+  font-size: 14px;
+  line-height: 1.5;
+}
 
 @media (max-width: 768px) {
 
