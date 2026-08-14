@@ -180,7 +180,7 @@ const registerDoctor = async (req, res, next) => {
           {
             subscriptionId,
             doctor: doctor._id,
-            plan: "basic",
+            plan: "free",
             price: 0,
             startDate,
             endDate,

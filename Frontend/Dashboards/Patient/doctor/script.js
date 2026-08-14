@@ -1,118 +1,260 @@
 /* ============================================================
    ClinicFlow — Doctor Dashboard (behavior)
-   Mock-driven. Backend touchpoints marked  // API:  /  // SOCKET:
-   Product rules: serve strictly by TOKEN; DATE shown, TIME never.
-   Data scoped to the authenticated doctor only.
+   NOW WIRED TO THE REAL BACKEND. Every network call is grouped
+   under ENDPOINTS / api*() below — if a path is wrong for your
+   server, fix it in ONE place.
+
+   ASSUMPTIONS (please verify / adjust):
+   1. All routes are mounted under API_PREFIX = "/api/v1".
+   2. queue.routes.js  -> "/api/v1/queue"
+      doctor.routes.js -> "/api/v1/doctor"
+      doctorDashboard.routes.js -> "/api/v1/dashboard"  (matches the
+         "GET /dashboard/doctor" comment in the controller)
+      appointment routes -> "/api/v1/appointments" with:
+         GET   /appointments/doctor            (getDoctorAppointments)
+         PATCH /appointments/:id/status         (updateAppointmentStatus)
+      These two appointment paths are GUESSES — appointment.routes.js
+      wasn't provided. Update ENDPOINTS.appointments below if different.
+   3. Auth is cookie-based (JWT in an httpOnly cookie), so every fetch
+      uses `credentials: "include"`. No Authorization header is sent.
+   4. MISSING BACKEND ROUTE: there is currently no self-service
+      "get my own queue" endpoint — only `GET /queue/:doctorId`, and
+      the frontend never learns its own Mongo _id (only the human
+      readable `doctorId` code comes back from the dashboard route).
+      This file calls `GET /queue/me` for that. Please add it
+      server-side, e.g.:
+        router.get("/me", async (req, res, next) => {
+          const { queue } = await getOwnQueue(req.user._id); // reuse existing helper
+          res.json(new ApiResponse(200, queue, "Own queue fetched"));
+        });
+      If that route 404s, this file falls back to whatever the
+      dashboard endpoint already gives us (clinicStatus + nowServing)
+      and leaves lastToken / delay / estimatedTimePerPatient at
+      their last-known values.
+   5. `cancelAppointment` is patient-only (checks Patient ownership),
+      so the doctor dashboard's "Cancel Appointment" button calls
+      `updateAppointmentStatus` with `{ status: "cancelled" }` instead.
+   6. Subscription + notifications have no backend routes in what was
+      shared, so those two panels are left mocked — clearly marked
+      below — until those endpoints exist.
+   7. Realtime: socket.io-client must be loaded on the page
+      (e.g. `<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>`
+      in doctor-dashboard.html, before this script) for the socket
+      block near the bottom to activate. If `io` isn't found, the
+      dashboard still works — it just won't get push updates and will
+      rely on refetching after each action.
    ============================================================ */
+
 const CFG = window.CLINICFLOW_CONFIG || {};
 const API_BASE = CFG.API_BASE || "http://localhost:8000";
+const API_PREFIX = CFG.API_PREFIX || "/api/v1";
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
-/* ---------- MOCK STATE ----------
-   API: GET /dashboard/doctor, GET /appointments/doctor?date=,
-        GET /doctor/profile, GET /subscription/me, GET /notifications
---------------------------------- */
-const DOCTOR = {
-  name: "Dr. Hassan Qureshi",
-  email: "hassan.qureshi@clinicflow.com",
-  phone: "+92 300 1234567",
-  spec: "General Physician",
-  doctorId: "CF-DOC-10428",
-  clinic: "Care Point Clinic",
-  address: "24-B, Model Town Link Road, Lahore",
-  fee: 2000,
+const ENDPOINTS = {
+  dashboard: () => `${API_BASE}/dashboard/doctor`,
+  doctorProfileUpdate: () => `${API_BASE}/doctor/profile`,
+  queueStart: () => `${API_BASE}/queue/start`,
+  queueNext: () => `${API_BASE}/queue/next`,
+  queueDelay: () => `${API_BASE}/queue/delay`,
+  queueTime: () => `${API_BASE}/queue/time`,
+  queueEnd: () => `${API_BASE}/queue/end`,
+  queueReset: () => `${API_BASE}/queue/reset`,
+  queueMe: () => `${API_BASE}/queue/me`, // see assumption #4
+  appointmentsDoctor: () => `${API_BASE}/appointments/doctor`,
+  appointmentStatus: (id) =>
+    `${API_BASE}${API_PREFIX}/appointments/${id}/status`,
+  logout: () => `${API_BASE}${API_PREFIX}/auth/logout`,
 };
-const CLINIC_DATE = "August 10, 2026";
-const CLINIC_DAY = "Monday, August 10, 2026";
+
+/* ---------- fetch helpers ---------- */
+async function apiCall(url, { method = "GET", body } = {}) {
+  const res = await fetch(url, {
+    method,
+    credentials: "include",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  let payload = null;
+  try {
+    payload = await res.json();
+  } catch {
+    /* no JSON body */
+  }
+
+  if (!res.ok) {
+    const message = payload?.message || `Request failed (${res.status})`;
+    const err = new Error(message);
+    err.status = res.status;
+    err.payload = payload;
+    throw err;
+  }
+  return payload; // ApiResponse shape: { statusCode, data, message, success }
+}
+const apiGet = (url) => apiCall(url, { method: "GET" });
+const apiPatch = (url, body) => apiCall(url, { method: "PATCH", body });
+const apiPost = (url, body) => apiCall(url, { method: "POST", body });
+
+/* ============================================================
+   LIVE STATE — replaces the old hard-coded mock objects.
+   Populated by loadAll() on init and refreshed after every action.
+   ============================================================ */
+const DOCTOR = {
+  name: "",
+  email: "",
+  phone: "",
+  spec: "",
+  doctorId: "",
+  clinic: "",
+  address: "",
+  fee: 0,
+};
 
 const STATE = {
-  clinicOpen: false, // start closed (matches screenshot)
-  nowServing: 8, // token currently being served
-  perPatient: 10, // minutes
-  delay: 0, // minutes
-  lastToken: 19,
-  // token -> patient name & status. status: waiting|in-progress|completed|cancelled
-  patients: [
-    ["Saad", "completed"],
-    ["Maryam", "completed"],
-    ["Imran", "completed"],
-    ["Noor", "completed"],
-    ["Hamza", "completed"],
-    ["Sana", "completed"],
-    ["Tariq", "completed"],
-    ["Rabia", "in-progress"],
-    ["Kashif", "waiting"],
-    ["Amna", "waiting"],
-    ["Danish", "waiting"],
-    ["Ahmed", "waiting"],
-    ["Muhammad", "waiting"],
-    ["Fatima", "waiting"],
-    ["Ali", "waiting"],
-    ["Ayesha", "waiting"],
-    ["Bilal", "waiting"],
-    ["Zainab", "waiting"],
-    ["Usman", "waiting"],
-    ["Hira", "cancelled"],
-  ],
+  clinicOpen: false,
+  nowServing: 0,
+  perPatient: 10,
+  delay: 0,
+  lastToken: 0,
+  selectedDate: null, // YYYY-MM-DD, from the dashboard response
+  clinicDayLabel: "",
+  // appointments for the selected day, newest-token-first order preserved
+  appointments: [], // [{ id(_id), appointmentId, token, patient, status, date, clinic, createdAt }]
   subscription: {
+    // MOCK — no backend route provided for subscriptions.
     plan: "Free",
     status: "Active",
-    start: "August 1, 2026",
+    start: "—",
     end: "—",
   },
   notifications: [
-    { text: "Patient #13 is waiting.", time: "3 min ago", read: false },
-    {
-      text: "Patient #7 appointment is completed.",
-      time: "15 min ago",
-      read: false,
-    },
-    {
-      text: "Your queue has 11 patients remaining.",
-      time: "20 min ago",
-      read: false,
-    },
-    {
-      text: "Your clinic is currently closed.",
-      time: "1 hour ago",
-      read: true,
-    },
+    // MOCK — no backend route provided for notifications.
   ],
 };
 
-/* build appointment objects from patients[] (token = index+1) */
-function appts() {
-  return STATE.patients.map(([name, status], i) => ({
-    token: i + 1,
-    patient: name,
-    status,
-    id: "APT-2026" + String(80 + i + 1).padStart(4, "0"),
-    date: CLINIC_DATE,
-    clinic: DOCTOR.clinic,
-    createdAt: "Aug 9, 2026",
-  }));
-}
-const nameFor = (tok) => STATE.patients[tok - 1]?.[0] || "—";
-const statusFor = (tok) => STATE.patients[tok - 1]?.[1] || "waiting";
+/* ---------- derived helpers over live STATE.appointments ---------- */
+const nameFor = (tok) =>
+  STATE.appointments.find((a) => a.token === tok)?.patient || "—";
+const statusFor = (tok) =>
+  STATE.appointments.find((a) => a.token === tok)?.status || "waiting";
 const nextWaiting = (from) => {
-  for (let n = from + 1; n <= STATE.patients.length; n++)
-    if (statusFor(n) === "waiting") return n;
+  const tokens = STATE.appointments
+    .map((a) => a.token)
+    .filter((t) => t > from)
+    .sort((a, b) => a - b);
+  for (const t of tokens) if (statusFor(t) === "waiting") return t;
   return null;
 };
 const counts = () => {
   const c = {
-    total: STATE.patients.length,
+    total: STATE.appointments.length,
     waiting: 0,
     "in-progress": 0,
     completed: 0,
     cancelled: 0,
   };
-  STATE.patients.forEach(([, s]) => c[s]++);
+  STATE.appointments.forEach((a) => {
+    if (c[a.status] !== undefined) c[a.status]++;
+  });
   return c;
 };
 const waitingCount = () =>
-  STATE.patients.filter(([, s]) => s === "waiting").length;
+  STATE.appointments.filter((a) => a.status === "waiting").length;
+const appts = () => STATE.appointments; // kept for drop-in compatibility with render code
+
+/* ============================================================
+   LOADERS — pull real data from the backend
+   ============================================================ */
+function formatLongDate(d) {
+  return new Date(d).toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+function formatShortDate(d) {
+  return new Date(d).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+async function loadDashboard(dateStr) {
+  const url = dateStr
+    ? `${ENDPOINTS.dashboard()}?date=${encodeURIComponent(dateStr)}`
+    : ENDPOINTS.dashboard();
+  const res = await apiGet(url);
+  const d = res.data;
+
+  DOCTOR.doctorId = d.doctor?.doctorId || DOCTOR.doctorId;
+  DOCTOR.name = d.doctor?.fullname || DOCTOR.name;
+  DOCTOR.clinic = d.doctor?.clinicName || DOCTOR.clinic;
+  DOCTOR.spec = d.doctor?.specialization || DOCTOR.spec;
+
+  STATE.clinicOpen = d.clinicStatus === "open";
+  STATE.nowServing = d.currentServingToken ?? STATE.nowServing;
+  STATE.selectedDate = d.selectedDate;
+  STATE.clinicDayLabel = formatLongDate(d.selectedDate);
+}
+
+async function loadQueueMe() {
+  // See assumption #4 at the top of this file.
+  try {
+    const res = await apiGet(ENDPOINTS.queueMe());
+    const q = res.data;
+    applyQueueDoc(q);
+  } catch (err) {
+    // Route not implemented yet on the backend — degrade gracefully.
+    console.warn(
+      "GET /queue/me unavailable, falling back to dashboard-only queue data:",
+      err.message,
+    );
+  }
+}
+
+function applyQueueDoc(q) {
+  if (!q) return;
+  STATE.clinicOpen = q.clinicStatus === "open";
+  STATE.nowServing = q.nowServing ?? STATE.nowServing;
+  STATE.lastToken = q.lastToken ?? STATE.lastToken;
+  STATE.perPatient = q.estimatedTimePerPatient ?? STATE.perPatient;
+  STATE.delay = q.delayInMinutes ?? STATE.delay;
+}
+
+async function loadAppointments() {
+  const res = await apiGet(ENDPOINTS.appointmentsDoctor());
+  const list = res.data || [];
+  STATE.appointments = list
+    .map((a) => ({
+      id: a._id,
+      appointmentId: a.appointmentId,
+      token: a.tokenNumber,
+      patient:
+        a.patientName ||
+        a.patient?.user?.fullname ||
+        "Unknown patient",
+      status: a.status,
+      date: formatShortDate(a.appointmentDate),
+      clinic: DOCTOR.clinic,
+      createdAt: formatShortDate(a.createdAt),
+    }))
+    .sort((a, b) => a.token - b.token);
+
+  if (STATE.appointments.length) {
+    STATE.lastToken = Math.max(
+      STATE.lastToken,
+      ...STATE.appointments.map((a) => a.token),
+    );
+  }
+}
+
+async function loadAll(dateStr) {
+  await loadDashboard(dateStr);
+  await Promise.all([loadQueueMe(), loadAppointments()]);
+}
 
 /* ---------- ROUTER ---------- */
 const TITLES = {
@@ -154,9 +296,8 @@ function renderOverview() {
   $("#greeting").textContent =
     `${greetWord()}, ${DOCTOR.name.replace("Dr. ", "Dr. ").split(" ").slice(0, 2).join(" ")}`;
   $("#clinicName").textContent = DOCTOR.clinic;
-  $("#todayDate").textContent = CLINIC_DAY;
+  $("#todayDate").textContent = STATE.clinicDayLabel;
 
-  // clinic status card
   const open = STATE.clinicOpen;
   $("#clinicStatusCard").innerHTML = `
     <div class="card clinic-status">
@@ -165,13 +306,12 @@ function renderOverview() {
         <div class="k">Clinic Status</div>
         <h2><span class="d"></span> ${open ? "Clinic Open" : "Clinic Closed"}</h2>
         <div class="desc">${open ? "Your clinic is open and the queue is active." : "Your clinic is currently closed."}</div>
-        <div class="meta">${DOCTOR.clinic} · ${CLINIC_DAY}</div>
+        <div class="meta">${DOCTOR.clinic} · ${STATE.clinicDayLabel}</div>
       </div>
       <button class="btn ${open ? "btn-danger-ghost" : "btn-primary"}" id="ovClinicBtn">${open ? "Close Clinic" : "Open Clinic"}</button>
     </div>`;
   $("#ovClinicBtn").onclick = toggleClinic;
 
-  // stats
   const c = counts();
   $("#statGrid").innerHTML = [
     [
@@ -214,9 +354,8 @@ function renderOverview() {
   renderLiveQueueCard($("#liveQueueCard"), { withActions: true });
   renderSequence($("#seqList"));
 
-  // overview appointment table (compact, full list)
   $("#overviewAppts").innerHTML = `
-    <div class="aph"><div><h2>Today's Appointments</h2><div class="sub">${CLINIC_DAY}</div></div><span class="count-chip">${c.total}</span></div>
+    <div class="aph"><div><h2>Today's Appointments</h2><div class="sub">${STATE.clinicDayLabel}</div></div><span class="count-chip">${c.total}</span></div>
     ${apptTableHTML(appts())}`;
 }
 
@@ -256,11 +395,18 @@ function renderLiveQueueCard(el, { withActions }) {
 }
 
 function renderSequence(el) {
-  // show a window around now-serving
-  const start = Math.max(1, STATE.nowServing - 2);
-  const end = Math.min(STATE.patients.length, start + 5);
+  const tokens = STATE.appointments.map((a) => a.token).sort((a, b) => a - b);
+  if (!tokens.length) {
+    el.innerHTML = `<div class="empty-state"><p>No appointments yet.</p></div>`;
+    return;
+  }
+  const startIdx = Math.max(
+    0,
+    tokens.findIndex((t) => t >= STATE.nowServing) - 2,
+  );
+  const windowTokens = tokens.slice(startIdx, startIdx + 6);
   let out = "";
-  for (let n = start; n <= end; n++) {
+  for (const n of windowTokens) {
     const st = statusFor(n);
     const isServing = n === STATE.nowServing && st === "in-progress";
     const isNext = n === nextWaiting(STATE.nowServing);
@@ -287,12 +433,16 @@ function renderSequence(el) {
 }
 
 /* ---------- CLINIC OPEN / CLOSE ---------- */
-function toggleClinic() {
+async function toggleClinic() {
   if (!STATE.clinicOpen) {
-    // API: await apiPost("/queue/start");  (loading state on button)
-    STATE.clinicOpen = true;
-    toast("Clinic opened", "● Queue is now active.");
-    refreshAll();
+    try {
+      const res = await apiPatch(ENDPOINTS.queueStart());
+      applyQueueDoc(res.data);
+      toast("Clinic opened", "● Queue is now active.");
+      refreshAll();
+    } catch (err) {
+      toast("Couldn't open the clinic", err.message, true);
+    }
   } else {
     confirmModal({
       tone: "warn",
@@ -300,11 +450,15 @@ function toggleClinic() {
       body: "Are you sure you want to close the clinic? Patients will no longer be served until you reopen.",
       confirmText: "Close Clinic",
       danger: true,
-      onConfirm: () => {
-        // API: await apiPost("/queue/end");
-        STATE.clinicOpen = false;
-        toast("Clinic closed", "Your clinic is now closed.");
-        refreshAll();
+      onConfirm: async () => {
+        try {
+          const res = await apiPatch(ENDPOINTS.queueEnd());
+          applyQueueDoc(res.data);
+          toast("Clinic closed", "Your clinic is now closed.");
+          refreshAll();
+        } catch (err) {
+          toast("Couldn't close the clinic", err.message, true);
+        }
       },
     });
   }
@@ -313,7 +467,7 @@ function toggleClinic() {
 /* ---------- QUEUE CONTROL PAGE ---------- */
 function renderQueue() {
   $("#queueSub").textContent =
-    `${CLINIC_DAY} · patients are served strictly by token number.`;
+    `${STATE.clinicDayLabel} · patients are served strictly by token number.`;
   const open = STATE.clinicOpen;
   $("#qcStatusBadge").className = `pill ${open ? "active" : "closed"}`;
   $("#qcStatusBadge").innerHTML =
@@ -339,7 +493,6 @@ function renderQueue() {
   $("#qcDelayBtn").onclick = openDelayModal;
   $("#qcResetBtn").onclick = resetQueue;
 
-  // serve next block
   $("#svCur").textContent = "#" + STATE.nowServing;
   $("#svCurName").textContent = nameFor(STATE.nowServing);
   $("#svNext").textContent = nx ? "#" + nx : "—";
@@ -356,18 +509,25 @@ function renderQueue() {
   renderSequence($("#qcSeqList"));
 }
 
-function serveNext() {
+async function serveNext() {
   if (!STATE.clinicOpen) return;
   const nx = nextWaiting(STATE.nowServing);
   if (!nx) return toast("Queue empty", "No more patients waiting.", true);
-  // API: await apiPost("/queue/next");  (button -> "Serving…")
-  // complete current, advance
-  if (STATE.patients[STATE.nowServing - 1])
-    STATE.patients[STATE.nowServing - 1][1] = "completed";
-  STATE.nowServing = nx;
-  STATE.patients[nx - 1][1] = "in-progress";
-  toast("Serving next patient", `Now serving #${nx} — ${nameFor(nx)}.`);
-  refreshAll();
+
+  const btn = $("#serveNextBtn");
+  const prevLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Serving…";
+  try {
+    await apiPatch(ENDPOINTS.queueNext());
+    toast("Serving next patient", `Now serving #${nx}.`);
+    await loadAll(STATE.selectedDate);
+    refreshAll();
+  } catch (err) {
+    toast("Couldn't advance the queue", err.message, true);
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
 }
 
 function resetQueue() {
@@ -377,16 +537,16 @@ function resetQueue() {
     body: "This clears today's progress and returns the queue to the first token. This cannot be undone.",
     confirmText: "Reset Queue",
     danger: true,
-    onConfirm: () => {
-      // API: await apiPost("/queue/reset");
-      STATE.patients.forEach((p) => {
-        if (p[1] !== "cancelled") p[1] = "waiting";
-      });
-      STATE.nowServing = 1;
-      STATE.patients[0][1] = STATE.clinicOpen ? "in-progress" : "waiting";
-      STATE.delay = 0;
-      toast("Queue reset", "The queue has been reset.");
-      refreshAll();
+    onConfirm: async () => {
+      try {
+        const res = await apiPatch(ENDPOINTS.queueReset());
+        applyQueueDoc(res.data);
+        toast("Queue reset", "The queue has been reset.");
+        await loadAppointments();
+        refreshAll();
+      } catch (err) {
+        toast("Couldn't reset the queue", err.message, true);
+      }
     },
   });
 }
@@ -396,17 +556,26 @@ function openDelayModal() {
   openModal(`
     <div class="modal-head"><div><h2>Add Clinic Delay</h2><div class="sub">Extra minutes are added to every patient's wait.</div></div>
       <button class="modal-close" data-close><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg></button></div>
-    <div class="field"><label>Delay in minutes</label><input type="number" id="delayInput" min="0" value="10"></div>
+    <div class="field"><label>Delay in minutes</label><input type="number" id="delayInput" min="0" value="${STATE.delay || 10}"></div>
     <div class="modal-foot"><button class="btn btn-ghost" data-close>Cancel</button><button class="btn btn-primary" id="delaySave">Add Delay</button></div>`);
-  $("#delaySave").onclick = () => {
+  $("#delaySave").onclick = async () => {
     const v = parseInt($("#delayInput").value, 10);
     if (isNaN(v) || v < 0)
       return toast("Invalid delay", "Enter a valid number of minutes.", true);
-    // API: await apiPost("/queue/delay", { minutes: v });
-    STATE.delay = v;
-    closeModal();
-    toast("Delay updated", `Current delay set to +${v} min.`);
-    refreshAll();
+    const btn = $("#delaySave");
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      const res = await apiPatch(ENDPOINTS.queueDelay(), { delay: v });
+      applyQueueDoc(res.data);
+      closeModal();
+      toast("Delay updated", `Current delay set to +${v} min.`);
+      refreshAll();
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "Add Delay";
+      toast("Couldn't update the delay", err.message, true);
+    }
   };
 }
 
@@ -414,15 +583,16 @@ function openDelayModal() {
 let apptFilter = "all",
   apptSearch = "";
 function renderAppointments() {
-  $("#dateCur").textContent = CLINIC_DAY;
-  $("#apptDayLabel").textContent = CLINIC_DAY;
+  $("#dateCur").textContent = STATE.clinicDayLabel;
+  $("#apptDayLabel").textContent = STATE.clinicDayLabel;
   let list = appts();
   if (apptFilter !== "all") list = list.filter((a) => a.status === apptFilter);
   if (apptSearch) {
     const q = apptSearch.toLowerCase();
     list = list.filter(
       (a) =>
-        a.patient.toLowerCase().includes(q) || a.id.toLowerCase().includes(q),
+        a.patient.toLowerCase().includes(q) ||
+        (a.appointmentId || "").toLowerCase().includes(q),
     );
   }
   $("#apptCount").textContent = list.length;
@@ -454,18 +624,31 @@ $("#apptSearch").addEventListener("input", (e) => {
   apptSearch = e.target.value.trim();
   renderAppointments();
 });
-$("#apptDate").addEventListener("change", () => {
-  /* API: fetch by date */ toast(
-    "Date changed",
-    "Showing appointments for the selected clinic day.",
-  );
+$("#apptDate").addEventListener("change", async (e) => {
+  const val = e.target.value; // YYYY-MM-DD
+  if (!val) return;
+  try {
+    await loadAll(val);
+    refreshAll();
+    toast("Date changed", "Showing appointments for the selected clinic day.");
+  } catch (err) {
+    toast("Couldn't load that date", err.message, true);
+  }
 });
-$("#datePrev").addEventListener("click", () =>
-  toast("Previous day", "Loading previous clinic day…"),
-);
-$("#dateNext").addEventListener("click", () =>
-  toast("Next day", "Loading next clinic day…"),
-);
+$("#datePrev").addEventListener("click", async () => {
+  const d = new Date(STATE.selectedDate || Date.now());
+  d.setDate(d.getDate() - 1);
+  await loadAll(d.toISOString().slice(0, 10));
+  refreshAll();
+  toast("Previous day", "Loaded previous clinic day.");
+});
+$("#dateNext").addEventListener("click", async () => {
+  const d = new Date(STATE.selectedDate || Date.now());
+  d.setDate(d.getDate() + 1);
+  await loadAll(d.toISOString().slice(0, 10));
+  refreshAll();
+  toast("Next day", "Loaded next clinic day.");
+});
 
 /* ---------- DETAILS SLIDE-OVER ---------- */
 document.addEventListener("click", (e) => {
@@ -492,14 +675,14 @@ function openDetails(tok) {
     : "";
   const actions = active
     ? `
-    <button class="btn btn-danger-ghost" style="width:100%;margin-top:22px" data-cancelappt="${tok}">Cancel Appointment</button>`
+    <button class="btn btn-danger-ghost" style="width:100%;margin-top:22px" data-cancelappt="${a.id}" data-token="${tok}">Cancel Appointment</button>`
     : "";
   $("#slideover").innerHTML = `
     <div class="so-head"><div class="so-title">Appointment details</div>
       <button class="modal-close" id="soClose"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg></button></div>
     <span class="pill ${a.status}" style="margin-bottom:16px"><span class="d"></span> ${label(a.status)}</span>
     <div class="so-rows">
-      <div class="so-row"><span class="k">Appointment ID</span><span class="v mono">${a.id}</span></div>
+      <div class="so-row"><span class="k">Appointment ID</span><span class="v mono">${a.appointmentId || a.id}</span></div>
       <div class="so-row"><span class="k">Patient Name</span><span class="v">${a.patient}</span></div>
       <div class="so-row"><span class="k">Token Number</span><span class="v">#${a.token}</span></div>
       <div class="so-row"><span class="k">Appointment Date</span><span class="v">${a.date}</span></div>
@@ -518,7 +701,8 @@ $("#soBackdrop").addEventListener("click", closeDetails);
 document.addEventListener("click", (e) => {
   const c = e.target.closest("[data-cancelappt]");
   if (!c) return;
-  const tok = +c.dataset.cancelappt;
+  const apptId = c.dataset.cancelappt;
+  const tok = +c.dataset.token;
   closeDetails();
   confirmModal({
     tone: "danger",
@@ -526,10 +710,19 @@ document.addEventListener("click", (e) => {
     body: "This will mark the appointment as cancelled. This cannot be undone.",
     confirmText: "Confirm Cancellation",
     danger: true,
-    onConfirm: () => {
-      STATE.patients[tok - 1][1] = "cancelled"; // API: await apiPatch(`/appointments/${id}/cancel`)
-      toast("Appointment cancelled", `Token #${tok} has been cancelled.`);
-      refreshAll();
+    onConfirm: async () => {
+      try {
+        // Doctor-scoped cancellation: updateAppointmentStatus, not the
+        // patient-only cancelAppointment endpoint. See assumption #5.
+        await apiPatch(ENDPOINTS.appointmentStatus(apptId), {
+          status: "cancelled",
+        });
+        toast("Appointment cancelled", `Token #${tok} has been cancelled.`);
+        await loadAppointments();
+        refreshAll();
+      } catch (err) {
+        toast("Couldn't cancel the appointment", err.message, true);
+      }
     },
   });
 });
@@ -543,16 +736,16 @@ function renderProfile() {
     <div class="pc-section"><h3>Practitioner</h3></div>
     <div class="pc-grid">
       <div class="pc-box"><div class="fk">Full Name</div><div class="fv">${d.name}</div></div>
-      <div class="pc-box"><div class="fk">Email</div><div class="fv">${d.email}</div></div>
-      <div class="pc-box"><div class="fk">Phone</div><div class="fv">${d.phone}</div></div>
+      <div class="pc-box"><div class="fk">Email</div><div class="fv">${d.email || "—"}</div></div>
+      <div class="pc-box"><div class="fk">Phone</div><div class="fv">${d.phone || "—"}</div></div>
       <div class="pc-box"><div class="fk">Specialization</div><div class="fv">${d.spec}</div></div>
       <div class="pc-box readonly"><div class="fk">Doctor ID (read-only)</div><div class="fv">${d.doctorId}</div></div>
     </div>
     <div class="pc-section"><h3>Clinic</h3></div>
     <div class="pc-grid">
       <div class="pc-box"><div class="fk">Clinic Name</div><div class="fv">${d.clinic}</div></div>
-      <div class="pc-box"><div class="fk">Clinic Address</div><div class="fv">${d.address}</div></div>
-      <div class="pc-box"><div class="fk">Consultation Fee</div><div class="fv">PKR ${d.fee.toLocaleString()}</div></div>
+      <div class="pc-box"><div class="fk">Clinic Address</div><div class="fv">${d.address || "—"}</div></div>
+      <div class="pc-box"><div class="fk">Consultation Fee</div><div class="fv">${d.fee ? "PKR " + Number(d.fee).toLocaleString() : "—"}</div></div>
     </div>`;
 }
 $("#editProfileBtn").addEventListener("click", () => {
@@ -561,12 +754,11 @@ $("#editProfileBtn").addEventListener("click", () => {
     <div class="modal-head"><div><h2>Edit Profile</h2><div class="sub">Doctor ID cannot be changed.</div></div>
       <button class="modal-close" data-close><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg></button></div>
     <form id="profForm">
-      <div class="field"><label>Full Name</label><input name="name" value="${d.name}"></div>
-      <div class="field"><label>Phone</label><input name="phone" value="${d.phone}"></div>
-      <div class="field"><label>Specialization</label><input name="spec" value="${d.spec}"></div>
-      <div class="field"><label>Clinic Name</label><input name="clinic" value="${d.clinic}"></div>
-      <div class="field"><label>Clinic Address</label><input name="address" value="${d.address}"></div>
-      <div class="field"><label>Consultation Fee (PKR)</label><input name="fee" type="number" value="${d.fee}"></div>
+      <div class="field"><label>Full Name</label><input name="fullname" value="${d.name}"></div>
+      <div class="field"><label>Specialization</label><input name="specialization" value="${d.spec}"></div>
+      <div class="field"><label>Clinic Name</label><input name="clinicName" value="${d.clinic}"></div>
+      <div class="field"><label>Clinic Address</label><input name="clinicAddress" value="${d.address}"></div>
+      <div class="field"><label>Consultation Fee (PKR)</label><input name="consultationFee" type="number" value="${d.fee}"></div>
       <div class="field"><label>Doctor ID</label><input value="${d.doctorId}" disabled style="background:var(--line-soft);color:var(--muted)"></div>
       <div class="modal-foot"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="submit" class="btn btn-primary" id="profSave">Save Changes</button></div>
     </form>`);
@@ -576,16 +768,29 @@ $("#editProfileBtn").addEventListener("click", () => {
     btn.disabled = true;
     btn.textContent = "Saving…";
     const fd = Object.fromEntries(new FormData(e.target));
-    fd.fee = parseInt(fd.fee, 10) || d.fee;
-    await sleep(500); // API: await apiPatch("/doctor/profile", fd)
-    Object.assign(DOCTOR, fd);
-    closeModal();
-    renderProfile();
-    toast("Profile updated successfully.");
+    if (fd.consultationFee) fd.consultationFee = Number(fd.consultationFee);
+    try {
+      const res = await apiPatch(ENDPOINTS.doctorProfileUpdate(), fd);
+      const updated = res.data;
+      DOCTOR.name = updated.user?.fullname || DOCTOR.name;
+      DOCTOR.email = updated.user?.email || DOCTOR.email;
+      DOCTOR.phone = updated.user?.phone || DOCTOR.phone;
+      DOCTOR.spec = updated.specialization ?? DOCTOR.spec;
+      DOCTOR.clinic = updated.clinicName ?? DOCTOR.clinic;
+      DOCTOR.address = updated.clinicAddress ?? DOCTOR.address;
+      DOCTOR.fee = updated.consultationFee ?? DOCTOR.fee;
+      closeModal();
+      renderProfile();
+      toast("Profile updated successfully.");
+    } catch (err) {
+      btn.disabled = false;
+      btn.textContent = "Save Changes";
+      toast("Couldn't update your profile", err.message, true);
+    }
   };
 });
 
-/* ---------- SUBSCRIPTION ---------- */
+/* ---------- SUBSCRIPTION (MOCK — no backend route provided) ---------- */
 function renderSubscription() {
   const s = STATE.subscription;
   $("#subWrap").innerHTML = `
@@ -609,26 +814,13 @@ function renderSubscription() {
       </div>
     </div>`;
   const up = () =>
-    confirmModal({
-      tone: "warn",
-      title: "Upgrade to Practice?",
-      body: "You'll move to the Practice plan at PKR 4,500 / month with unlimited tokens and priority support.",
-      confirmText: "Upgrade",
-      onConfirm: () => {
-        // API: await apiPost("/subscription/upgrade")
-        STATE.subscription = {
-          plan: "Practice",
-          status: "Active",
-          start: CLINIC_DATE,
-          end: "September 10, 2026",
-        };
-        toast("Plan upgraded", "You're now on the Practice plan.");
-        renderSubscription();
-      },
-    });
+    toast(
+      "Not available yet",
+      "Subscription upgrades need a backend endpoint — none was provided.",
+      true,
+    );
   $("#upgradeBtn").onclick = up;
-  $("#manageBtn").onclick = () =>
-    toast("Manage subscription", "Opening billing…");
+  $("#manageBtn").onclick = up;
   const ub = $("#upgradePracticeBtn");
   if (ub) ub.onclick = up;
 }
@@ -686,6 +878,7 @@ $("#faqBtn").addEventListener("click", () => {
 $("#reportBtn").addEventListener("click", openReportModal);
 
 function openReportModal() {
+  // MOCK — no /support/report route was provided in the backend files shared.
   const MAX = 1000;
   openModal(`
     <div class="modal-head"><div><h2>Report a Problem</h2><div class="sub">Tell us about the issue you're experiencing.</div></div>
@@ -714,11 +907,12 @@ function openReportModal() {
     btn.disabled = true;
     btn.textContent = "Sending…";
     try {
-      await sleep(700); // API: await apiPost("/support/report", { doctorId: DOCTOR.doctorId, message: msg })
+      // TODO: replace with a real call once /support/report exists, e.g.
+      // await apiPost(`${API_BASE}${API_PREFIX}/support/report`, { message: msg });
+      await sleep(700);
       closeModal();
       toast("Report submitted", "Your report has been submitted successfully.");
     } catch (err) {
-      // keep text; show error
       btn.disabled = false;
       btn.textContent = "Send Report";
       toast("Unable to submit your report", "Please try again.", true);
@@ -784,12 +978,14 @@ document.addEventListener("click", closeMenus);
 $("#notifMenu").addEventListener("click", (e) => e.stopPropagation());
 $("#userMenu").addEventListener("click", (e) => e.stopPropagation());
 function renderNotifs() {
-  $("#notifList").innerHTML = STATE.notifications
-    .map(
-      (n) =>
-        `<div class="notif-item ${n.read ? "read" : ""}"><span class="nd"></span><div><div class="nt">${n.text}</div><div class="ntime">${n.time}</div></div></div>`,
-    )
-    .join("");
+  $("#notifList").innerHTML = STATE.notifications.length
+    ? STATE.notifications
+        .map(
+          (n) =>
+            `<div class="notif-item ${n.read ? "read" : ""}"><span class="nd"></span><div><div class="nt">${n.text}</div><div class="ntime">${n.time}</div></div></div>`,
+        )
+        .join("")
+    : `<div class="notif-item read"><div><div class="nt">No notifications yet.</div></div></div>`;
   const unread = STATE.notifications.filter((n) => !n.read).length;
   $("#notifCount").textContent = unread;
   $("#notifCount").style.display = unread ? "grid" : "none";
@@ -818,9 +1014,14 @@ function closeSidebar() {
 [$("#logoutBtn"), $("#logoutBtn2")].forEach(
   (b) =>
     b &&
-    b.addEventListener("click", (e) => {
-      e.preventDefault(); // API: await apiPost("/auth/logout"); clear session
-      window.location.href = "./login.html";
+    b.addEventListener("click", async (e) => {
+      e.preventDefault();
+      try {
+        await apiPost(ENDPOINTS.logout());
+      } catch (err) {
+        console.warn("Logout request failed, redirecting anyway:", err.message);
+      }
+      window.location.href = "../../../Auth/login/login.html";
     }),
 );
 
@@ -841,14 +1042,15 @@ const label = (s) =>
     cancelled: "Cancelled",
   })[s] || s;
 const initials = (n) =>
-  n
+  (n || "")
     .replace(/^Dr\.?\s+/, "")
     .trim()
     .split(/\s+/)
+    .filter(Boolean)
     .slice(0, 2)
     .map((w) => w[0])
     .join("")
-    .toUpperCase();
+    .toUpperCase() || "DR";
 const greetWord = () => {
   const h = new Date().getHours();
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
@@ -856,20 +1058,73 @@ const greetWord = () => {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /* ============================================================
-   SOCKET.IO (spec §12, §37) — live queue updates.
-   const socket = io(API_BASE, { withCredentials: true });
-   socket.on("queueUpdated", d => { STATE.nowServing=d.nowServing; STATE.delay=d.delay;
-       STATE.lastToken=d.lastToken; refreshAll(); });
-   socket.on("clinicStarted", () => { STATE.clinicOpen=true; refreshAll(); });
-   socket.on("clinicClosed",  () => { STATE.clinicOpen=false; refreshAll(); });
-   // Clean up on unmount: socket.off("queueUpdated"); socket.off("clinicStarted"); socket.off("clinicClosed"); socket.disconnect();
+   SOCKET.IO — live queue push updates.
+   Requires the socket.io client script to be loaded on the page
+   BEFORE this file (see assumption #7 at the top).
    ============================================================ */
+let socket = null;
+function initSocket() {
+  if (typeof io !== "function") {
+    console.warn(
+      "socket.io client not found — realtime updates disabled, relying on refetch-after-action instead.",
+    );
+    return;
+  }
+  socket = io(API_BASE, { withCredentials: true });
+
+  socket.on("queueUpdated", (d) => {
+    STATE.nowServing = d.nowServing ?? STATE.nowServing;
+    STATE.delay = d.delayInMinutes ?? STATE.delay;
+    STATE.lastToken = d.lastToken ?? STATE.lastToken;
+    STATE.perPatient = d.estimatedTimePerPatient ?? STATE.perPatient;
+    refreshAll();
+  });
+  socket.on("clinicStarted", () => {
+    STATE.clinicOpen = true;
+    refreshAll();
+  });
+  socket.on("clinicClosed", () => {
+    STATE.clinicOpen = false;
+    refreshAll();
+  });
+  socket.on("delayUpdated", (d) => {
+    STATE.delay = d.delayInMinutes ?? STATE.delay;
+    STATE.nowServing = d.nowServing ?? STATE.nowServing;
+    STATE.perPatient = d.estimatedTimePerPatient ?? STATE.perPatient;
+    refreshAll();
+  });
+
+  window.addEventListener("beforeunload", () => {
+    socket.off("queueUpdated");
+    socket.off("clinicStarted");
+    socket.off("clinicClosed");
+    socket.off("delayUpdated");
+    socket.disconnect();
+  });
+}
 
 /* ---------- INIT ---------- */
-function init() {
-  renderNotifs();
+async function init() {
   renderFAQ();
+  try {
+    await loadAll();
+  } catch (err) {
+    console.error("Failed to load dashboard:", err);
+    toast(
+      "Couldn't load your dashboard",
+      err.status === 401 || err.status === 403
+        ? "Please log in again."
+        : err.message,
+      true,
+    );
+    if (err.status === 401 || err.status === 403) {
+      window.location.href = "../../../Auth/login/login.html";
+      return;
+    }
+  }
+  renderNotifs();
   const h = location.hash.replace("#", "");
   showView(TITLES[h] ? h : "overview");
+  initSocket();
 }
 init();

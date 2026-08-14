@@ -1,19 +1,10 @@
-// ============================================================
-// ClinicFlow Authentication
-// Shared frontend authentication logic
-// ============================================================
-
-// config.js should be loaded BEFORE this file.
-
 const API_BASE =
   (window.CLINICFLOW_CONFIG &&
     window.CLINICFLOW_CONFIG.API_BASE) ||
   "http://localhost:8000";
 
 
-// ============================================================
 // API HELPER
-// ============================================================
 
 async function apiRequest(path, options = {}) {
   const response = await fetch(API_BASE + path, {
