@@ -5,7 +5,7 @@ import { Appointment } from "../models/appointment.models.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 
-// GET /dashboard/doctor?date=YYYY-MM-DD   (doctor only)
+// GET /dashboard/doctor
 const getDoctorDashboard = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id }).populate({

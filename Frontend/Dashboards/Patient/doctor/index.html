@@ -18,17 +18,14 @@
       <aside class="sidebar" id="sidebar">
         <div class="sb-top">
           <div class="brand-txt">
+            <a class="brand" href="#clinicStatusCard">
+              <img src="../../../images/logo.png" alt="ClinicFlow" />
 
-  <a class="brand" href="#clinicStatusCard">
-    <img
-      src="../../../images/logo.png"
-      alt="ClinicFlow"
-    />
-
-    <span>
-      <span class="b-clinic">Clinic</span><span class="b-flow">Flow</span>
-    </span>
-  </a>
+              <span>
+                <span class="b-clinic">Clinic</span
+                ><span class="b-flow">Flow</span>
+              </span>
+            </a>
             <div class="bt2">Doctor Dashboard</div>
           </div>
         </div>
@@ -82,7 +79,7 @@
               stroke-width="2"
             >
               <circle cx="12" cy="8" r="4" />
-              <path d="M4 21c0-4 3.5-6 8-6s8 2 8 6" stroke-linecap="round" />
+              <circle cx="12" cy="12" r="10" />
             </svg>
             Profile</a
           >
@@ -169,8 +166,7 @@
               ><span class="count-badge" id="notifCount">10</span>
             </button>
             <button class="user-menu" id="userBtn">
-              <span class="avatar">HQ</span
-              ><span class="uname">Dr. Hassan Qureshi</span
+              <span class="uname" id="topDoctorName"></span
               ><svg
                 class="chev"
                 width="16"
@@ -196,8 +192,8 @@
         </div>
         <div class="dropdown" id="userMenu">
           <div class="dh">
-            <div class="n">Dr. Hassan Qureshi</div>
-            <div class="e">General Physician</div>
+            <div class="n" id="ddDoctorName"></div>
+            <div class="e" id="ddDoctorSpec"></div>
           </div>
           <a href="#profile" data-view="profile">Profile</a>
           <a href="#subscription" data-view="subscription">Subscription</a>
@@ -553,6 +549,32 @@
     <!-- slide-over -->
     <div class="slideover-backdrop" id="soBackdrop"></div>
     <aside class="slideover" id="slideover"></aside>
+    <!-- CHANGE EMAIL MODAL -->
+    <div class="overlay" id="emailChangeOverlay">
+      <div class="modal" style="max-width: 480px">
+        <div class="modal-head">
+          <div>
+            <h2 id="ecTitle">Change Email</h2>
+            <div class="sub" id="ecSub">
+              Enter the new email you'd like to use.
+            </div>
+          </div>
+          <button class="modal-close" id="ecClose">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M18 6 6 18M6 6l12 12" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <form id="ecForm" style="margin-top: 22px"></form>
+      </div>
+    </div>
     <!-- toasts -->
     <div class="toast-wrap" id="toasts"></div>
 

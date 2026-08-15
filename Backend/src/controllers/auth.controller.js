@@ -72,6 +72,10 @@ const registerDoctor = async (req, res, next) => {
       throw new ApiError(400, "Full name can contain only letters and spaces");
     }
 
+    // Normalize: strip any "Dr"/"Dr." the person may have typed themselves,.
+    const cleanedName = fullname.trim().replace(/^dr\.?\s*/i, "");
+    const finalFullname = `Dr. ${cleanedName}`;
+
     // Email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email.trim())) {
@@ -142,7 +146,7 @@ const registerDoctor = async (req, res, next) => {
       const [user] = await User.create(
         [
           {
-            fullname,
+            fullname: finalFullname,
             email: email.toLowerCase(),
             password,
             phone,
@@ -456,16 +460,6 @@ const login = async (req, res, next) => {
     // Generate tokens using User model methods
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
-
-    console.log(
-      "ACCESS TOKEN GENERATED:",
-      !!accessToken,
-    );
-
-    console.log(
-      "REFRESH TOKEN GENERATED:",
-      !!refreshToken,
-    );
 
     // Save refresh token
     user.refreshToken = refreshToken;

@@ -53,17 +53,20 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const ENDPOINTS = {
   dashboard: () => `${API_BASE}/dashboard/doctor`,
   doctorProfileUpdate: () => `${API_BASE}/doctor/profile`,
+  doctorMe: () => `${API_BASE}/doctor/getdrprofile`,
   queueStart: () => `${API_BASE}/queue/start`,
   queueNext: () => `${API_BASE}/queue/next`,
   queueDelay: () => `${API_BASE}/queue/delay`,
   queueTime: () => `${API_BASE}/queue/time`,
   queueEnd: () => `${API_BASE}/queue/end`,
   queueReset: () => `${API_BASE}/queue/reset`,
-  queueMe: () => `${API_BASE}/queue/me`, 
+  queueMe: () => `${API_BASE}/queue/me`,
   appointmentsDoctor: () => `${API_BASE}/appointments/doctor`,
   appointmentStatus: (id) =>
     `${API_BASE}${API_PREFIX}/appointments/${id}/status`,
   logout: () => `${API_BASE}${API_PREFIX}/auth/logout`,
+  emailChangeRequest: () => `${API_BASE}/auth/email/request`,
+  emailChangeVerify: () => `${API_BASE}/auth/email/verify`,
 };
 
 /* ---------- fetch helpers ---------- */
@@ -118,15 +121,14 @@ const STATE = {
   lastToken: 0,
   selectedDate: null,
   clinicDayLabel: "",
-  appointments: [], 
+  appointments: [],
   subscription: {
     plan: "Free",
     status: "Active",
     start: "—",
     end: "—",
   },
-  notifications: [
-  ],
+  notifications: [],
 };
 
 /* ---------- derived helpers over live STATE.appointments ---------- */
@@ -194,6 +196,15 @@ async function loadDashboard(dateStr) {
   STATE.clinicDayLabel = formatLongDate(d.selectedDate);
 }
 
+async function loadDoctorProfile() {
+  const res = await apiGet(ENDPOINTS.doctorMe());
+  const d = res.data;
+  DOCTOR.email = d.user?.email || DOCTOR.email;
+  DOCTOR.phone = d.user?.phone || DOCTOR.phone;
+  DOCTOR.address = d.clinicAddress || DOCTOR.address;
+  DOCTOR.fee = d.consultationFee || DOCTOR.fee;
+}
+
 async function loadQueueMe() {
   try {
     const res = await apiGet(ENDPOINTS.queueMe());
@@ -225,10 +236,7 @@ async function loadAppointments() {
       id: a._id,
       appointmentId: a.appointmentId,
       token: a.tokenNumber,
-      patient:
-        a.patientName ||
-        a.patient?.user?.fullname ||
-        "Unknown patient",
+      patient: a.patientName || a.patient?.user?.fullname || "Unknown patient",
       status: a.status,
       date: formatShortDate(a.appointmentDate),
       clinic: DOCTOR.clinic,
@@ -246,7 +254,7 @@ async function loadAppointments() {
 
 async function loadAll(dateStr) {
   await loadDashboard(dateStr);
-  await Promise.all([loadQueueMe(), loadAppointments()]);
+  await Promise.all([loadQueueMe(), loadAppointments(), loadDoctorProfile()]);
 }
 
 /* ---------- ROUTER ---------- */
@@ -491,14 +499,27 @@ function renderQueue() {
   $("#svNext").textContent = nx ? "#" + nx : "—";
   $("#svNextName").textContent = nx ? nameFor(nx) : "—";
   const btn = $("#serveNextBtn");
-  btn.disabled = !open || !nx;
-  $("#serveNote").textContent = !open
-    ? "Open the clinic to continue serving patients."
-    : !nx
-      ? "No more patients in the queue."
-      : "Completing the current token moves the queue forward.";
-  btn.onclick = serveNext;
-
+  if (!open) {
+    btn.disabled = true;
+    btn.textContent = "Serve Next Patient →";
+    btn.onclick = serveNext;
+    $("#serveNote").textContent =
+      "Open the clinic to continue serving patients.";
+  } else if (!nx) {
+    btn.disabled = false;
+    btn.textContent = "Finish Appointments";
+    btn.onclick = finishAppointments;
+    $("#serveNote").textContent =
+      "All patients have been served. Finish appointments to close the clinic.";
+  } else {
+    btn.disabled = false;
+    btn.textContent = "Serve Next Patient →";
+    btn.onclick = serveNext;
+    $("#serveNote").textContent =
+      "Completing the current token moves the queue forward.";
+  btn.onclick = serveNext;    // ← this line
+  }
+  renderSequence($("#qcSeqList"));
   renderSequence($("#qcSeqList"));
 }
 
@@ -521,6 +542,26 @@ async function serveNext() {
     btn.disabled = false;
     btn.textContent = prevLabel;
   }
+}
+
+function finishAppointments() {
+  confirmModal({
+    tone: "warn",
+    title: "Finish today's appointments?",
+    body: "All patients have been served. This will close the clinic for today. You can reopen it anytime.",
+    confirmText: "Finish & Close Clinic",
+    danger: true,
+    onConfirm: async () => {
+      try {
+        const res = await apiPatch(ENDPOINTS.queueEnd());
+        applyQueueDoc(res.data);
+        toast("Appointments finished", "Clinic closed for today.");
+        refreshAll();
+      } catch (err) {
+        toast("Couldn't close the clinic", err.message, true);
+      }
+    },
+  });
 }
 
 function resetQueue() {
@@ -720,16 +761,21 @@ document.addEventListener("click", (e) => {
   });
 });
 
-/* ---------- PROFILE ---------- */
+  function syncTopbarIdentity() {
+  $("#topDoctorName").textContent = DOCTOR.name || "Doctor";
+  $("#ddDoctorName").textContent = DOCTOR.name || "Doctor";
+  $("#ddDoctorSpec").textContent = DOCTOR.spec || "";
+}
+/* PROFILE */
 function renderProfile() {
   const d = DOCTOR;
   $("#profileCard").innerHTML = `
-    <div class="pc-head"><div class="pc-avatar">${initials(d.name)}</div>
+    <div class="pc-head">
       <div><div class="pn">${d.name}</div><div class="pmeta">${d.spec} · ${d.clinic}</div></div></div>
     <div class="pc-section"><h3>Practitioner</h3></div>
     <div class="pc-grid">
       <div class="pc-box"><div class="fk">Full Name</div><div class="fv">${d.name}</div></div>
-      <div class="pc-box"><div class="fk">Email</div><div class="fv">${d.email || "—"}</div></div>
+      <div class="pc-box"><div class="fk">Email</div><div class="fv">${d.email || "—"} <button type="button" class="change-email-btn" data-change-email>Change</button></div></div>
       <div class="pc-box"><div class="fk">Phone</div><div class="fv">${d.phone || "—"}</div></div>
       <div class="pc-box"><div class="fk">Specialization</div><div class="fv">${d.spec}</div></div>
       <div class="pc-box readonly"><div class="fk">Doctor ID (read-only)</div><div class="fv">${d.doctorId}</div></div>
@@ -783,6 +829,142 @@ $("#editProfileBtn").addEventListener("click", () => {
   };
 });
 
+/* CHANGE EMAIL */
+const emailChange = { step: 1, newEmail: "" };
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-change-email]")) {
+    e.preventDefault();
+    openEmailChange();
+  }
+});
+
+function openEmailChange() {
+  emailChange.step = 1;
+  emailChange.newEmail = "";
+  renderEmailChange();
+  $("#emailChangeOverlay").classList.add("open");
+}
+
+$("#ecClose").addEventListener("click", () => {
+  $("#emailChangeOverlay").classList.remove("open");
+});
+$("#emailChangeOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "emailChangeOverlay") {
+    $("#emailChangeOverlay").classList.remove("open");
+  }
+});
+
+function renderEmailChange() {
+  const form = $("#ecForm");
+
+  if (emailChange.step === 1) {
+    $("#ecTitle").textContent = "Change Email";
+    $("#ecSub").textContent = "Enter the new email you'd like to use.";
+    form.innerHTML = `
+      <div class="field" style="margin-bottom:22px">
+        <label>New email</label>
+        <input type="email" id="ecEmail" placeholder="you@example.com" value="${emailChange.newEmail}">
+      </div>
+      <div class="modal-foot"><button type="button" class="btn btn-ghost" id="ecCancel">Cancel</button><button type="submit" class="btn btn-primary" id="ecSubmit">Send Code</button></div>`;
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const val = $("#ecEmail").value.trim();
+      if (!val) return toast("Enter a new email address.", "", true);
+
+      const btn = $("#ecSubmit");
+      btn.disabled = true;
+      btn.textContent = "Sending…";
+
+      try {
+        const res = await apiPost(ENDPOINTS.emailChangeRequest(), { newEmail: val });
+        emailChange.newEmail = res.data?.newEmail || val;
+        emailChange.step = 2;
+        renderEmailChange();
+        toast("Verification code sent", `Check ${emailChange.newEmail} for the code.`);
+      } catch (err) {
+        toast("Couldn't send code", err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Send Code";
+      }
+    };
+
+    $("#ecCancel").onclick = () => $("#emailChangeOverlay").classList.remove("open");
+  } else if (emailChange.step === 2) {
+    $("#ecTitle").textContent = "Verify your new email";
+    $("#ecSub").textContent = `Enter the 6-digit code sent to ${emailChange.newEmail}.`;
+    form.innerHTML = `
+      <div class="field" style="margin-bottom:22px">
+        <label style="text-align:center;display:block">Verification code</label>
+        <div class="otp-boxes" id="ecOtpBoxes">
+          ${Array.from({ length: 6 }, (_, i) => `
+            <input class="otp-box" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-otp-i="${i}" autocomplete="one-time-code">`).join("")}
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn btn-ghost" id="ecBack">Back</button>
+        <button type="submit" class="btn btn-primary" id="ecVerify">Verify Email</button>
+      </div>`;
+
+    const boxes = $$(".otp-box", form);
+    boxes[0]?.focus();
+
+    boxes.forEach((box, i) => {
+      box.addEventListener("input", (e) => {
+        const val = e.target.value.replace(/\D/g, "").slice(-1);
+        e.target.value = val;
+        e.target.classList.toggle("filled", !!val);
+        if (val && boxes[i + 1]) boxes[i + 1].focus();
+      });
+      box.addEventListener("keydown", (e) => {
+        if (e.key === "Backspace" && !e.target.value && boxes[i - 1]) {
+          boxes[i - 1].focus();
+        }
+      });
+      box.addEventListener("paste", (e) => {
+        e.preventDefault();
+        const digits = (e.clipboardData.getData("text") || "").replace(/\D/g, "").slice(0, 6).split("");
+        digits.forEach((d, j) => {
+          if (boxes[j]) {
+            boxes[j].value = d;
+            boxes[j].classList.add("filled");
+          }
+        });
+        boxes[Math.min(digits.length, 5)]?.focus();
+      });
+    });
+
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const otp = $$(".otp-box", form).map((b) => b.value).join("");
+      if (otp.length !== 6) return toast("Enter all 6 digits.", "", true);
+
+      const btn = $("#ecVerify");
+      btn.disabled = true;
+      btn.textContent = "Verifying…";
+
+      try {
+        const res = await apiPost(ENDPOINTS.emailChangeVerify(), { otp });
+        DOCTOR.email = res.data?.email || emailChange.newEmail;
+        $("#emailChangeOverlay").classList.remove("open");
+        renderProfile();
+        toast("Email updated successfully.");
+      } catch (err) {
+        toast("Couldn't verify code", err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Verify Email";
+      }
+    };
+
+    $("#ecBack").onclick = () => {
+      emailChange.step = 1;
+      renderEmailChange();
+    };
+  }
+}
 /* ---------- SUBSCRIPTION (MOCK — no backend route provided) ---------- */
 function renderSubscription() {
   const s = STATE.subscription;
@@ -968,8 +1150,6 @@ $("#userBtn").addEventListener("click", (e) => {
   $("#userMenu").classList.toggle("open");
 });
 document.addEventListener("click", closeMenus);
-$("#notifMenu").addEventListener("click", (e) => e.stopPropagation());
-$("#userMenu").addEventListener("click", (e) => e.stopPropagation());
 function renderNotifs() {
   $("#notifList").innerHTML = STATE.notifications.length
     ? STATE.notifications
@@ -983,7 +1163,6 @@ function renderNotifs() {
   $("#notifCount").textContent = unread;
   $("#notifCount").style.display = unread ? "grid" : "none";
 }
-
 /* ---------- TOAST ---------- */
 function toast(title, msg = "", isError = false) {
   const el = document.createElement("div");
@@ -1024,6 +1203,7 @@ function refreshAll() {
   if (!$("#view-queue").hidden) renderQueue();
   if (!$("#view-appointments").hidden) renderAppointments();
   renderNotifs();
+  syncTopbarIdentity();
 }
 
 /* ---------- helpers ---------- */
@@ -1116,6 +1296,7 @@ async function init() {
     }
   }
   renderNotifs();
+  syncTopbarIdentity()
   const h = location.hash.replace("#", "");
   showView(TITLES[h] ? h : "overview");
   initSocket();

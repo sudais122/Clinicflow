@@ -333,9 +333,29 @@ h3 {
     font-size: 13px
 }
 
+/* User name — more prominent */
 .user-menu .uname {
     font-size: 14px;
-    font-weight: 500
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+}
+
+/* The whole user-menu button — pill style so it reads as a clickable identity */
+.user-menu {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    border: 1px solid var(--line);
+    background: #fff;
+    padding: 5px 12px 5px 13px;
+    border-radius: 999px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.user-menu:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 
 .user-menu .chev {

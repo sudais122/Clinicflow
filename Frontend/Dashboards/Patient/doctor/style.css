@@ -2145,3 +2145,47 @@ h3 {
         height: 32px;
     }
 }
+.change-email-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  margin-left: 10px;
+  vertical-align: middle;
+  transition: background .15s;
+}
+.change-email-btn:hover {
+  background: var(--blue);
+  color: #fff;
+}
+.otp-boxes {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.otp-box {
+  width: 46px;
+  height: 54px;
+  text-align: center;
+  font-family: var(--fd);
+  font-size: 22px;
+  font-weight: 700;
+  border: 1.5px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink);
+  transition: border-color .15s, box-shadow .15s;
+}
+.otp-box:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+.otp-box.filled {
+  border-color: #c7d2e8;
+}

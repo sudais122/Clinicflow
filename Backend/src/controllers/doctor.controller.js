@@ -119,6 +119,26 @@ const updateDoctorProfile = async (req, res, next) => {
   }
 };
 
+// GET /doctor/me   (doctor only)
+const getCurrentDoctorProfile = async (req, res, next) => {
+  try {
+    const doctor = await Doctor.findOne({ user: req.user._id })
+      .select("doctorId clinicName clinicAddress specialization consultationFee user")
+      .populate({ path: "user", select: "fullname email phone role" })
+      .lean();
+
+    if (!doctor) {
+      throw new ApiError(403, "Only a doctor can view this profile");
+    }
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, doctor, "Doctor profile fetched"));
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getAvailableDoctors = async (req, res, next) => {
   try {
     const doctors = await Doctor.find()
@@ -153,4 +173,4 @@ const getAvailableDoctors = async (req, res, next) => {
   }
 };
 
-export { updateDoctorProfile,getAvailableDoctors };
+export { updateDoctorProfile, getAvailableDoctors, getCurrentDoctorProfile };
