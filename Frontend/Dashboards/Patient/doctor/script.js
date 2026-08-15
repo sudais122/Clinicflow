@@ -111,6 +111,9 @@ const DOCTOR = {
   clinic: "",
   address: "",
   fee: 0,
+  bio: "",
+  experience: 0,
+  licenseNumber: "",
 };
 
 const STATE = {
@@ -203,6 +206,9 @@ async function loadDoctorProfile() {
   DOCTOR.phone = d.user?.phone || DOCTOR.phone;
   DOCTOR.address = d.clinicAddress || DOCTOR.address;
   DOCTOR.fee = d.consultationFee || DOCTOR.fee;
+  DOCTOR.bio = d.bio || DOCTOR.bio;
+  DOCTOR.experience = d.experience ?? DOCTOR.experience;
+  DOCTOR.licenseNumber = d.licenseNumber || DOCTOR.licenseNumber;
 }
 
 async function loadQueueMe() {
@@ -517,7 +523,7 @@ function renderQueue() {
     btn.onclick = serveNext;
     $("#serveNote").textContent =
       "Completing the current token moves the queue forward.";
-  btn.onclick = serveNext;    // ← this line
+    btn.onclick = serveNext; // ← this line
   }
   renderSequence($("#qcSeqList"));
   renderSequence($("#qcSeqList"));
@@ -761,7 +767,7 @@ document.addEventListener("click", (e) => {
   });
 });
 
-  function syncTopbarIdentity() {
+function syncTopbarIdentity() {
   $("#topDoctorName").textContent = DOCTOR.name || "Doctor";
   $("#ddDoctorName").textContent = DOCTOR.name || "Doctor";
   $("#ddDoctorSpec").textContent = DOCTOR.spec || "";
@@ -771,43 +777,120 @@ function renderProfile() {
   const d = DOCTOR;
   $("#profileCard").innerHTML = `
     <div class="pc-head">
-      <div><div class="pn">${d.name}</div><div class="pmeta">${d.spec} · ${d.clinic}</div></div></div>
+      <div class="pc-avatar">${initials(d.name)}</div>
+      <div>
+        <div class="pn">${d.name}</div>
+        <div class="pmeta">${d.spec} · ${d.clinic}</div>
+      </div>
+    </div>
+
     <div class="pc-section"><h3>Practitioner</h3></div>
     <div class="pc-grid">
-      <div class="pc-box"><div class="fk">Full Name</div><div class="fv">${d.name}</div></div>
-      <div class="pc-box"><div class="fk">Email</div><div class="fv">${d.email || "—"} <button type="button" class="change-email-btn" data-change-email>Change</button></div></div>
-      <div class="pc-box"><div class="fk">Phone</div><div class="fv">${d.phone || "—"}</div></div>
-      <div class="pc-box"><div class="fk">Specialization</div><div class="fv">${d.spec}</div></div>
-      <div class="pc-box readonly"><div class="fk">Doctor ID (read-only)</div><div class="fv">${d.doctorId}</div></div>
+      <div class="pc-box">
+        <div class="fk">Full Name</div>
+        <div class="fv">${d.name}</div>
+      </div>
+<div class="pc-box">
+        <div class="fk">Email</div>
+        <div class="fv">${d.email || "—"} <button type="button" class="change-email-btn" data-change-email>Change</button></div>
+      </div>
+      <div class="pc-box">
+        <div class="fk">Phone</div>
+        <div class="fv">${d.phone || "—"}</div>
+      </div>
+      <div class="pc-box">
+        <div class="fk">Specialization</div>
+        <div class="fv">${d.spec || "—"}</div>
+      </div>
+      <div class="pc-box">
+        <div class="fk">Experience</div>
+        <div class="fv">${d.experience ? d.experience + " years" : "—"}</div>
+      </div>
+      <div class="pc-box readonly">
+        <div class="fk">License Number</div>
+        <div class="fv">${d.licenseNumber || "—"}</div>
+      </div>
+      <div class="pc-box readonly">
+        <div class="fk">Doctor ID</div>
+        <div class="fv">${d.doctorId || "—"}</div>
+      </div>
     </div>
+
+<div class="pc-section"><h3>Bio</h3></div>
+    <div class="pc-bio-card ${d.bio ? "" : "empty"}">
+      ${d.bio || "No bio added yet. Click Edit Profile to add one."}
+    </div>
+
     <div class="pc-section"><h3>Clinic</h3></div>
     <div class="pc-grid">
-      <div class="pc-box"><div class="fk">Clinic Name</div><div class="fv">${d.clinic}</div></div>
-      <div class="pc-box"><div class="fk">Clinic Address</div><div class="fv">${d.address || "—"}</div></div>
-      <div class="pc-box"><div class="fk">Consultation Fee</div><div class="fv">${d.fee ? "PKR " + Number(d.fee).toLocaleString() : "—"}</div></div>
+      <div class="pc-box">
+        <div class="fk">Clinic Name</div>
+        <div class="fv">${d.clinic || "—"}</div>
+      </div>
+      <div class="pc-box">
+        <div class="fk">Clinic Address</div>
+        <div class="fv">${d.address || "—"}</div>
+      </div>
+      <div class="pc-box">
+        <div class="fk">Consultation Fee</div>
+        <div class="fv">PKR ${Number(d.fee || 0).toLocaleString()}</div>
+      </div>
+<div class="pc-box">
+        <div class="fk">Clinic Status</div>
+        <div class="fv">
+          <span class="pill ${STATE.clinicOpen ? "active" : "closed"}">
+            <span class="d"></span>
+            ${STATE.clinicOpen ? "Open" : "Closed"}
+          </span>
+        </div>
+      </div>
+      </div>
     </div>`;
 }
 $("#editProfileBtn").addEventListener("click", () => {
   const d = DOCTOR;
   openModal(`
-    <div class="modal-head"><div><h2>Edit Profile</h2><div class="sub">Doctor ID cannot be changed.</div></div>
-      <button class="modal-close" data-close><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg></button></div>
-    <form id="profForm">
-      <div class="field"><label>Full Name</label><input name="fullname" value="${d.name}"></div>
-      <div class="field"><label>Specialization</label><input name="specialization" value="${d.spec}"></div>
-      <div class="field"><label>Clinic Name</label><input name="clinicName" value="${d.clinic}"></div>
-      <div class="field"><label>Clinic Address</label><input name="clinicAddress" value="${d.address}"></div>
-      <div class="field"><label>Consultation Fee (PKR)</label><input name="consultationFee" type="number" value="${d.fee}"></div>
-      <div class="field"><label>Doctor ID</label><input value="${d.doctorId}" disabled style="background:var(--line-soft);color:var(--muted)"></div>
-      <div class="modal-foot"><button type="button" class="btn btn-ghost" data-close>Cancel</button><button type="submit" class="btn btn-primary" id="profSave">Save Changes</button></div>
-    </form>`);
+  <div class="modal-head">
+    <div><h2>Edit Profile</h2><div class="sub">Doctor ID and license number cannot be changed.</div></div>
+    <button class="modal-close" data-close>✕</button>
+  </div>
+  <form id="profForm">
+    <div class="field"><label>Full Name</label>
+      <input name="fullname" value="${d.name}"></div>
+    <div class="field"><label>Phone</label>
+      <input name="phone" value="${d.phone || ""}"></div>
+    <div class="field"><label>Specialization</label>
+      <input name="specialization" value="${d.spec}"></div>
+    <div class="field"><label>Experience (years)</label>
+      <input name="experience" type="number" min="0" value="${d.experience || 0}"></div>
+    <div class="field"><label>Clinic Name</label>
+      <input name="clinicName" value="${d.clinic}"></div>
+    <div class="field"><label>Clinic Address</label>
+      <input name="clinicAddress" value="${d.address || ""}"></div>
+    <div class="field"><label>Consultation Fee (PKR)</label>
+      <input name="consultationFee" type="number" value="${d.fee}"></div>
+    <div class="field"><label>Bio</label>
+      <textarea name="bio" maxlength="1000" style="min-height:100px">${d.bio || ""}</textarea></div>
+
+    <!-- Read-only fields -->
+    <div class="field"><label>Doctor ID (read-only)</label>
+      <input value="${d.doctorId}" disabled style="background:var(--line-soft);color:var(--muted)"></div>
+    <div class="field"><label>License Number (read-only)</label>
+      <input value="${d.licenseNumber || "—"}" disabled style="background:var(--line-soft);color:var(--muted)"></div>
+
+    <div class="modal-foot">
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary" id="profSave">Save Changes</button>
+    </div>
+  </form>`);
   $("#profForm").onsubmit = async (e) => {
     e.preventDefault();
     const btn = $("#profSave");
     btn.disabled = true;
     btn.textContent = "Saving…";
     const fd = Object.fromEntries(new FormData(e.target));
-    if (fd.consultationFee) fd.consultationFee = Number(fd.consultationFee);
+    fd.consultationFee = parseInt(fd.consultationFee, 10) || d.fee;
+    fd.experience = parseInt(fd.experience, 10) || 0;
     try {
       const res = await apiPatch(ENDPOINTS.doctorProfileUpdate(), fd);
       const updated = res.data;
@@ -825,6 +908,9 @@ $("#editProfileBtn").addEventListener("click", () => {
       btn.disabled = false;
       btn.textContent = "Save Changes";
       toast("Couldn't update your profile", err.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save Changes";
     }
   };
 });
@@ -878,11 +964,16 @@ function renderEmailChange() {
       btn.textContent = "Sending…";
 
       try {
-        const res = await apiPost(ENDPOINTS.emailChangeRequest(), { newEmail: val });
+        const res = await apiPost(ENDPOINTS.emailChangeRequest(), {
+          newEmail: val,
+        });
         emailChange.newEmail = res.data?.newEmail || val;
         emailChange.step = 2;
         renderEmailChange();
-        toast("Verification code sent", `Check ${emailChange.newEmail} for the code.`);
+        toast(
+          "Verification code sent",
+          `Check ${emailChange.newEmail} for the code.`,
+        );
       } catch (err) {
         toast("Couldn't send code", err.message, true);
       } finally {
@@ -891,16 +982,21 @@ function renderEmailChange() {
       }
     };
 
-    $("#ecCancel").onclick = () => $("#emailChangeOverlay").classList.remove("open");
+    $("#ecCancel").onclick = () =>
+      $("#emailChangeOverlay").classList.remove("open");
   } else if (emailChange.step === 2) {
     $("#ecTitle").textContent = "Verify your new email";
-    $("#ecSub").textContent = `Enter the 6-digit code sent to ${emailChange.newEmail}.`;
+    $("#ecSub").textContent =
+      `Enter the 6-digit code sent to ${emailChange.newEmail}.`;
     form.innerHTML = `
       <div class="field" style="margin-bottom:22px">
         <label style="text-align:center;display:block">Verification code</label>
         <div class="otp-boxes" id="ecOtpBoxes">
-          ${Array.from({ length: 6 }, (_, i) => `
-            <input class="otp-box" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-otp-i="${i}" autocomplete="one-time-code">`).join("")}
+          ${Array.from(
+            { length: 6 },
+            (_, i) => `
+            <input class="otp-box" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="1" data-otp-i="${i}" autocomplete="one-time-code">`,
+          ).join("")}
         </div>
       </div>
       <div class="modal-foot">
@@ -925,7 +1021,10 @@ function renderEmailChange() {
       });
       box.addEventListener("paste", (e) => {
         e.preventDefault();
-        const digits = (e.clipboardData.getData("text") || "").replace(/\D/g, "").slice(0, 6).split("");
+        const digits = (e.clipboardData.getData("text") || "")
+          .replace(/\D/g, "")
+          .slice(0, 6)
+          .split("");
         digits.forEach((d, j) => {
           if (boxes[j]) {
             boxes[j].value = d;
@@ -938,7 +1037,9 @@ function renderEmailChange() {
 
     form.onsubmit = async (e) => {
       e.preventDefault();
-      const otp = $$(".otp-box", form).map((b) => b.value).join("");
+      const otp = $$(".otp-box", form)
+        .map((b) => b.value)
+        .join("");
       if (otp.length !== 6) return toast("Enter all 6 digits.", "", true);
 
       const btn = $("#ecVerify");
@@ -1296,7 +1397,7 @@ async function init() {
     }
   }
   renderNotifs();
-  syncTopbarIdentity()
+  syncTopbarIdentity();
   const h = location.hash.replace("#", "");
   showView(TITLES[h] ? h : "overview");
   initSocket();

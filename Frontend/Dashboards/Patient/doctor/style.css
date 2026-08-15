@@ -1350,11 +1350,10 @@ h3 {
 .pc-avatar {
     width: 64px;
     height: 64px;
+    display: none;
     border-radius: 16px;
     background: var(--blue-soft);
     color: var(--blue);
-    display: grid;
-    place-items: center;
     font-weight: 700;
     font-size: 22px;
     font-family: var(--fd)
@@ -2188,4 +2187,16 @@ h3 {
 }
 .otp-box.filled {
   border-color: #c7d2e8;
+}.pc-bio-card {
+  margin: 4px 28px 24px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 10px 20px 10px;
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--sub);
+}
+.pc-bio-card.empty {
+  color: var(--faint);
+  font-style: italic;
 }

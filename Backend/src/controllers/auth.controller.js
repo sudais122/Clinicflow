@@ -46,7 +46,10 @@ const registerDoctor = async (req, res, next) => {
       clinicName,
       clinicAddress,
       specialization,
+      licenseNumber,
+      experience,
       consultationFee,
+      bio,
     } = req.body;
 
     // Required fields
@@ -55,41 +58,53 @@ const registerDoctor = async (req, res, next) => {
         fullname,
         email,
         password,
-        clinicName,
         phone,
+        clinicName,
         clinicAddress,
         specialization,
-      ].some((field) => !field || field.trim() === "")
+        licenseNumber,
+        experience,
+        consultationFee,
+      ].some((field) => field === undefined || field === null || String(field).trim() === "")
     ) {
-      throw new ApiError(400, "All fields are required");
+      throw new ApiError(400, "All required fields are required");
     }
 
     // Full name
     if (fullname.length < 3 || fullname.length > 50) {
       throw new ApiError(400, "Full name must be between 3 and 50 characters");
     }
-    if (!/^[A-Za-z\s]+$/.test(fullname)) {
-      throw new ApiError(400, "Full name can contain only letters and spaces");
+
+    if (!/^[A-Za-z.\s]+$/.test(fullname)) {
+      throw new ApiError(
+        400,
+        "Full name can contain only letters, spaces, and dots",
+      );
     }
 
-    // Normalize: strip any "Dr"/"Dr." the person may have typed themselves,.
+    // Normalize doctor name
     const cleanedName = fullname.trim().replace(/^dr\.?\s*/i, "");
     const finalFullname = `Dr. ${cleanedName}`;
 
     // Email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
     if (!emailRegex.test(email.trim())) {
       throw new ApiError(400, "Invalid email format");
     }
 
-    // Phone 
+    // Phone
     if (!/^03\d{9}$/.test(phone)) {
-      throw new ApiError(400, "Phone must be 11 digits and start with 03");
+      throw new ApiError(
+        400,
+        "Phone must be 11 digits and start with 03",
+      );
     }
 
     // Password
     const passwordRegex =
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=])[A-Za-z\d@$!%*?&#^()_\-+=]{8,}$/;
+
     if (!passwordRegex.test(password)) {
       throw new ApiError(
         400,
@@ -121,22 +136,71 @@ const registerDoctor = async (req, res, next) => {
       );
     }
 
-    // Consultation Fee
-    if (
-      consultationFee === undefined ||
-      consultationFee === null ||
-      isNaN(consultationFee)
-    ) {
-      throw new ApiError(400, "Consultation fee is required");
-    }
-    if (Number(consultationFee) <= 0) {
-      throw new ApiError(400, "Consultation fee must be greater than 0");
+    // License Number
+    if (licenseNumber.length < 3 || licenseNumber.length > 50) {
+      throw new ApiError(
+        400,
+        "License number must be between 3 and 50 characters",
+      );
     }
 
+    // Experience
+    if (
+      isNaN(experience) ||
+      Number(experience) < 0 ||
+      Number(experience) > 70
+    ) {
+      throw new ApiError(
+        400,
+        "Experience must be a valid number between 0 and 70 years",
+      );
+    }
+
+    // Consultation Fee
+    if (
+      isNaN(consultationFee) ||
+      Number(consultationFee) <= 0
+    ) {
+      throw new ApiError(
+        400,
+        "Consultation fee must be greater than 0",
+      );
+    }
+
+    // Bio - optional
+    if (bio !== undefined && bio !== null) {
+      if (typeof bio !== "string") {
+        throw new ApiError(400, "Bio must be a string");
+      }
+
+      if (bio.trim().length > 1000) {
+        throw new ApiError(
+          400,
+          "Bio cannot exceed 1000 characters",
+        );
+      }
+    }
+
+    // Normalize values
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedLicenseNumber = licenseNumber.trim();
+
     // Email already exists
-    const existedUser = await User.findOne({ email: email.toLowerCase() });
+    const existedUser = await User.findOne({
+      email: normalizedEmail,
+    });
+
     if (existedUser) {
       throw new ApiError(409, "Email already exists");
+    }
+
+    // License number already exists
+    const existedDoctor = await Doctor.findOne({
+      licenseNumber: normalizedLicenseNumber,
+    });
+
+    if (existedDoctor) {
+      throw new ApiError(409, "License number already exists");
     }
 
     const session = await mongoose.startSession();
@@ -147,7 +211,7 @@ const registerDoctor = async (req, res, next) => {
         [
           {
             fullname: finalFullname,
-            email: email.toLowerCase(),
+            email: normalizedEmail,
             password,
             phone,
             role: "doctor",
@@ -156,7 +220,7 @@ const registerDoctor = async (req, res, next) => {
         { session },
       );
 
-      // Human-readable id, e.g. "DR-000125"
+      // Human-readable ID, e.g. DR-000125
       const doctorId = await generateDoctorId({ session });
 
       const [doctor] = await Doctor.create(
@@ -164,16 +228,21 @@ const registerDoctor = async (req, res, next) => {
           {
             user: user._id,
             doctorId,
-            clinicName,
-            clinicAddress,
-            specialization,
+            clinicName: clinicName.trim(),
+            clinicAddress: clinicAddress.trim(),
+            specialization: specialization.trim(),
+            licenseNumber: normalizedLicenseNumber,
+            experience: Number(experience),
             consultationFee: Number(consultationFee),
+            bio: bio?.trim() || undefined,
           },
         ],
         { session },
       );
 
+      // Create 30-day free subscription
       const startDate = new Date();
+
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + 30);
 
@@ -194,27 +263,41 @@ const registerDoctor = async (req, res, next) => {
         { session },
       );
 
-      await Queue.create([{ doctor: doctor._id }], { session });
+      // Create doctor's queue
+      await Queue.create(
+        [
+          {
+            doctor: doctor._id,
+          },
+        ],
+        { session },
+      );
 
       await session.commitTransaction();
 
+      // Return created user
       const createdUser = await User.findById(user._id).select(
         "-password -refreshToken",
       );
 
+      // Return created doctor
       const createdDoctor = await Doctor.findById(doctor._id).select(
-        "doctorId clinicName clinicAddress specialization consultationFee",
+        "doctorId clinicName clinicAddress specialization licenseNumber experience consultationFee bio clinicStatus",
       );
 
       return res.status(201).json(
         new ApiResponse(
           201,
-          { user: createdUser, doctor: createdDoctor },
+          {
+            user: createdUser,
+            doctor: createdDoctor,
+          },
           "Doctor registered successfully",
         ),
       );
     } catch (error) {
       await session.abortTransaction();
+
       throw error instanceof ApiError
         ? error
         : new ApiError(
@@ -223,7 +306,7 @@ const registerDoctor = async (req, res, next) => {
               "Something went wrong while registering the doctor",
           );
     } finally {
-      session.endSession();
+      await session.endSession();
     }
   } catch (error) {
     next(error);

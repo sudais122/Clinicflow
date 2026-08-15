@@ -16,7 +16,6 @@ const getDoctorDashboard = async (req, res, next) => {
       throw new ApiError(403, "Only a doctor can view the doctor dashboard");
     }
 
-    // Determine which day to report on: query ?date, else today.
     const { date } = req.query;
     let selected;
     if (date) {
@@ -33,13 +32,11 @@ const getDoctorDashboard = async (req, res, next) => {
     const endOfDay = new Date(selected);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // All of this doctor's appointments for the selected day.
     const appointments = await Appointment.find({
       doctor: doctor._id,
       appointmentDate: { $gte: startOfDay, $lte: endOfDay },
     }).lean();
 
-    // Tally by status.
     let waitingPatients = 0;
     let inProgress = 0;
     let completedAppointments = 0;
@@ -52,25 +49,30 @@ const getDoctorDashboard = async (req, res, next) => {
       else if (appt.status === "cancelled") cancelledAppointments += 1;
     }
 
-    // Live queue state.
     const queue = await Queue.findOne({ doctor: doctor._id }).lean();
-
-    const selectedDate = startOfDay.toISOString().slice(0, 10); // YYYY-MM-DD
+    const selectedDate = startOfDay.toISOString().slice(0, 10);
 
     return res.status(200).json(
       new ApiResponse(
         200,
         {
           doctor: {
-            doctorId: doctor.doctorId,
-            fullname: doctor.user?.fullname,
-            clinicName: doctor.clinicName,
-            specialization: doctor.specialization,
+            doctorId:        doctor.doctorId,
+            fullname:        doctor.user?.fullname,
+            email:           doctor.user?.email,        // ← added
+            clinicName:      doctor.clinicName,
+            clinicAddress:   doctor.clinicAddress,      // ← added
+            specialization:  doctor.specialization,
+            licenseNumber:   doctor.licenseNumber,      // ← added
+            experience:      doctor.experience,         // ← added
+            consultationFee: doctor.consultationFee,    // ← added
+            bio:             doctor.bio,                // ← added
+            clinicStatus:    doctor.clinicStatus,       // ← added
           },
           selectedDate,
-          clinicStatus: queue?.clinicStatus ?? "closed",
-          currentServingToken: queue?.nowServing ?? 0,
-          totalAppointments: appointments.length,
+          clinicStatus:            queue?.clinicStatus ?? "closed",
+          currentServingToken:     queue?.nowServing ?? 0,
+          totalAppointments:       appointments.length,
           waitingPatients,
           inProgress,
           completedAppointments,

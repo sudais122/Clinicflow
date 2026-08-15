@@ -6,35 +6,44 @@ import { Doctor } from "../models/doctor.models.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 
-// PATCH /doctor/profile   (doctor only)
+// PATCH /doctor/profile   
 const updateDoctorProfile = async (req, res, next) => {
   try {
     const {
       fullname,
+      phone,
       clinicName,
       clinicAddress,
       specialization,
       consultationFee,
+      bio,
+      experience,
     } = req.body;
 
-    // At least one updatable field must be present.
     if (
       fullname === undefined &&
+      phone === undefined &&
       clinicName === undefined &&
       clinicAddress === undefined &&
       specialization === undefined &&
-      consultationFee === undefined
+      consultationFee === undefined &&
+      bio === undefined &&
+      experience === undefined
     ) {
       throw new ApiError(400, "No fields provided to update");
     }
 
-    // Validate only the fields that were actually sent (partial update).
     if (fullname !== undefined) {
       if (fullname.length < 3 || fullname.length > 50) {
         throw new ApiError(400, "Full name must be between 3 and 50 characters");
       }
-      if (!/^[A-Za-z\s]+$/.test(fullname)) {
+      if (!/^[A-Za-z\s.]+$/.test(fullname)) {
         throw new ApiError(400, "Full name can contain only letters and spaces");
+      }
+    }
+    if (phone !== undefined) {
+      if (!/^[+\d][\d\s-]{6,14}\d$/.test(phone)) {
+        throw new ApiError(400, "Please enter a valid phone number");
       }
     }
     if (clinicName !== undefined && (clinicName.length < 3 || clinicName.length > 100)) {
@@ -57,6 +66,14 @@ const updateDoctorProfile = async (req, res, next) => {
         throw new ApiError(400, "Consultation fee must be a number greater than 0");
       }
     }
+    if (bio !== undefined && bio.length > 1000) {
+      throw new ApiError(400, "Bio must be under 1000 characters");
+    }
+    if (experience !== undefined) {
+      if (isNaN(experience) || Number(experience) < 0) {
+        throw new ApiError(400, "Experience must be a number of 0 or more years");
+      }
+    }
 
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
@@ -67,16 +84,18 @@ const updateDoctorProfile = async (req, res, next) => {
     session.startTransaction();
 
     try {
-      // User collection: fullname only.
-      if (fullname !== undefined) {
+      if (fullname !== undefined || phone !== undefined) {
+        const userUpdates = {};
+        if (fullname !== undefined) userUpdates.fullname = fullname;
+        if (phone !== undefined) userUpdates.phone = phone;
+
         await User.findByIdAndUpdate(
           req.user._id,
-          { $set: { fullname } },
+          { $set: userUpdates },
           { session },
         );
       }
 
-      // Doctor collection: the clinic fields.
       const doctorUpdates = {};
       if (clinicName !== undefined) doctorUpdates.clinicName = clinicName;
       if (clinicAddress !== undefined) doctorUpdates.clinicAddress = clinicAddress;
@@ -84,6 +103,8 @@ const updateDoctorProfile = async (req, res, next) => {
       if (consultationFee !== undefined) {
         doctorUpdates.consultationFee = Number(consultationFee);
       }
+      if (bio !== undefined) doctorUpdates.bio = bio;
+      if (experience !== undefined) doctorUpdates.experience = Number(experience);
 
       if (Object.keys(doctorUpdates).length > 0) {
         await Doctor.findByIdAndUpdate(
@@ -103,9 +124,10 @@ const updateDoctorProfile = async (req, res, next) => {
       session.endSession();
     }
 
-    // Return the fresh, merged profile.
     const updatedDoctor = await Doctor.findById(doctor._id)
-      .select("doctorId clinicName clinicAddress specialization consultationFee user")
+      .select(
+        "doctorId clinicName clinicAddress specialization consultationFee bio experience licenseNumber user",
+      )
       .populate({ path: "user", select: "fullname email phone role" })
       .lean();
 
@@ -119,11 +141,13 @@ const updateDoctorProfile = async (req, res, next) => {
   }
 };
 
-// GET /doctor/me   (doctor only)
+// GET /doctor/me   
 const getCurrentDoctorProfile = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id })
-      .select("doctorId clinicName clinicAddress specialization consultationFee user")
+      .select(
+        "doctorId clinicName clinicAddress specialization consultationFee bio experience licenseNumber user",
+      )
       .populate({ path: "user", select: "fullname email phone role" })
       .lean();
 
