@@ -314,10 +314,10 @@
       </div>
     </div>`;
     }
-const recentHistory = $("#recentHistory");
+    const recentHistory = $("#recentHistory");
 
-if (!STATE.appointments || STATE.appointments.length === 0) {
-  recentHistory.innerHTML = `
+    if (!STATE.appointments || STATE.appointments.length === 0) {
+      recentHistory.innerHTML = `
     <div class="empty-history">
       <h3>No appointment history</h3>
       <p>You don't have any previous appointments yet.</p>
@@ -326,11 +326,11 @@ if (!STATE.appointments || STATE.appointments.length === 0) {
       </button>
     </div>
   `;
-} else {
-  recentHistory.innerHTML = STATE.appointments
-    .slice(0, 4)
-    .map(
-      (a) => `
+    } else {
+      recentHistory.innerHTML = STATE.appointments
+        .slice(0, 4)
+        .map(
+          (a) => `
         <div class="hrow" data-details="${a.id}" style="cursor:pointer">
           <div>
             <div class="dn">${a.doctor}</div>
@@ -345,9 +345,9 @@ if (!STATE.appointments || STATE.appointments.length === 0) {
           </span>
         </div>
       `,
-    )
-    .join("");
-}
+        )
+        .join("");
+    }
   }
 
   function chipTrack(a) {
@@ -512,12 +512,11 @@ if (!STATE.appointments || STATE.appointments.length === 0) {
   }
 
   /* ---------------- PROFILE ---------------- */
-function renderProfile() {
-  const u = STATE.user;
+  function renderProfile() {
+    const u = STATE.user;
 
-  $("#profileCard").innerHTML = `
+    $("#profileCard").innerHTML = `
     <div class="pc-head">
-      <div class="pc-avatar">${initials(u.fullname)}</div>
       <div>
         <div class="pn">${u.fullname}</div>
         <div class="pe">${u.email}</div>
@@ -568,13 +567,12 @@ function renderProfile() {
       </div>
     </div>
   `;
-}
+  }
 
+  $("#editProfileBtn").addEventListener("click", () => {
+    const u = STATE.user;
 
-$("#editProfileBtn").addEventListener("click", () => {
-  const u = STATE.user;
-
-  $("#editForm").innerHTML = `
+    $("#editForm").innerHTML = `
     <div class="field" style="margin-bottom:16px">
       <label>Full name</label>
       <input
@@ -588,7 +586,6 @@ $("#editProfileBtn").addEventListener("click", () => {
       <input
         name="phone"
         value="${u.phone || ""}"
-        disabled
       >
     </div>
 
@@ -623,9 +620,7 @@ $("#editProfileBtn").addEventListener("click", () => {
         ${["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
           .map(
             (b) =>
-              `<option ${
-                b === u.bloodGroup ? "selected" : ""
-              }>${b}</option>`,
+              `<option ${b === u.bloodGroup ? "selected" : ""}>${b}</option>`,
           )
           .join("")}
       </select>
@@ -642,220 +637,187 @@ $("#editProfileBtn").addEventListener("click", () => {
     </div>
   `;
 
-  $("#editOverlay").classList.add("open");
+    $("#editOverlay").classList.add("open");
 
-  $("#editCancel").onclick = () =>
-    $("#editOverlay").classList.remove("open");
-});
+    $("#editCancel").onclick = () => $("#editOverlay").classList.remove("open");
+  });
 
-
-$("#editClose").addEventListener("click", () =>
-  $("#editOverlay").classList.remove("open"),
-);
-
-
-$("#editForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  const fd = new FormData(e.target);
-
-  const payload = {
-    fullname: fd.get("fullname"),
-    dateOfBirth: fd.get("dateOfBirth"),
-    gender: fd.get("gender"),
-    bloodGroup: fd.get("bloodGroup"),
-  };
-
-  const submitBtn = e.target.querySelector(
-    'button[type="submit"]',
+  $("#editClose").addEventListener("click", () =>
+    $("#editOverlay").classList.remove("open"),
   );
 
-  submitBtn.disabled = true;
-  submitBtn.textContent = "Saving…";
+  $("#editForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-  try {
-    let res;
+    const fd = new FormData(e.target);
 
-    try {
-      res = await fetch(API_BASE + "/patient/profile", {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch (networkErr) {
-      throw new Error(
-        "Could not reach the server. Check your connection.",
-      );
-    }
+const payload = {
+  fullname: fd.get("fullname"),
+  phone: fd.get("phone"),
+  dateOfBirth: fd.get("dateOfBirth"),
+  gender: fd.get("gender"),
+  bloodGroup: fd.get("bloodGroup"),
+};
 
-    if (res.status === 401) {
-      window.location.href =
-        "../../../Auth/login/login.html";
+    const submitBtn = e.target.querySelector('button[type="submit"]');
 
-      throw new Error(
-        "Session expired. Please log in again.",
-      );
-    }
-
-    let json = null;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Saving…";
 
     try {
-      json = await res.json();
-    } catch {
-      // Empty response body
+      let res;
+
+      try {
+        res = await fetch(API_BASE + "/patient/profile", {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+
+      try {
+        json = await res.json();
+      } catch {
+        // Empty response body
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      applyPatientProfile(json?.data);
+
+      $("#editOverlay").classList.remove("open");
+
+      renderProfile();
+      syncUserChrome();
+
+      toast("Profile updated successfully.");
+    } catch (err) {
+      toast("Couldn't update profile", err.message, true);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Save changes";
     }
-
-    if (!res.ok) {
-      throw new Error(
-        json?.message || `Request failed (${res.status})`,
-      );
-    }
-
-    applyPatientProfile(json?.data);
-
-    $("#editOverlay").classList.remove("open");
-
-    renderProfile();
-    syncUserChrome();
-
-    toast("Profile updated successfully.");
-  } catch (err) {
-    toast(
-      "Couldn't update profile",
-      err.message,
-      true,
-    );
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = "Save changes";
-  }
-});
+  });
 
   /* ---------------- BOOKING WIZARD ---------------- */
   const book = {
-  step: 1,
-  forWhom: "self",
-  patientName: "",
-  doctor: null,
-  date: "",
-};
+    step: 1,
+    forWhom: "self",
+    patientName: "",
+    doctor: null,
+    date: "",
+  };
 
-async function loadDoctors() {
-  try {
-    const res = await fetch(API_BASE + "/doctor/getalldoctors", {
-      method: "GET",
-      credentials: "include",
-    });
-
-    if (res.status === 401) {
-      window.location.href = "../../../Auth/login/login.html";
-      throw new Error("Session expired. Please log in again.");
-    }
-
-    let json = null;
-
+  async function loadDoctors() {
     try {
-      json = await res.json();
-    } catch {
-      throw new Error("Invalid server response.");
+      const res = await fetch(API_BASE + "/doctor/getalldoctors", {
+        method: "GET",
+        credentials: "include",
+      });
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error("Invalid server response.");
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      const doctors = json?.data?.doctors || json?.data || [];
+
+      STATE.doctors = doctors.map((doctor) => ({
+        id: doctor._id || doctor.id,
+        doctorId: doctor.doctorId,
+        name: doctor.user?.fullname || doctor.fullname || "Unknown Doctor",
+        spec: doctor.specialization || "—",
+        clinic: doctor.clinicName || "—",
+        area: doctor.clinicAddress || "—",
+        fee: Number(doctor.consultationFee || 0),
+      }));
+
+      return STATE.doctors;
+    } catch (error) {
+      STATE.doctors = [];
+
+      toast("Unable to load doctors", error.message, true);
+
+      return [];
     }
-
-    if (!res.ok) {
-      throw new Error(
-        json?.message || `Request failed (${res.status})`,
-      );
-    }
-
-    const doctors = json?.data?.doctors || json?.data || [];
-
-    STATE.doctors = doctors.map((doctor) => ({
-      id: doctor._id || doctor.id,
-      doctorId: doctor.doctorId,
-      name:
-        doctor.user?.fullname ||
-        doctor.fullname ||
-        "Unknown Doctor",
-      spec: doctor.specialization || "—",
-      clinic: doctor.clinicName || "—",
-      area: doctor.clinicAddress || "—",
-      fee: Number(doctor.consultationFee || 0),
-    }));
-
-    return STATE.doctors;
-  } catch (error) {
-    STATE.doctors = [];
-
-    toast(
-      "Unable to load doctors",
-      error.message,
-      true,
-    );
-
-    return [];
   }
-}
 
-async function openBooking() {
-  book.step = 1;
-  book.forWhom = "self";
-  book.patientName = STATE.user.fullname;
-  book.doctor = null;
-  book.date = "";
+  async function openBooking() {
+    book.step = 1;
+    book.forWhom = "self";
+    book.patientName = STATE.user.fullname;
+    book.doctor = null;
+    book.date = "";
 
-  $("#bookOverlay").classList.add("open");
+    $("#bookOverlay").classList.add("open");
 
-  renderWizard();
-
-  if (!STATE.doctors.length) {
-    await loadDoctors();
     renderWizard();
+
+    if (!STATE.doctors.length) {
+      await loadDoctors();
+      renderWizard();
+    }
   }
-}
 
-$("#bookClose").addEventListener("click", () => {
-  $("#bookOverlay").classList.remove("open");
-});
-
-$("#bookOverlay").addEventListener("click", (e) => {
-  if (e.target.id === "bookOverlay") {
+  $("#bookClose").addEventListener("click", () => {
     $("#bookOverlay").classList.remove("open");
-  }
-});
-
-function renderWizard() {
-  $$("#wsteps .wstep").forEach((s) => {
-    const n = Number(s.dataset.s);
-
-    s.classList.toggle(
-      "active",
-      n === book.step,
-    );
-
-    s.classList.toggle(
-      "done",
-      n < book.step,
-    );
-
-    s.querySelector(".num").innerHTML =
-      n < book.step ? "✓" : n;
   });
 
-  const body = $("#wbody");
-  const foot = $("#wfoot");
+  $("#bookOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "bookOverlay") {
+      $("#bookOverlay").classList.remove("open");
+    }
+  });
 
-  if (book.step === 1) {
-    body.innerHTML = `
+  function renderWizard() {
+    $$("#wsteps .wstep").forEach((s) => {
+      const n = Number(s.dataset.s);
+
+      s.classList.toggle("active", n === book.step);
+
+      s.classList.toggle("done", n < book.step);
+
+      s.querySelector(".num").innerHTML = n < book.step ? "✓" : n;
+    });
+
+    const body = $("#wbody");
+    const foot = $("#wfoot");
+
+    if (book.step === 1) {
+      body.innerHTML = `
       <h3>Who is this appointment for?</h3>
 
       <div class="who-grid">
 
         <div
-          class="who-opt ${
-            book.forWhom === "self" ? "sel" : ""
-          }"
+          class="who-opt ${book.forWhom === "self" ? "sel" : ""}"
           data-who="self"
         >
           <span class="radio"></span>
@@ -872,9 +834,7 @@ function renderWizard() {
         </div>
 
         <div
-          class="who-opt ${
-            book.forWhom === "other" ? "sel" : ""
-          }"
+          class="who-opt ${book.forWhom === "other" ? "sel" : ""}"
           data-who="other"
         >
           <span class="radio"></span>
@@ -912,7 +872,7 @@ function renderWizard() {
       </div>
     `;
 
-    foot.innerHTML = `
+      foot.innerHTML = `
       <button
         class="link-btn"
         id="wCancel"
@@ -928,61 +888,46 @@ function renderWizard() {
       </button>
     `;
 
-    $$(".who-opt", body).forEach((option) => {
-      option.onclick = () => {
-        book.forWhom = option.dataset.who;
+      $$(".who-opt", body).forEach((option) => {
+        option.onclick = () => {
+          book.forWhom = option.dataset.who;
 
-        if (book.forWhom === "self") {
-          book.patientName =
-            STATE.user.fullname;
-        } else {
-          book.patientName = "";
+          if (book.forWhom === "self") {
+            book.patientName = STATE.user.fullname;
+          } else {
+            book.patientName = "";
+          }
+
+          renderWizard();
+        };
+      });
+
+      $("#wPatient").oninput = (e) => {
+        book.patientName = e.target.value;
+      };
+
+      $("#wCancel").onclick = () => {
+        $("#bookOverlay").classList.remove("open");
+      };
+
+      $("#wNext").onclick = () => {
+        if (!book.patientName.trim()) {
+          return toast("Enter a patient name.", "", true);
         }
+
+        book.patientName = book.patientName.trim();
+
+        book.step = 2;
 
         renderWizard();
       };
-    });
-
-    $("#wPatient").oninput = (e) => {
-      book.patientName =
-        e.target.value;
-    };
-
-    $("#wCancel").onclick = () => {
-      $("#bookOverlay").classList.remove(
-        "open",
-      );
-    };
-
-    $("#wNext").onclick = () => {
-      if (!book.patientName.trim()) {
-        return toast(
-          "Enter a patient name.",
-          "",
-          true,
-        );
-      }
-
-      book.patientName =
-        book.patientName.trim();
-
-      book.step = 2;
-
-      renderWizard();
-    };
-  }
-
-  else if (book.step === 2) {
-    body.innerHTML = STATE.doctors.length
-      ? STATE.doctors
-          .map(
-            (d) => `
+    } else if (book.step === 2) {
+      body.innerHTML = STATE.doctors.length
+        ? STATE.doctors
+            .map(
+              (d) => `
               <div
-                class="doc-opt ${
-                  book.doctor?.id === d.id
-                    ? "sel"
-                    : ""
-                }"
+                class="doc-opt ${book.doctor?.id === d.id ? "sel" : ""}"
                 data-doc="${d.id}"
               >
 
@@ -1010,9 +955,9 @@ function renderWizard() {
 
               </div>
             `,
-          )
-          .join("")
-      : `
+            )
+            .join("")
+        : `
           <div
             class="empty-state"
             style="padding:20px 0"
@@ -1023,7 +968,7 @@ function renderWizard() {
           </div>
         `;
 
-    foot.innerHTML = `
+      foot.innerHTML = `
       <button
         class="wback"
         id="wBack"
@@ -1055,37 +1000,28 @@ function renderWizard() {
       </button>
     `;
 
-    $$(".doc-opt", body).forEach(
-      (option) => {
+      $$(".doc-opt", body).forEach((option) => {
         option.onclick = () => {
-          book.doctor =
-            STATE.doctors.find(
-              (d) =>
-                d.id ===
-                option.dataset.doc,
-            );
+          book.doctor = STATE.doctors.find((d) => d.id === option.dataset.doc);
 
           renderWizard();
         };
-      },
-    );
+      });
 
-    $("#wBack").onclick = () => {
-      book.step = 1;
-      renderWizard();
-    };
+      $("#wBack").onclick = () => {
+        book.step = 1;
+        renderWizard();
+      };
 
-    $("#wNext").onclick = () => {
-      if (!book.doctor) return;
+      $("#wNext").onclick = () => {
+        if (!book.doctor) return;
 
-      book.step = 3;
+        book.step = 3;
 
-      renderWizard();
-    };
-  }
-
-  else if (book.step === 3) {
-    body.innerHTML = `
+        renderWizard();
+      };
+    } else if (book.step === 3) {
+      body.innerHTML = `
       <div
         class="field"
         style="margin-bottom:22px"
@@ -1104,7 +1040,7 @@ function renderWizard() {
       </div>
     `;
 
-    foot.innerHTML = `
+      foot.innerHTML = `
       <button
         class="wback"
         id="wBack"
@@ -1136,46 +1072,34 @@ function renderWizard() {
       </button>
     `;
 
-    const dateInput =
-      $("#wDate");
+      const dateInput = $("#wDate");
 
-    dateInput.onchange = (e) => {
-      book.date =
-        e.target.value;
+      dateInput.onchange = (e) => {
+        book.date = e.target.value;
 
-      $("#wNext").disabled =
-        !book.date;
-    };
+        $("#wNext").disabled = !book.date;
+      };
 
-    $("#wBack").onclick = () => {
-      book.step = 2;
-      renderWizard();
-    };
+      $("#wBack").onclick = () => {
+        book.step = 2;
+        renderWizard();
+      };
 
-    $("#wNext").onclick = () => {
-      if (!book.date) {
-        return toast(
-          "Select an appointment date.",
-          "",
-          true,
-        );
-      }
+      $("#wNext").onclick = () => {
+        if (!book.date) {
+          return toast("Select an appointment date.", "", true);
+        }
 
-      book.step = 4;
+        book.step = 4;
 
-      renderWizard();
-    };
-  }
+        renderWizard();
+      };
+    } else if (book.step === 4) {
+      const d = book.doctor;
 
-  else if (book.step === 4) {
-    const d = book.doctor;
+      const dateNice = book.date ? niceDate(book.date) : "—";
 
-    const dateNice =
-      book.date
-        ? niceDate(book.date)
-        : "—";
-
-    body.innerHTML = `
+      body.innerHTML = `
       <div class="review-row">
         <span class="rk">
           Patient
@@ -1259,7 +1183,7 @@ function renderWizard() {
       </div>
     `;
 
-    foot.innerHTML = `
+      foot.innerHTML = `
       <button
         class="wback"
         id="wBack"
@@ -1290,155 +1214,109 @@ function renderWizard() {
       </button>
     `;
 
-    $("#wBack").onclick = () => {
-      book.step = 3;
-      renderWizard();
-    };
+      $("#wBack").onclick = () => {
+        book.step = 3;
+        renderWizard();
+      };
 
-    $("#wConfirm").onclick =
-      confirmBooking;
-  }
-}
-
-async function confirmBooking() {
-  const d = book.doctor;
-  const confirmBtn =
-    $("#wConfirm");
-
-  if (!d) {
-    return toast(
-      "Please select a doctor.",
-      "",
-      true,
-    );
+      $("#wConfirm").onclick = confirmBooking;
+    }
   }
 
-  if (!book.date) {
-    return toast(
-      "Please select an appointment date.",
-      "",
-      true,
-    );
-  }
+  async function confirmBooking() {
+    const d = book.doctor;
+    const confirmBtn = $("#wConfirm");
 
-  if (!book.patientName.trim()) {
-    return toast(
-      "Patient name is required.",
-      "",
-      true,
-    );
-  }
+    if (!d) {
+      return toast("Please select a doctor.", "", true);
+    }
 
-  confirmBtn.disabled = true;
-  confirmBtn.textContent =
-    "Booking…";
+    if (!book.date) {
+      return toast("Please select an appointment date.", "", true);
+    }
 
-  try {
-    const payload = {
-      doctorId: d.id,
-      appointmentDate: new Date(
-        `${book.date}T00:00:00`,
-      ).toISOString(),
+    if (!book.patientName.trim()) {
+      return toast("Patient name is required.", "", true);
+    }
 
-      bookFor: book.forWhom,
-
-      ...(book.forWhom === "other"
-        ? {
-            patientName:
-              book.patientName.trim(),
-          }
-        : {}),
-    };
-
-    let res;
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = "Booking…";
 
     try {
-      res = await fetch(
-        API_BASE +
-          "/appointments/book",
-        {
+      const payload = {
+        doctorId: d.id,
+        appointmentDate: new Date(`${book.date}T00:00:00`).toISOString(),
+
+        bookFor: book.forWhom,
+
+        ...(book.forWhom === "other"
+          ? {
+              patientName: book.patientName.trim(),
+            }
+          : {}),
+      };
+
+      let res;
+
+      try {
+        res = await fetch(API_BASE + "/appointments/book", {
           method: "POST",
           credentials: "include",
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
-          body: JSON.stringify(
-            payload,
-          ),
-        },
+          body: JSON.stringify(payload),
+        });
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+
+      try {
+        json = await res.json();
+      } catch {
+        throw new Error("Invalid server response.");
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      const resData = json?.data;
+
+      $("#bookOverlay").classList.remove("open");
+
+      toast(
+        "Appointment confirmed",
+        `Token #${resData?.queue?.yourToken ?? "—"} — ${d.name}, ${niceDate(
+          book.date,
+        )}.`,
       );
-    } catch (networkErr) {
-      throw new Error(
-        "Could not reach the server. Check your connection.",
-      );
+
+      await loadAppointments();
+
+      renderOverview();
+      renderAppointments();
+
+      book.step = 1;
+      book.forWhom = "self";
+      book.patientName = "";
+      book.doctor = null;
+      book.date = "";
+    } catch (err) {
+      toast("Booking failed", err.message, true);
+    } finally {
+      confirmBtn.disabled = false;
+      confirmBtn.textContent = "Confirm Appointment";
     }
-
-    if (res.status === 401) {
-      window.location.href =
-        "../../../Auth/login/login.html";
-
-      throw new Error(
-        "Session expired. Please log in again.",
-      );
-    }
-
-    let json = null;
-
-    try {
-      json = await res.json();
-    } catch {
-      throw new Error(
-        "Invalid server response.",
-      );
-    }
-
-    if (!res.ok) {
-      throw new Error(
-        json?.message ||
-          `Request failed (${res.status})`,
-      );
-    }
-
-    const resData =
-      json?.data;
-
-    $("#bookOverlay").classList.remove(
-      "open",
-    );
-
-    toast(
-      "Appointment confirmed",
-      `Token #${
-        resData?.queue?.yourToken ??
-        "—"
-      } — ${d.name}, ${niceDate(
-        book.date,
-      )}.`,
-    );
-
-    await loadAppointments();
-
-    renderOverview();
-    renderAppointments();
-
-    book.step = 1;
-    book.forWhom = "self";
-    book.patientName = "";
-    book.doctor = null;
-    book.date = "";
-  } catch (err) {
-    toast(
-      "Booking failed",
-      err.message,
-      true,
-    );
-  } finally {
-    confirmBtn.disabled = false;
-    confirmBtn.textContent =
-      "Confirm Appointment";
   }
-}
   /* ---------------- DETAILS SLIDE-OVER ---------------- */
   document.addEventListener("click", (e) => {
     const el = e.target.closest("[data-details]");
@@ -1703,7 +1581,6 @@ async function confirmBooking() {
   function syncUserChrome() {
     const u = STATE.user;
     $("#topName").textContent = u.fullname;
-    $("#topAvatar").textContent = initials(u.fullname);
     $("#ddName").textContent = u.fullname;
     $("#ddEmail").textContent = u.email;
   }

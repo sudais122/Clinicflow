@@ -11,13 +11,14 @@ const validBloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 // PATCH /patient/profile   (patient only)
 const updatePatientProfile = async (req, res, next) => {
   try {
-    let { fullname, dateOfBirth, gender, bloodGroup } = req.body;
+    let { fullname, dateOfBirth, gender, bloodGroup, phone } = req.body;
 
     if (
       fullname === undefined &&
       dateOfBirth === undefined &&
       gender === undefined &&
-      bloodGroup === undefined
+      bloodGroup === undefined &&
+      phone === undefined
     ) {
       throw new ApiError(400, "No fields provided to update");
     }
@@ -37,6 +38,14 @@ const updatePatientProfile = async (req, res, next) => {
           400,
           "Full name can contain only letters and spaces",
         );
+      }
+    }
+
+    if (phone !== undefined) {
+      phone = String(phone).trim();
+
+      if (!/^[+\d][\d\s-]{6,14}\d$/.test(phone)) {
+        throw new ApiError(400, "Please enter a valid phone number");
       }
     }
 
@@ -90,10 +99,14 @@ const updatePatientProfile = async (req, res, next) => {
     session.startTransaction();
 
     try {
-      if (fullname !== undefined) {
+      if (fullname !== undefined || phone !== undefined) {
+        const userUpdates = {};
+        if (fullname !== undefined) userUpdates.fullname = fullname;
+        if (phone !== undefined) userUpdates.phone = phone;
+
         await User.findByIdAndUpdate(
           req.user._id,
-          { $set: { fullname } },
+          { $set: userUpdates },
           { session, new: true },
         );
       }

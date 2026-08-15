@@ -47,7 +47,6 @@
 
 const CFG = window.CLINICFLOW_CONFIG || {};
 const API_BASE = CFG.API_BASE || "http://localhost:8000";
-const API_PREFIX = CFG.API_PREFIX || "/api/v1";
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
@@ -60,7 +59,7 @@ const ENDPOINTS = {
   queueTime: () => `${API_BASE}/queue/time`,
   queueEnd: () => `${API_BASE}/queue/end`,
   queueReset: () => `${API_BASE}/queue/reset`,
-  queueMe: () => `${API_BASE}/queue/me`, // see assumption #4
+  queueMe: () => `${API_BASE}/queue/me`, 
   appointmentsDoctor: () => `${API_BASE}/appointments/doctor`,
   appointmentStatus: (id) =>
     `${API_BASE}${API_PREFIX}/appointments/${id}/status`,
@@ -117,19 +116,16 @@ const STATE = {
   perPatient: 10,
   delay: 0,
   lastToken: 0,
-  selectedDate: null, // YYYY-MM-DD, from the dashboard response
+  selectedDate: null,
   clinicDayLabel: "",
-  // appointments for the selected day, newest-token-first order preserved
-  appointments: [], // [{ id(_id), appointmentId, token, patient, status, date, clinic, createdAt }]
+  appointments: [], 
   subscription: {
-    // MOCK — no backend route provided for subscriptions.
     plan: "Free",
     status: "Active",
     start: "—",
     end: "—",
   },
   notifications: [
-    // MOCK — no backend route provided for notifications.
   ],
 };
 
@@ -163,9 +159,7 @@ const waitingCount = () =>
   STATE.appointments.filter((a) => a.status === "waiting").length;
 const appts = () => STATE.appointments; // kept for drop-in compatibility with render code
 
-/* ============================================================
-   LOADERS — pull real data from the backend
-   ============================================================ */
+/* LOADERS — pull real data from the backend*/
 function formatLongDate(d) {
   return new Date(d).toLocaleDateString("en-US", {
     weekday: "long",
@@ -201,7 +195,6 @@ async function loadDashboard(dateStr) {
 }
 
 async function loadQueueMe() {
-  // See assumption #4 at the top of this file.
   try {
     const res = await apiGet(ENDPOINTS.queueMe());
     const q = res.data;

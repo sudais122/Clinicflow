@@ -32,6 +32,11 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    phone:{
+      type:String,
+      require:true,
+      unique:true
+    },
     resetOtp: {
       type: String,
       default: undefined,

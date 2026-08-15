@@ -238,32 +238,55 @@ const registerPatient = async (req, res, next) => {
       bloodGroup,
     } = req.body;
 
-    // Required fields
     if (
-      [fullname, email, password, phone, gender, bloodGroup].some(
+      [fullname, email, password, gender, bloodGroup].some(
         (field) => !field || field.trim() === "",
       )
     ) {
       throw new ApiError(400, "All fields are required");
     }
 
-    // Full name
-    if (fullname.length < 3 || fullname.length > 50) {
-      throw new ApiError(400, "Full name must be between 3 and 50 characters");
-    }
-    if (!/^[A-Za-z\s]+$/.test(fullname)) {
-      throw new ApiError(400, "Full name can contain only letters and spaces");
+    if (!phone || phone.trim() === "") {
+      throw new ApiError(400, "Phone number is required");
     }
 
-    // Email
+    if (!/^\d{11}$/.test(phone.trim())) {
+      throw new ApiError(
+        400,
+        "Phone number must be exactly 11 digits",
+      );
+    }
+
+    if (!/^03\d{9}$/.test(phone.trim())) {
+      throw new ApiError(
+        400,
+        "Phone number must start with 03",
+      );
+    }
+
+    if (fullname.length < 3 || fullname.length > 50) {
+      throw new ApiError(
+        400,
+        "Full name must be between 3 and 50 characters",
+      );
+    }
+
+    if (!/^[A-Za-z\s]+$/.test(fullname)) {
+      throw new ApiError(
+        400,
+        "Full name can contain only letters and spaces",
+      );
+    }
+
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
     if (!emailRegex.test(email.trim())) {
       throw new ApiError(400, "Invalid email format");
     }
 
-    // Password
     const passwordRegex =
       /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#^()_\-+=])[A-Za-z\d@$!%*?&#^()_\-+=]{8,}$/;
+
     if (!passwordRegex.test(password)) {
       throw new ApiError(
         400,
@@ -271,38 +294,63 @@ const registerPatient = async (req, res, next) => {
       );
     }
 
-    // Phone — must be 11 digits and start with 03
-    if (!/^03\d{9}$/.test(phone)) {
-      throw new ApiError(400, "Phone must be 11 digits and start with 03");
-    }
-
-    // Date of birth
     if (!dateOfBirth) {
       throw new ApiError(400, "Date of birth is required");
     }
+
     const dob = new Date(dateOfBirth);
+
     if (isNaN(dob.getTime())) {
       throw new ApiError(400, "Invalid date of birth");
     }
+
     if (dob >= new Date()) {
-      throw new ApiError(400, "Date of birth must be in the past");
+      throw new ApiError(
+        400,
+        "Date of birth must be in the past",
+      );
     }
 
-    // Gender
     if (!["male", "female", "other"].includes(gender)) {
-      throw new ApiError(400, "Gender must be male, female or other");
+      throw new ApiError(
+        400,
+        "Gender must be male, female or other",
+      );
     }
 
-    // Blood group
-    const validBloodGroups = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+    const validBloodGroups = [
+      "A+",
+      "A-",
+      "B+",
+      "B-",
+      "AB+",
+      "AB-",
+      "O+",
+      "O-",
+    ];
+
     if (!validBloodGroups.includes(bloodGroup)) {
       throw new ApiError(400, "Invalid blood group");
     }
 
-    // Email already exists
-    const existedUser = await User.findOne({ email: email.toLowerCase() });
+    const normalizedEmail = email.toLowerCase().trim();
+    const normalizedPhone = phone.trim();
+
+    const existedUser = await User.findOne({
+      $or: [
+        { email: normalizedEmail },
+        { phone: normalizedPhone },
+      ],
+    });
+
     if (existedUser) {
-      throw new ApiError(409, "Email already exists");
+      if (existedUser.email === normalizedEmail) {
+        throw new ApiError(409, "Email already exists");
+      }
+
+      if (existedUser.phone === normalizedPhone) {
+        throw new ApiError(409, "Phone number already exists");
+      }
     }
 
     const session = await mongoose.startSession();
@@ -312,21 +360,28 @@ const registerPatient = async (req, res, next) => {
       const [user] = await User.create(
         [
           {
-            fullname,
-            email: email.toLowerCase(),
+            fullname: fullname.trim(),
+            email: normalizedEmail,
             password,
-            phone,
+            phone: normalizedPhone,
             role: "patient",
           },
         ],
         { session },
       );
 
-      // Human-readable id, e.g. "PT-001245"
       const patientId = await generatePatientId({ session });
 
       const [patient] = await Patient.create(
-        [{ user: user._id, patientId, dateOfBirth: dob, gender, bloodGroup }],
+        [
+          {
+            user: user._id,
+            patientId,
+            dateOfBirth: dob,
+            gender,
+            bloodGroup,
+          },
+        ],
         { session },
       );
 
@@ -343,12 +398,16 @@ const registerPatient = async (req, res, next) => {
       return res.status(201).json(
         new ApiResponse(
           201,
-          { user: createdUser, patient: createdPatient },
+          {
+            user: createdUser,
+            patient: createdPatient,
+          },
           "Patient registered successfully",
         ),
       );
     } catch (error) {
       await session.abortTransaction();
+
       throw error instanceof ApiError
         ? error
         : new ApiError(
@@ -357,7 +416,7 @@ const registerPatient = async (req, res, next) => {
               "Something went wrong while registering the patient",
           );
     } finally {
-      session.endSession();
+      await session.endSession();
     }
   } catch (error) {
     next(error);
@@ -465,7 +524,175 @@ const login = async (req, res, next) => {
     return next(error);
   }
 };
+//Update patinet
+const updatePatient = async (req, res, next) => {
+  try {
+    const { patientId } = req.params;
 
+    const {
+      fullname,
+      email,
+      phone,
+      dateOfBirth,
+      gender,
+      bloodGroup,
+    } = req.body;
+
+    // Find patient
+    const patient = await Patient.findOne({ patientId });
+
+    if (!patient) {
+      throw new ApiError(404, "Patient not found");
+    }
+
+    // Find user
+    const user = await User.findById(patient.user);
+
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    // Full name
+    if (fullname !== undefined) {
+      if (fullname.trim().length < 3 || fullname.trim().length > 50) {
+        throw new ApiError(
+          400,
+          "Full name must be between 3 and 50 characters",
+        );
+      }
+
+      if (!/^[A-Za-z\s]+$/.test(fullname.trim())) {
+        throw new ApiError(
+          400,
+          "Full name can contain only letters and spaces",
+        );
+      }
+    }
+
+    // Email
+    if (email !== undefined) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      if (!emailRegex.test(email.trim())) {
+        throw new ApiError(400, "Invalid email format");
+      }
+
+      const existedEmail = await User.findOne({
+        email: email.toLowerCase().trim(),
+        _id: { $ne: user._id },
+      });
+
+      if (existedEmail) {
+        throw new ApiError(409, "Email already exists");
+      }
+    }
+
+    // Phone
+    if (phone !== undefined) {
+      if (!/^03\d{9}$/.test(phone.trim())) {
+        throw new ApiError(
+          400,
+          "Phone number must be exactly 11 digits and start with 03",
+        );
+      }
+
+      const existedPhone = await User.findOne({
+        phone: phone.trim(),
+        _id: { $ne: user._id },
+      });
+
+      if (existedPhone) {
+        throw new ApiError(409, "Phone number already exists");
+      }
+    }
+
+    // Date of birth
+    let dob;
+
+    if (dateOfBirth !== undefined) {
+      dob = new Date(dateOfBirth);
+
+      if (isNaN(dob.getTime())) {
+        throw new ApiError(400, "Invalid date of birth");
+      }
+
+      if (dob >= new Date()) {
+        throw new ApiError(400, "Date of birth must be in the past");
+      }
+    }
+
+    // Gender
+    if (
+      gender !== undefined &&
+      !["male", "female", "other"].includes(gender)
+    ) {
+      throw new ApiError(
+        400,
+        "Gender must be male, female or other",
+      );
+    }
+
+    // Blood group
+    const validBloodGroups = [
+      "A+",
+      "A-",
+      "B+",
+      "B-",
+      "AB+",
+      "AB-",
+      "O+",
+      "O-",
+    ];
+
+    if (
+      bloodGroup !== undefined &&
+      !validBloodGroups.includes(bloodGroup)
+    ) {
+      throw new ApiError(400, "Invalid blood group");
+    }
+
+    // Update User
+    const updatedUser = await User.findByIdAndUpdate(
+      user._id,
+      {
+        ...(fullname !== undefined && { fullname: fullname.trim() }),
+        ...(email !== undefined && { email: email.toLowerCase().trim() }),
+        ...(phone !== undefined && { phone: phone.trim() }),
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    ).select("-password -refreshToken");
+
+    // Update Patient
+    const updatedPatient = await Patient.findByIdAndUpdate(
+      patient._id,
+      {
+        ...(dob !== undefined && { dateOfBirth: dob }),
+        ...(gender !== undefined && { gender }),
+        ...(bloodGroup !== undefined && { bloodGroup }),
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    ).select("patientId dateOfBirth gender bloodGroup");
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          user: updatedUser,
+          patient: updatedPatient,
+        },
+        "Patient updated successfully",
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
+};
 // refreshAccessToken
 const refreshAccessToken = async (req, res, next) => {
   try {
@@ -535,6 +762,7 @@ const logout = async (req, res, next) => {
 export {
   registerDoctor,
   registerPatient,
+  updatePatient,
   login,
   refreshAccessToken,
   logout
