@@ -543,7 +543,7 @@
 
       <div class="pc-field">
         <div class="fk">Email</div>
-        <div class="fv">${u.email}</div>
+        <div class="fv">${u.email} <button type="button" class="change-email-btn" data-change-email>Change</button></div>
       </div>
 
       <div class="pc-field">
@@ -651,13 +651,13 @@
 
     const fd = new FormData(e.target);
 
-const payload = {
-  fullname: fd.get("fullname"),
-  phone: fd.get("phone"),
-  dateOfBirth: fd.get("dateOfBirth"),
-  gender: fd.get("gender"),
-  bloodGroup: fd.get("bloodGroup"),
-};
+    const payload = {
+      fullname: fd.get("fullname"),
+      phone: fd.get("phone"),
+      dateOfBirth: fd.get("dateOfBirth"),
+      gender: fd.get("gender"),
+      bloodGroup: fd.get("bloodGroup"),
+    };
 
     const submitBtn = e.target.querySelector('button[type="submit"]');
 
@@ -1422,6 +1422,175 @@ const payload = {
     }
   });
 
+  /* ---------------- CHANGE EMAIL ---------------- */
+  const emailChange = { step: 1, newEmail: "" };
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-change-email]")) {
+      e.preventDefault();
+      openEmailChange();
+    }
+  });
+
+  function openEmailChange() {
+    emailChange.step = 1;
+    emailChange.newEmail = "";
+    renderEmailChange();
+    $("#emailChangeOverlay").classList.add("open");
+  }
+
+  $("#ecClose").addEventListener("click", () => {
+    $("#emailChangeOverlay").classList.remove("open");
+  });
+  $("#emailChangeOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "emailChangeOverlay") {
+      $("#emailChangeOverlay").classList.remove("open");
+    }
+  });
+
+  function renderEmailChange() {
+    const form = $("#ecForm");
+
+    if (emailChange.step === 1) {
+      $("#ecTitle").textContent = "Change Email";
+      $("#ecSub").textContent = "Enter the new email you'd like to use.";
+      form.innerHTML = `
+        <div class="field" style="margin-bottom:22px">
+          <label>New email</label>
+          <input type="email" id="ecEmail" placeholder="you@example.com" value="${emailChange.newEmail}">
+        </div>
+        <div class="wfoot" style="border:none;padding:0;margin:0">
+          <button type="button" class="link-btn" id="ecCancel">Cancel</button>
+          <button type="submit" class="btn btn-primary" id="ecSubmit">Send Code</button>
+        </div>`;
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const val = $("#ecEmail").value.trim();
+        if (!val) return toast("Enter a new email address.", "", true);
+
+        const btn = $("#ecSubmit");
+        btn.disabled = true;
+        btn.textContent = "Sending…";
+
+        try {
+          let res;
+          try {
+            res = await fetch(API_BASE + "/auth/email/request", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ newEmail: val }),
+            });
+          } catch (networkErr) {
+            throw new Error("Could not reach the server. Check your connection.");
+          }
+
+          if (res.status === 401) {
+            window.location.href = "../../../Auth/login/login.html";
+            throw new Error("Session expired. Please log in again.");
+          }
+
+          let json = null;
+          try {
+            json = await res.json();
+          } catch {
+            /* empty body */
+          }
+
+          if (!res.ok) {
+            throw new Error(json?.message || `Request failed (${res.status})`);
+          }
+
+          emailChange.newEmail = json?.data?.newEmail || val;
+          emailChange.step = 2;
+          renderEmailChange();
+          toast("Verification code sent", `Check ${emailChange.newEmail} for the code.`);
+        } catch (err) {
+          toast("Couldn't send code", err.message, true);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Send Code";
+        }
+      };
+
+      $("#ecCancel").onclick = () =>
+        $("#emailChangeOverlay").classList.remove("open");
+    } else if (emailChange.step === 2) {
+      $("#ecTitle").textContent = "Verify your new email";
+      $("#ecSub").textContent = `Enter the 6-digit code sent to ${emailChange.newEmail}.`;
+      form.innerHTML = `
+        <div class="field" style="margin-bottom:22px">
+          <label>Verification code</label>
+          <input type="text" id="ecOtp" placeholder="123456" maxlength="6" inputmode="numeric">
+        </div>
+        <div class="wfoot" style="border:none;padding:0;margin:0">
+          <button type="button" class="wback" id="ecBack">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            Back
+          </button>
+          <button type="submit" class="btn btn-primary" id="ecVerify">Verify Email</button>
+        </div>`;
+
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        const otp = $("#ecOtp").value.trim();
+        if (!otp) return toast("Enter the verification code.", "", true);
+
+        const btn = $("#ecVerify");
+        btn.disabled = true;
+        btn.textContent = "Verifying…";
+
+        try {
+          let res;
+          try {
+            res = await fetch(API_BASE + "/auth/email/verify", {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ otp }),
+            });
+          } catch (networkErr) {
+            throw new Error("Could not reach the server. Check your connection.");
+          }
+
+          if (res.status === 401) {
+            window.location.href = "../../../Auth/login/login.html";
+            throw new Error("Session expired. Please log in again.");
+          }
+
+          let json = null;
+          try {
+            json = await res.json();
+          } catch {
+            /* empty body */
+          }
+
+          if (!res.ok) {
+            throw new Error(json?.message || `Request failed (${res.status})`);
+          }
+
+          STATE.user.email = json?.data?.email || emailChange.newEmail;
+          $("#emailChangeOverlay").classList.remove("open");
+          renderProfile();
+          syncUserChrome();
+          toast("Email updated successfully.");
+        } catch (err) {
+          toast("Couldn't verify code", err.message, true);
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Verify Email";
+        }
+      };
+
+      $("#ecBack").onclick = () => {
+        emailChange.step = 1;
+        renderEmailChange();
+      };
+    }
+  }
   /* ---------------- DROPDOWNS ---------------- */
   function closeMenus() {
     $("#notifMenu").classList.remove("open");

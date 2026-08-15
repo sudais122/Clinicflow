@@ -14,7 +14,7 @@
   </head>
   <body>
     <div class="app">
-      <!-- ================= SIDEBAR ================= -->
+      <!--  SIDEBAR  -->
       <aside class="sidebar" id="sidebar">
         <div class="sb-top">
           <div class="sb-top">
@@ -129,7 +129,7 @@
         </div>
       </aside>
 
-      <!-- ================= MAIN ================= -->
+      <!--  MAIN -->
       <div class="main">
         <!-- TOPBAR -->
         <header class="topbar">
@@ -244,7 +244,7 @@
           </button>
         </div>
 
-        <!-- ============ VIEW: OVERVIEW ============ -->
+        <!-- VIEW: OVERVIEW -->
         <section class="view" id="view-overview">
           <div class="page-head">
             <div>
@@ -374,7 +374,7 @@
           </div>
         </section>
 
-        <!-- ============ VIEW: MY APPOINTMENTS ============ -->
+        <!--  VIEW: MY APPOINTMENTS  -->
         <section class="view" id="view-appointments" hidden>
           <div class="page-head">
             <div>
@@ -412,7 +412,7 @@
           <div id="apptList"></div>
         </section>
 
-        <!-- ============ VIEW: QUEUE ============ -->
+        <!--  VIEW: QUEUE  -->
         <section class="view" id="view-queue" hidden>
           <div class="page-head">
             <div>
@@ -441,7 +441,7 @@
           </div>
         </section>
 
-        <!-- ============ VIEW: PROFILE ============ -->
+        <!--  VIEW: PROFILE -->
         <section class="view" id="view-profile" hidden>
           <div class="page-head">
             <div>
@@ -467,7 +467,7 @@
           <div class="card profile-card" id="profileCard"></div>
         </section>
 
-        <!-- ============ VIEW: HELP ============ -->
+        <!--  VIEW: HELP  -->
         <section class="view" id="view-help" hidden>
           <div class="page-head">
             <div>
@@ -586,7 +586,7 @@
       </div>
     </div>
 
-    <!-- ================= BOOKING MODAL ================= -->
+    <!--  BOOKING MODAL  -->
     <div class="overlay" id="bookOverlay">
       <div class="modal" role="dialog" aria-modal="true">
         <div class="modal-head">
@@ -629,11 +629,11 @@
       </div>
     </div>
 
-    <!-- ================= DETAILS SLIDE-OVER ================= -->
+    <!--  DETAILS SLIDE-OVER  -->
     <div class="slideover-backdrop" id="soBackdrop"></div>
     <aside class="slideover" id="slideover"></aside>
 
-    <!-- ================= EDIT PROFILE MODAL ================= -->
+    <!--  EDIT PROFILE MODAL  -->
     <div class="overlay" id="editOverlay">
       <div class="modal" style="max-width: 560px">
         <div class="modal-head">
@@ -657,8 +657,33 @@
         <form id="editForm" style="margin-top: 22px"></form>
       </div>
     </div>
-
-    <!-- ================= TOASTS ================= -->
+    <!--  CHANGE EMAIL MODAL -->
+    <div class="overlay" id="emailChangeOverlay">
+      <div class="modal" style="max-width: 480px">
+        <div class="modal-head">
+          <div>
+            <h2 id="ecTitle">Change Email</h2>
+            <div class="sub" id="ecSub">
+              Enter the new email you'd like to use.
+            </div>
+          </div>
+          <button class="modal-close" id="ecClose">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M18 6 6 18M6 6l12 12" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <form id="ecForm" style="margin-top: 22px"></form>
+      </div>
+    </div>
+    <!--  TOASTS  -->
     <div class="toast-wrap" id="toasts"></div>
     <script src="./script.js"></script>
   </body>
