@@ -13,6 +13,7 @@ import dashboardroutes from "./routes/doctorDashboard.routes.js";
 import subscriptionroutes from "./routes/subscription.routes.js";
 import adminroutes from "./routes/admin.routes.js";
 import forgotPasswordRoutes from "./routes/Forgotpassword.routes.js";
+import emailChangeRoutes from "./routes/emailChange.routes.js";
 
 const app = express();
 
@@ -38,6 +39,8 @@ app.use("/appointments", appointmentroutes);
 app.use("/queue", queueroutes);
 
 app.use("/doctor", doctorroutes);
+
+app.use("/auth/email", emailChangeRoutes);
 
 app.use("/patient", patientroutes);
 app.use("/dashboard", dashboardroutes);

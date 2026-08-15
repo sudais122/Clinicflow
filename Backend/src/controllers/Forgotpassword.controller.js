@@ -3,17 +3,16 @@ import crypto from "crypto";
 import { User } from "../models/user.models.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
-import { sendEmail, otpEmailTemplate } from "../utils/sendemail.js";
+import { sendEmail, otpEmailTemplate } from "../utils/email/ForgotPassword.js";
 
-const OTP_TTL_MS = 60 * 1000;        
-const RESEND_COOLDOWN_MS = 30 * 1000; 
+const OTP_TTL_MS = 60 * 1000;
+const RESEND_COOLDOWN_MS = 30 * 1000;
 
-const hashOtp = (otp) =>
-  crypto.createHash("sha256").update(otp).digest("hex");
+const hashOtp = (otp) => crypto.createHash("sha256").update(otp).digest("hex");
 
 // Create a fresh OTP, save it hashed with a 1-min expiry, and email it
 const issueOtp = async (user) => {
-  const otp = String(crypto.randomInt(100000, 1000000)); 
+  const otp = String(crypto.randomInt(100000, 1000000));
 
   user.resetOtp = hashOtp(otp);
   user.resetOtpExpiry = new Date(Date.now() + OTP_TTL_MS);
@@ -27,7 +26,7 @@ const issueOtp = async (user) => {
   });
 };
 
-//POST /auth/forgot-password  
+//POST /auth/forgot-password
 const forgotPassword = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -45,17 +44,13 @@ const forgotPassword = async (req, res, next) => {
     return res
       .status(200)
       .json(
-        new ApiResponse(
-          200,
-          {},
-          "A reset code has been sent to your email",
-        ),
+        new ApiResponse(200, {}, "A reset code has been sent to your email"),
       );
   } catch (error) {
     next(error);
   }
 };
-//POST /auth/resend-otp   
+//POST /auth/resend-otp
 const resendOtp = async (req, res, next) => {
   try {
     const { email } = req.body;
@@ -96,7 +91,7 @@ const resendOtp = async (req, res, next) => {
   }
 };
 
-//POST /auth/verify-otp  
+//POST /auth/verify-otp
 const verifyResetOtp = async (req, res, next) => {
   try {
     const { email, otp } = req.body;
@@ -118,15 +113,13 @@ const verifyResetOtp = async (req, res, next) => {
       throw new ApiError(400, "Invalid or expired OTP");
     }
 
-    return res
-      .status(200)
-      .json(new ApiResponse(200, {}, "OTP verified"));
+    return res.status(200).json(new ApiResponse(200, {}, "OTP verified"));
   } catch (error) {
     next(error);
   }
 };
 
-//POST /auth/reset-password   
+//POST /auth/reset-password
 const resetPassword = async (req, res, next) => {
   try {
     const { email, otp, newPassword } = req.body;
@@ -161,7 +154,7 @@ const resetPassword = async (req, res, next) => {
     user.resetOtp = undefined;
     user.resetOtpExpiry = undefined;
     user.resetOtpLastSent = undefined;
-    user.refreshToken = ""; 
+    user.refreshToken = "";
     await user.save();
 
     return res
