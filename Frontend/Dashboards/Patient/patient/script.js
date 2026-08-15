@@ -1519,10 +1519,21 @@
     } else if (emailChange.step === 2) {
       $("#ecTitle").textContent = "Verify your new email";
       $("#ecSub").textContent = `Enter the 6-digit code sent to ${emailChange.newEmail}.`;
-      form.innerHTML = `
+        form.innerHTML = `
         <div class="field" style="margin-bottom:22px">
-          <label>Verification code</label>
-          <input type="text" id="ecOtp" placeholder="123456" maxlength="6" inputmode="numeric">
+          <label style="text-align:center;display:block">Verification code</label>
+          <div class="otp-boxes" id="ecOtpBoxes">
+            ${Array.from({ length: 6 }, (_, i) => `
+              <input
+                class="otp-box"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]*"
+                maxlength="1"
+                data-otp-i="${i}"
+                autocomplete="one-time-code"
+              >`).join("")}
+          </div>
         </div>
         <div class="wfoot" style="border:none;padding:0;margin:0">
           <button type="button" class="wback" id="ecBack">
@@ -1533,6 +1544,39 @@
           </button>
           <button type="submit" class="btn btn-primary" id="ecVerify">Verify Email</button>
         </div>`;
+
+      const boxes = $$(".otp-box", form);
+      boxes[0]?.focus();
+
+      boxes.forEach((box, i) => {
+        box.addEventListener("input", (e) => {
+          const val = e.target.value.replace(/\D/g, "").slice(-1);
+          e.target.value = val;
+          e.target.classList.toggle("filled", !!val);
+          if (val && boxes[i + 1]) boxes[i + 1].focus();
+        });
+
+        box.addEventListener("keydown", (e) => {
+          if (e.key === "Backspace" && !e.target.value && boxes[i - 1]) {
+            boxes[i - 1].focus();
+          }
+        });
+
+        box.addEventListener("paste", (e) => {
+          e.preventDefault();
+          const digits = (e.clipboardData.getData("text") || "")
+            .replace(/\D/g, "")
+            .slice(0, 6)
+            .split("");
+          digits.forEach((d, j) => {
+            if (boxes[j]) {
+              boxes[j].value = d;
+              boxes[j].classList.add("filled");
+            }
+          });
+          boxes[Math.min(digits.length, 5)]?.focus();
+        });
+      });
 
       form.onsubmit = async (e) => {
         e.preventDefault();

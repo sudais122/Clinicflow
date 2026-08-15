@@ -2280,3 +2280,31 @@ h3 {
   background: var(--blue);
   color: #fff;
 }
+.otp-boxes {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.otp-box {
+  width: 46px;
+  height: 54px;
+  text-align: center;
+  font-family: var(--fd);
+  font-size: 22px;
+  font-weight: 700;
+  border: 1.5px solid var(--line);
+  border-radius: 11px;
+  color: var(--ink);
+  transition: border-color .15s, box-shadow .15s;
+}
+
+.otp-box:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-soft);
+}
+
+.otp-box.filled {
+  border-color: #c7d2e8;
+}
