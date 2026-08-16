@@ -13,20 +13,31 @@ const appointmentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Doctor",
       required: true,
+      index: true,
     },
+
     bookedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index: true,
     },
 
     patient: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Patient",
       required: true,
+      index: true,
     },
 
     patientName: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100,
+    },
+
+    patientPhone: {
       type: String,
       required: true,
       trim: true,
@@ -35,17 +46,20 @@ const appointmentSchema = new mongoose.Schema(
     appointmentDate: {
       type: Date,
       required: true,
+      index: true,
     },
 
     tokenNumber: {
       type: Number,
       required: true,
+      min: 1,
     },
 
     status: {
       type: String,
-      enum: ["waiting", "completed", "cancelled"],
+      enum: ["waiting", "in-progress", "completed", "cancelled"],
       default: "waiting",
+      index: true,
     },
   },
   {
@@ -53,4 +67,7 @@ const appointmentSchema = new mongoose.Schema(
   },
 );
 
-export const Appointment = mongoose.model("Appointment", appointmentSchema);
+export const Appointment = mongoose.model(
+  "Appointment",
+  appointmentSchema,
+);

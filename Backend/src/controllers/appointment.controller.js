@@ -17,7 +17,7 @@ const allowedTransitions = {
   cancelled: [],
 };
 
-// 1. Book Appointment  
+// 1. Book Appointment
 const bookAppointment = async (req, res, next) => {
   try {
     const {
@@ -25,6 +25,7 @@ const bookAppointment = async (req, res, next) => {
       appointmentDate,
       bookFor,
       patientName,
+      patientPhone,
     } = req.body;
 
     if (!doctorId) {
@@ -43,10 +44,7 @@ const bookAppointment = async (req, res, next) => {
     }
 
     if (!["self", "other"].includes(bookFor)) {
-      throw new ApiError(
-        400,
-        'bookFor must be either "self" or "other"',
-      );
+      throw new ApiError(400, 'bookFor must be either "self" or "other"');
     }
 
     const patient = await Patient.findOne({
@@ -58,14 +56,20 @@ const bookAppointment = async (req, res, next) => {
     }
 
     let actualPatientName;
+    let actualPatientPhone;
 
     if (bookFor === "self") {
       actualPatientName = req.user.fullname;
+      actualPatientPhone = req.user.phone;
 
       if (!actualPatientName) {
+        throw new ApiError(400, "Your profile name is not available");
+      }
+
+      if (!actualPatientPhone) {
         throw new ApiError(
           400,
-          "Your profile name is not available",
+          "Your profile phone number is not available",
         );
       }
     }
@@ -78,13 +82,41 @@ const bookAppointment = async (req, res, next) => {
         );
       }
 
+      if (!patientPhone || !patientPhone.trim()) {
+        throw new ApiError(
+          400,
+          "Patient phone number is required when booking for someone else",
+        );
+      }
+
+      if (!/^[+\d][\d\s-]{6,14}\d$/.test(patientPhone.trim())) {
+        throw new ApiError(400, "Please enter a valid phone number");
+      }
+
       actualPatientName = patientName.trim();
+      actualPatientPhone = patientPhone.trim();
     }
 
     const doctor = await Doctor.findById(doctorId);
 
     if (!doctor) {
       throw new ApiError(404, "Doctor not found");
+    }
+
+    const existingActive = await Appointment.findOne({
+      patientName: actualPatientName,
+      patientPhone: actualPatientPhone,
+      doctor: doctorId,
+      status: {
+        $in: ["waiting", "in-progress"],
+      },
+    });
+
+    if (existingActive) {
+      throw new ApiError(
+        409,
+        `${actualPatientName} already has an active appointment with this doctor. Please wait until it is completed or cancel it before booking another appointment with this doctor.`,
+      );
     }
 
     const date = appointmentDate
@@ -96,7 +128,6 @@ const bookAppointment = async (req, res, next) => {
     }
 
     const session = await mongoose.startSession();
-
     session.startTransaction();
 
     let appointmentDocId;
@@ -107,13 +138,10 @@ const bookAppointment = async (req, res, next) => {
       }).session(session);
 
       if (!queue) {
-        throw new ApiError(
-          404,
-          "Doctor queue not found",
-        );
+        throw new ApiError(404, "Doctor queue not found");
       }
 
-      const tokenNumber = queue.lastToken + 1;
+      const tokenNumber = Math.max(queue.lastToken + 1, 1);
 
       queue.lastToken = tokenNumber;
       queue.lastUpdated = new Date();
@@ -131,6 +159,7 @@ const bookAppointment = async (req, res, next) => {
             bookedBy: req.user._id,
             patient: patient._id,
             patientName: actualPatientName,
+            patientPhone: actualPatientPhone,
             doctor: doctorId,
             appointmentDate: date,
             tokenNumber,
@@ -186,18 +215,11 @@ const bookAppointment = async (req, res, next) => {
     }).lean();
 
     const yourToken = populatedAppointment.tokenNumber;
-
-    const clinicStatus =
-      queue?.clinicStatus ?? "closed";
-
-    const nowServing =
-      queue?.nowServing ?? 0;
-
+    const clinicStatus = queue?.clinicStatus ?? "closed";
+    const nowServing = queue?.nowServing ?? 0;
     const perPatient =
       queue?.estimatedTimePerPatient ?? 10;
-
-    const delay =
-      queue?.delayInMinutes ?? 0;
+    const delay = queue?.delayInMinutes ?? 0;
 
     let patientsAhead = 0;
     let estimatedWaitMinutes = 0;
@@ -223,21 +245,13 @@ const bookAppointment = async (req, res, next) => {
       queue: {
         yourToken,
         nowServing:
-          clinicStatus === "open"
-            ? nowServing
-            : null,
+          clinicStatus === "open" ? nowServing : null,
         patientsAhead:
-          clinicStatus === "open"
-            ? patientsAhead
-            : null,
+          clinicStatus === "open" ? patientsAhead : null,
         estimatedTimePerPatient:
-          clinicStatus === "open"
-            ? perPatient
-            : null,
+          clinicStatus === "open" ? perPatient : null,
         delayInMinutes:
-          clinicStatus === "open"
-            ? delay
-            : null,
+          clinicStatus === "open" ? delay : null,
         estimatedWaitMinutes:
           clinicStatus === "open"
             ? estimatedWaitMinutes
@@ -251,13 +265,15 @@ const bookAppointment = async (req, res, next) => {
           : "Appointment booked successfully. The clinic is currently closed. Queue information will be available when the clinic opens.",
     };
 
-    return res.status(201).json(
-      new ApiResponse(
-        201,
-        responseData,
-        responseData.message,
-      ),
-    );
+    return res
+      .status(201)
+      .json(
+        new ApiResponse(
+          201,
+          responseData,
+          responseData.message,
+        ),
+      );
   } catch (error) {
     next(error);
   }
