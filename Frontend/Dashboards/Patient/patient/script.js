@@ -46,9 +46,25 @@
     notifications: [],
   };
 
-  const activeAppt = () =>
-    STATE.appointments.find((a) => a.status === "waiting") ||
-    STATE.appointments.find((a) => a.status === "in-progress");
+// Returns ALL active appointments (waiting/in-progress), sorted so the
+  // most urgent one is first: in-progress beats waiting; among waiting
+  // ones, whichever is closest to being served (fewest patients ahead)
+  // comes first; ties broken by earlier appointment date.
+  const activeAppts = () =>
+    STATE.appointments
+      .filter((a) => a.status === "waiting" || a.status === "in-progress")
+      .sort((a, b) => {
+        if (a.status !== b.status) return a.status === "in-progress" ? -1 : 1;
+        const aheadA = a.queue?.patientsAhead ?? 999;
+        const aheadB = b.queue?.patientsAhead ?? 999;
+        if (aheadA !== aheadB) return aheadA - aheadB;
+        return new Date(a.date) - new Date(b.date);
+      });
+
+  // Kept for any code path that only wants the single most-urgent one
+  // (e.g. the Queue page, which shows one appointment's live position).
+  const activeAppt = () => activeAppts()[0];
+
 
   function mapAppointment(a) {
     const doc = a.doctor || {};
@@ -60,7 +76,7 @@
       id: a.appointmentId || a._id,
       patient: a.patientName,
       bookedBy: a.bookedBy?.fullname || "",
-      doctor: docUser.fullname ? `Dr. ${docUser.fullname}` : "Doctor",
+      doctor: docUser.fullname || "Doctor",
       spec: doc.specialization || "",
       clinic: doc.clinicName || "",
       address: doc.clinicAddress || "",
@@ -93,7 +109,7 @@
     const u = d.user || {};
     return {
       id: d._id,
-      name: u.fullname ? `Dr. ${u.fullname}` : "Doctor",
+      name: u.fullname || "Doctor",
       spec: d.specialization || "",
       clinic: d.clinicName || "",
       area: d.clinicAddress || "",
@@ -274,45 +290,79 @@
   });
 
   /* ---------------- OVERVIEW ---------------- */
-  function renderOverview() {
+function renderOverview() {
     const u = STATE.user;
-    $("#greeting").textContent =
-      `${greetWord()}, ${(u.fullname || "").split(" ")[0] || ""}`;
-    const a = activeAppt();
+$("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
+    const actives = activeAppts();
     const wrap = $("#upcomingWrap");
 
-    if (!a) {
+    if (!actives.length) {
       wrap.innerHTML = `<div class="card empty-state">
       <div class="ei"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M3 9h18M8 2v4M16 2v4" stroke-linecap="round"/></svg></div>
       <h3>No upcoming appointments</h3><p>Book an appointment with a doctor to get started.</p>
       <button class="btn btn-primary" data-book>Book New Appointment</button></div>`;
     } else {
-      const q = a.queue || { nowServing: null, patientsAhead: 0, wait: 0 };
-      wrap.innerHTML = `
-    <div class="section-label">Upcoming appointment</div>
+      const [primary, ...others] = actives;
+      const pq = primary.queue || { nowServing: null, patientsAhead: 0, wait: 0 };
+
+      const primaryCard = `
+    <div class="section-label">Current appointment</div>
     <div class="card upcoming">
       <div class="uc-top">
         <div>
-          <div class="clinic-eyebrow">${a.clinic}</div>
-          <h2>${a.doctor}</h2>
-          <div class="spec">${a.spec}</div>
-          <div class="meta">${a.date} · ${a.time} · Patient: <b>${a.patient}</b></div>
+          <div class="clinic-eyebrow">${primary.clinic}</div>
+          <h2>${primary.doctor}</h2>
+          <div class="spec">${primary.spec}</div>
+          <div class="meta">${primary.date} · ${primary.time} · Patient: <b>${primary.patient}</b></div>
         </div>
-        <span class="pill ${a.status}"><span class="d"></span> ${cap(a.status)}</span>
+        <span class="pill ${primary.status}"><span class="d"></span> ${cap(primary.status)}</span>
       </div>
       <div class="metric-row">
-        <div class="m"><div class="mk">Your token</div><div class="mv blue">#${a.token}</div></div>
-        <div class="m"><div class="mk">Current token</div><div class="mv">${q.nowServing ? "#" + q.nowServing : "—"}</div></div>
-        <div class="m"><div class="mk">Patients ahead</div><div class="mv">${q.patientsAhead}</div></div>
-        <div class="m"><div class="mk">Estimated wait</div><div class="mv">~${q.wait} min</div></div>
+        <div class="m"><div class="mk">Your token</div><div class="mv blue">#${primary.token}</div></div>
+        <div class="m"><div class="mk">Current token</div><div class="mv">${pq.nowServing ? "#" + pq.nowServing : "—"}</div></div>
+        <div class="m"><div class="mk">Patients ahead</div><div class="mv">${pq.patientsAhead}</div></div>
+        <div class="m"><div class="mk">Estimated wait</div><div class="mv">~${pq.wait} min</div></div>
       </div>
       <div class="queue-label">Queue position</div>
-      <div class="chips">${chipTrack(a)}</div>
+      <div class="chips">${chipTrack(primary)}</div>
       <div class="uc-actions">
         <button class="btn btn-primary" data-view="queue">View Queue</button>
-        <button class="btn btn-ghost" data-details="${a.id}">View Details</button>
+        <button class="btn btn-ghost" data-details="${primary.id}">View Details</button>
       </div>
     </div>`;
+
+      const otherCards = others.length
+        ? `
+    <div class="section-label" style="margin-top:24px">Other active appointments</div>
+    ${others
+      .map((o) => {
+        const oq = o.queue || { nowServing: null, patientsAhead: 0, wait: 0 };
+        return `
+    <div class="card upcoming" style="margin-bottom:16px">
+      <div class="uc-top">
+        <div>
+          <div class="clinic-eyebrow">${o.clinic}</div>
+          <h2 style="font-size:20px">${o.doctor}</h2>
+          <div class="spec">${o.spec}</div>
+          <div class="meta">${o.date} · ${o.time} · Patient: <b>${o.patient}</b></div>
+        </div>
+        <span class="pill ${o.status}"><span class="d"></span> ${cap(o.status)}</span>
+      </div>
+      <div class="metric-row">
+        <div class="m"><div class="mk">Your token</div><div class="mv blue">#${o.token}</div></div>
+        <div class="m"><div class="mk">Current token</div><div class="mv">${oq.nowServing ? "#" + oq.nowServing : "—"}</div></div>
+        <div class="m"><div class="mk">Patients ahead</div><div class="mv">${oq.patientsAhead}</div></div>
+        <div class="m"><div class="mk">Estimated wait</div><div class="mv">~${oq.wait} min</div></div>
+      </div>
+      <div class="uc-actions">
+        <button class="btn btn-ghost" data-details="${o.id}">View Details</button>
+      </div>
+    </div>`;
+      })
+      .join("")}`
+        : "";
+
+      wrap.innerHTML = primaryCard + otherCards;
     }
     const recentHistory = $("#recentHistory");
 
@@ -716,12 +766,13 @@
 
   /* ---------------- BOOKING WIZARD ---------------- */
   const book = {
-    step: 1,
-    forWhom: "self",
-    patientName: "",
-    doctor: null,
-    date: "",
-  };
+  step: 1,
+  forWhom: "self",
+  patientName: "",
+  patientPhone: "",
+  doctor: null,
+  date: "",
+};
 
   async function loadDoctors() {
     try {
@@ -870,6 +921,27 @@
         </div>
 
       </div>
+
+      ${
+        book.forWhom === "other"
+          ? `
+      <div class="field" style="margin-top:16px">
+        <label>
+          Patient phone number
+        </label>
+
+        <input
+          id="wPatientPhone"
+          value="${book.patientPhone}"
+          placeholder="03XXXXXXXXX"
+        />
+
+        <div class="hint">
+          Used to tell them apart from other patients with the same name.
+        </div>
+      </div>`
+          : ""
+      }
     `;
 
       foot.innerHTML = `
@@ -906,6 +978,13 @@
         book.patientName = e.target.value;
       };
 
+      const phoneInput = $("#wPatientPhone");
+      if (phoneInput) {
+        phoneInput.oninput = (e) => {
+          book.patientPhone = e.target.value;
+        };
+      }
+
       $("#wCancel").onclick = () => {
         $("#bookOverlay").classList.remove("open");
       };
@@ -914,8 +993,12 @@
         if (!book.patientName.trim()) {
           return toast("Enter a patient name.", "", true);
         }
+        if (book.forWhom === "other" && !book.patientPhone.trim()) {
+          return toast("Enter the patient's phone number.", "", true);
+        }
 
         book.patientName = book.patientName.trim();
+        book.patientPhone = book.patientPhone.trim();
 
         book.step = 2;
 
@@ -1252,6 +1335,7 @@
         ...(book.forWhom === "other"
           ? {
               patientName: book.patientName.trim(),
+              patientPhone: book.patientPhone.trim(),
             }
           : {}),
       };
@@ -1483,7 +1567,9 @@
               body: JSON.stringify({ newEmail: val }),
             });
           } catch (networkErr) {
-            throw new Error("Could not reach the server. Check your connection.");
+            throw new Error(
+              "Could not reach the server. Check your connection.",
+            );
           }
 
           if (res.status === 401) {
@@ -1505,7 +1591,10 @@
           emailChange.newEmail = json?.data?.newEmail || val;
           emailChange.step = 2;
           renderEmailChange();
-          toast("Verification code sent", `Check ${emailChange.newEmail} for the code.`);
+          toast(
+            "Verification code sent",
+            `Check ${emailChange.newEmail} for the code.`,
+          );
         } catch (err) {
           toast("Couldn't send code", err.message, true);
         } finally {
@@ -1518,12 +1607,15 @@
         $("#emailChangeOverlay").classList.remove("open");
     } else if (emailChange.step === 2) {
       $("#ecTitle").textContent = "Verify your new email";
-      $("#ecSub").textContent = `Enter the 6-digit code sent to ${emailChange.newEmail}.`;
-        form.innerHTML = `
+      $("#ecSub").textContent =
+        `Enter the 6-digit code sent to ${emailChange.newEmail}.`;
+      form.innerHTML = `
         <div class="field" style="margin-bottom:22px">
           <label style="text-align:center;display:block">Verification code</label>
           <div class="otp-boxes" id="ecOtpBoxes">
-            ${Array.from({ length: 6 }, (_, i) => `
+            ${Array.from(
+              { length: 6 },
+              (_, i) => `
               <input
                 class="otp-box"
                 type="text"
@@ -1532,7 +1624,8 @@
                 maxlength="1"
                 data-otp-i="${i}"
                 autocomplete="one-time-code"
-              >`).join("")}
+              >`,
+            ).join("")}
           </div>
         </div>
         <div class="wfoot" style="border:none;padding:0;margin:0">
@@ -1580,8 +1673,9 @@
 
       form.onsubmit = async (e) => {
         e.preventDefault();
-        const otp = $("#ecOtp").value.trim();
-        if (!otp) return toast("Enter the verification code.", "", true);
+
+        const otp = $$(".otp-box", form).map((b) => b.value).join("");
+        if (otp.length !== 6) return toast("Enter all 6 digits.", "", true);
 
         const btn = $("#ecVerify");
         btn.disabled = true;
@@ -1597,7 +1691,9 @@
               body: JSON.stringify({ otp }),
             });
           } catch (networkErr) {
-            throw new Error("Could not reach the server. Check your connection.");
+            throw new Error(
+              "Could not reach the server. Check your connection.",
+            );
           }
 
           if (res.status === 401) {
