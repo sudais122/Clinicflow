@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In — ClinicFlow</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Inter:wght@400;500;600;750&family=IBM+Plex+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../css/auth.css" />
+  </head>
+  <body>
+    <div class="af-shell">
+      <!-- ================= LEFT: MARKETING PANEL ================= -->
+      <aside class="af-marketing">
+        <a class="af-brand" href="../../index.html">
+          <img src="../../images/logo.png" alt="ClinicFlow" />
+          <span
+            ><span class="b-clinic">Clinic</span
+            ><span class="b-flow">Flow</span></span
+          >
+        </a>
+
+        <h1>Healthcare appointments, without the waiting uncertainty.</h1>
+        <p class="af-lead">
+          ClinicFlow helps patients track their appointments and helps clinics
+          manage their live patient queue.
+        </p>
+
+        <div class="af-features">
+          <div class="af-feature">
+            <span class="af-ic">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </span>
+            <span>Strict token-number queueing — no time-slot guesswork.</span>
+          </div>
+          <div class="af-feature">
+            <span class="af-ic">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span>Live updates when the queue moves or a delay is added.</span>
+          </div>
+          <div class="af-feature">
+            <span class="af-ic">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path
+                  d="m9 12 2 2 4-4"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span
+              >One workspace for clinic status, patients and appointments.</span
+            >
+          </div>
+        </div>
+
+        <div class="af-queue-card">
+          <div class="af-eyebrow">Now serving</div>
+          <div class="af-token">
+            <span class="num">#14</span>
+            <span class="status">In progress</span>
+          </div>
+          <div class="af-sub">Next up · Token #15 · 6 waiting</div>
+        </div>
+
+        <div class="af-footnote">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3Z" />
+          </svg>
+          Secure access to your ClinicFlow account.
+        </div>
+      </aside>
+
+      <!-- ================= RIGHT: SIGN IN FORM ================= -->
+      <main class="af-panel">
+        <div class="af-card">
+          <h2>Welcome back</h2>
+          <p class="af-desc">Sign in to continue to ClinicFlow.</p>
+
+          <div id="alert" class="alert" style="margin-top: 22px"></div>
+
+          <!--
+            Field ids/names below match the real login.js exactly:
+            form#loginForm, form.email / form.password, wrapper ids
+            f-email / f-password, alert#alert, submitBtn#submitBtn.
+          -->
+          <form id="loginForm" novalidate style="margin-top: 22px">
+            <div class="af-field" id="f-email">
+              <label for="email">Email Address</label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                placeholder="you@example.com"
+                autocomplete="email"
+              />
+              <div class="err"></div>
+            </div>
+
+            <div class="af-field" id="f-password" style="margin-bottom: 0">
+              <label for="password">Password</label>
+              <div class="af-input-wrap">
+                <input
+                  type="password"
+                  id="password"
+                  name="password"
+                  placeholder="Enter your password"
+                  autocomplete="current-password"
+                />
+                <button
+                  type="button"
+                  class="af-toggle-pass"
+                  data-target="password"
+                  aria-label="Show password"
+                >
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </svg>
+                </button>
+              </div>
+              <div class="err"></div>
+            </div>
+
+            <div class="af-field-foot">
+              <a href="../forgotpassword/forgotpassword.html"
+                >Forgot password?</a
+              >
+            </div>
+
+            <button type="submit" class="af-btn-primary" id="submitBtn">
+              Sign In
+            </button>
+          </form>
+
+          <div class="af-below">
+            Don't have an account?
+            <a href="../register/register.html">Create Account</a>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="../config.js"></script>
+    <script src="../auth.js"></script>
+    <script src="./login.js"></script>
+    <script src="./login-ui.js"></script>
+  </body>
+</html>

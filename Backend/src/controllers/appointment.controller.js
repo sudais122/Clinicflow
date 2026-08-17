@@ -290,7 +290,6 @@ const getPatientAppointments = async (req, res, next) => {
       throw new ApiError(404, "Patient profile not found");
     }
 
-    // Only THIS patient's appointments, newest first.
     const appointments = await Appointment.find({ patient: patient._id })
       .populate({
         path: "doctor",
@@ -301,10 +300,6 @@ const getPatientAppointments = async (req, res, next) => {
       .sort({ createdAt: -1 })
       .lean();
 
-      console.log("Found appointments:", appointments.length);
-
-    // Load each involved doctor's live queue once, so we can compute the
-    // patient's position per appointment without querying in a loop.
     const doctorIds = [
       ...new Set(
         appointments

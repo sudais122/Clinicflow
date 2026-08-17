@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClinicFlow — Doctor Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <!-- SIDEBAR -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sb-top">
+          <div class="brand-txt">
+            <a class="brand" href="#clinicStatusCard">
+              <img src="../../../images/logo.png" alt="ClinicFlow" />
+
+              <span>
+                <span class="b-clinic">Clinic</span
+                ><span class="b-flow">Flow</span>
+              </span>
+            </a>
+            <div class="bt2">Doctor Dashboard</div>
+          </div>
+        </div>
+        <div class="sb-label">Clinic</div>
+        <nav class="nav" id="nav">
+          <a href="#overview" data-view="overview" class="active"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+            </svg>
+            Overview</a
+          >
+          <a href="#appointments" data-view="appointments"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="3" y="4" width="18" height="17" rx="2.5" />
+              <path d="M3 9h18M8 2v4M16 2v4" stroke-linecap="round" />
+            </svg>
+            Appointments</a
+          >
+          <a href="#queue" data-view="queue"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"
+                stroke-linecap="round"
+              />
+            </svg>
+            Queue</a
+          >
+          <a href="#profile" data-view="profile"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="8" r="4" />
+              <circle cx="12" cy="12" r="10" />
+            </svg>
+            Profile</a
+          >
+          <a href="#subscription" data-view="subscription"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <rect x="2" y="5" width="20" height="14" rx="2.5" />
+              <path d="M2 10h20" stroke-linecap="round" />
+            </svg>
+            Subscription</a
+          >
+        </nav>
+        <div class="sb-bottom">
+          <a href="#help" data-view="help"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <path
+                d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 2.5M12 17h.01"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Help &amp; Support</a
+          >
+          <a href="#" class="danger" id="logoutBtn"
+            ><svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path
+                d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Logout</a
+          >
+        </div>
+      </aside>
+
+      <div class="main">
+        <header class="topbar">
+          <div style="display: flex; align-items: center; gap: 12px">
+            <button class="icon-btn mobile-only" id="sbOpen">
+              <svg
+                width="22"
+                height="22"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M4 7h16M4 12h16M4 17h16" stroke-linecap="round" />
+              </svg>
+            </button>
+            <span class="page-title" id="pageTitle">Overview</span>
+          </div>
+          <div class="topbar-right">
+            <button class="icon-btn" id="notifBtn">
+              <svg
+                width="21"
+                height="21"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                /></svg
+              ><span class="count-badge" id="notifCount">10</span>
+            </button>
+            <button class="user-menu" id="userBtn">
+              <span class="uname" id="topDoctorName"></span
+              ><svg
+                class="chev"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="m6 9 6 6 6-6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="dropdown notif" id="notifMenu">
+          <div class="dh"><div class="n">Notifications</div></div>
+          <div id="notifList"></div>
+        </div>
+        <div class="dropdown" id="userMenu">
+          <div class="dh">
+            <div class="n" id="ddDoctorName"></div>
+            <div class="e" id="ddDoctorSpec"></div>
+          </div>
+          <a href="#profile" data-view="profile">Profile</a>
+          <a href="#subscription" data-view="subscription">Subscription</a>
+          <a href="#help" data-view="help">Help &amp; Support</a>
+          <button class="item danger" id="logoutBtn2">Logout</button>
+        </div>
+
+        <!-- OVERVIEW -->
+        <section class="view" id="view-overview">
+          <div class="page-head">
+            <div>
+              <h1 id="greeting">Good morning, Dr. Hassan</h1>
+              <p class="lead">Here's your clinic activity for today.</p>
+              <p class="sub2">
+                <b id="clinicName">Care Point Clinic</b> ·
+                <span id="todayDate">Monday, August 10, 2026</span>
+              </p>
+            </div>
+          </div>
+          <div id="clinicStatusCard"></div>
+          <div class="stat-grid" id="statGrid"></div>
+          <div class="ov-grid">
+            <div class="card lq-card" id="liveQueueCard"></div>
+            <div class="card seq-card">
+              <h2>Token Sequence</h2>
+              <div class="sub">Patients are served in token order.</div>
+              <div id="seqList"></div>
+            </div>
+          </div>
+          <div class="card appt-panel mt24" id="overviewAppts"></div>
+        </section>
+
+        <!-- APPOINTMENTS -->
+        <section class="view" id="view-appointments" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Appointments</h1>
+              <p class="lead">
+                Appointments are organised by clinic day and served in token
+                order.
+              </p>
+            </div>
+          </div>
+          <div class="card filter-bar">
+            <div class="fb-top">
+              <div class="date-nav">
+                <button class="nav-arrow" id="datePrev">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="m15 18-6-6 6-6"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+                <span class="cur" id="dateCur">Monday, August 10, 2026</span>
+                <button class="nav-arrow" id="dateNext">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="m9 18 6-6-6-6"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <div class="fb-field">
+                <label class="fl">Select Date</label
+                ><input type="date" class="date-input" id="apptDate" />
+              </div>
+              <div class="fb-field search">
+                <label class="fl">Search patient or appointment ID</label>
+                <div class="search-wrap">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m21 21-4.3-4.3" stroke-linecap="round" /></svg
+                  ><input
+                    class="search-input"
+                    id="apptSearch"
+                    placeholder="Ahmed or APT-2026081"
+                  />
+                </div>
+              </div>
+            </div>
+            <div class="tabs" id="apptTabs">
+              <button class="tab active" data-filter="all">All</button>
+              <button class="tab" data-filter="waiting">Waiting</button>
+              <button class="tab" data-filter="in-progress">In Progress</button>
+              <button class="tab" data-filter="completed">Completed</button>
+              <button class="tab" data-filter="cancelled">Cancelled</button>
+            </div>
+          </div>
+          <div class="card appt-panel">
+            <div class="aph">
+              <div>
+                <h2>Today's Appointments</h2>
+                <div class="sub" id="apptDayLabel">Monday, August 10, 2026</div>
+              </div>
+              <span class="count-chip" id="apptCount">20</span>
+            </div>
+            <div id="apptTableWrap"></div>
+          </div>
+        </section>
+
+        <!-- QUEUE CONTROL -->
+        <section class="view" id="view-queue" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Queue Control</h1>
+              <p class="lead" id="queueSub">
+                Monday, August 10, 2026 · patients are served strictly by token
+                number.
+              </p>
+            </div>
+          </div>
+          <div class="card qc-card">
+            <div class="lq-head">
+              <div>
+                <h2>Live Queue</h2>
+                <div class="sub">
+                  Real-time token flow for today's clinic session.
+                </div>
+              </div>
+              <span class="pill closed" id="qcStatusBadge"
+                ><span class="d"></span> Queue Closed</span
+              >
+            </div>
+            <div class="qc-live">
+              <div class="qc-now">
+                <div class="k">Now serving</div>
+                <div class="big" id="qcNow">#8</div>
+                <div class="pname" id="qcNowName">Rabia</div>
+                <div class="next-box">
+                  <div>
+                    <div class="k">Next patient</div>
+                    <div class="nm" id="qcNextName">Kashif</div>
+                  </div>
+                  <div class="tk" id="qcNextTok">#9</div>
+                </div>
+              </div>
+              <div class="qc-metrics" id="qcMetrics"></div>
+            </div>
+            <div class="qc-actions" id="qcActions"></div>
+          </div>
+          <div class="serve-grid">
+            <div class="card serve-card">
+              <h2>Serve Next Patient</h2>
+              <div class="sub">
+                Completing the current token moves the queue forward.
+              </div>
+              <div class="serve-flow">
+                <div class="serve-box">
+                  <div class="k">Currently serving</div>
+                  <div class="big" id="svCur">#8</div>
+                  <div class="nm" id="svCurName">Rabia</div>
+                </div>
+                <span class="serve-arrow">→</span>
+                <div class="serve-box next">
+                  <div class="k">Next patient</div>
+                  <div class="big" id="svNext">#9</div>
+                  <div class="nm" id="svNextName">Kashif</div>
+                </div>
+              </div>
+              <button class="btn btn-primary btn-lg" id="serveNextBtn">
+                Serve Next Patient →
+              </button>
+              <div class="serve-note" id="serveNote">
+                Open the clinic to continue serving patients.
+              </div>
+            </div>
+            <div class="card serve-card">
+              <h2>Token Sequence</h2>
+              <div class="sub">Patients are served in token order.</div>
+              <div id="qcSeqList"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PROFILE -->
+        <section class="view" id="view-profile" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Profile</h1>
+              <p class="lead">Your practitioner and clinic information.</p>
+            </div>
+            <button class="btn btn-primary" id="editProfileBtn">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              Edit Profile
+            </button>
+          </div>
+          <div class="card profile-card" id="profileCard"></div>
+        </section>
+
+        <!-- SUBSCRIPTION -->
+        <section class="view" id="view-subscription" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Subscription</h1>
+              <p class="lead">
+                Your ClinicFlow plan and included clinic features.
+              </p>
+            </div>
+          </div>
+          <div id="subWrap"></div>
+        </section>
+
+        <!-- HELP -->
+        <section class="view" id="view-help" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Need help?</h1>
+              <p class="lead">Contact the ClinicFlow support team.</p>
+            </div>
+          </div>
+          <div class="help-cards">
+            <div class="card help-card">
+              <div class="hic blue">
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <rect x="3" y="5" width="18" height="14" rx="2.5" />
+                  <path
+                    d="m3 7 9 6 9-6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </div>
+              <div class="hk">Official Support Email</div>
+              <div class="hv">
+                <a href="mailto:support@clinicflow.com"
+                  >support@clinicflow.com</a
+                >
+              </div>
+            </div>
+            <div class="card help-card">
+              <div class="hic green">
+                <svg
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3 19.5 19.5 0 0 1-6-6 19.8 19.8 0 0 1-3-8.6A2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.4-1.2a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2Z"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </div>
+              <div class="hk">Official Support Phone</div>
+              <div class="hv">+92 XXX XXXXXXX</div>
+            </div>
+          </div>
+          <div class="card help-actions">
+            <button class="btn btn-primary" id="contactBtn">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              Contact Support
+            </button>
+            <button class="btn btn-ghost" id="faqBtn">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path
+                  d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2.5-3 2.5M12 17h.01"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              FAQ
+            </button>
+            <button class="btn btn-ghost" id="reportBtn">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path d="M12 9v4M12 17h.01" stroke-linecap="round" />
+              </svg>
+              Report a Problem
+            </button>
+          </div>
+          <div class="card faq-card">
+            <h2>Frequently asked questions</h2>
+            <div id="faqList"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <!-- generic modal host -->
+    <div class="overlay" id="modalOverlay">
+      <div class="modal" id="modalBox"></div>
+    </div>
+    <!-- slide-over -->
+    <div class="slideover-backdrop" id="soBackdrop"></div>
+    <aside class="slideover" id="slideover"></aside>
+    <!-- CHANGE EMAIL MODAL -->
+    <div class="overlay" id="emailChangeOverlay">
+      <div class="modal" style="max-width: 480px">
+        <div class="modal-head">
+          <div>
+            <h2 id="ecTitle">Change Email</h2>
+            <div class="sub" id="ecSub">
+              Enter the new email you'd like to use.
+            </div>
+          </div>
+          <button class="modal-close" id="ecClose">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M18 6 6 18M6 6l12 12" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <form id="ecForm" style="margin-top: 22px"></form>
+      </div>
+    </div>
+    <!-- toasts -->
+    <div class="toast-wrap" id="toasts"></div>
+
+    <script src="./config.js"></script>
+    <script src="./api.js"></script>
+    <script src="./script.js"></script>
+  </body>
+</html>

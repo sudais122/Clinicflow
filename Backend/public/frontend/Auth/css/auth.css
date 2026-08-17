@@ -1,0 +1,1003 @@
+:root {
+    --blue: #1769E8;
+    --blue-hover: #1259c9;
+    --green: #1FB674;
+    --green-strong: #17A768;
+    --ink: #17202A;
+    --muted: #667085;
+    --faint: #98A2B3;
+    --white: #fff;
+    --soft: #F7FAF9;
+    --blue-tint: #EEF5FF;
+    --green-tint: #EAFBF5;
+    --border: #E6EAE9;
+    --red: #EF4444;
+    --grad: linear-gradient(135deg, #1769E8, #1FB674);
+    --shadow-sm: 0 1px 2px rgba(23, 32, 42, .04), 0 1px 3px rgba(23, 32, 42, .06);
+    --shadow-md: 0 8px 24px rgba(23, 32, 42, .08);
+    --font-display: 'Bricolage Grotesque', sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-body);
+    color: var(--ink);
+    background: var(--white);
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
+
+h1,
+h2 {
+    font-family: var(--font-display);
+    letter-spacing: -.02em;
+}
+
+.page {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+}
+
+/* ---- Left gradient panel ---- */
+.aside {
+    background: var(--grad);
+    color: #fff;
+    padding: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+}
+
+.aside::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cg fill='none' stroke='%23fff' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M28 20v14M21 27h14'/%3E%3Cpath d='M88 86v14M81 93h14'/%3E%3C/g%3E%3C/svg%3E");
+    background-size: 120px;
+    opacity: .1;
+}
+
+.aside-ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 1.5px solid rgba(255, 255, 255, .3);
+}
+
+.ar1 {
+    width: 320px;
+    height: 320px;
+    bottom: -120px;
+    right: -80px;
+}
+
+.ar2 {
+    width: 200px;
+    height: 200px;
+    top: 40px;
+    right: 40px;
+    opacity: .5;
+}
+
+.brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: 20px;
+    color: #fff;
+    position: relative;
+    z-index: 1;
+}
+
+.aside-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 400px;
+}
+
+.aside-inner h2 {
+    font-size: 38px;
+    line-height: 1.1;
+    color: #fff;
+}
+
+.aside-inner p {
+    color: rgba(255, 255, 255, .85);
+    font-size: 16px;
+    margin-top: 16px;
+}
+
+.aside-foot {
+    position: relative;
+    z-index: 1;
+    font-size: 14px;
+    color: rgba(255, 255, 255, .9);
+}
+
+/* ---- Right form panel ---- */
+.form-side {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+}
+
+.card {
+    width: 100%;
+    max-width: 420px;
+}
+
+.card h1 {
+    font-size: 30px;
+}
+
+.card .sub {
+    color: var(--muted);
+    font-size: 15px;
+    margin: 8px 0 28px;
+}
+
+.field {
+    margin-bottom: 16px;
+}
+
+.field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 7px;
+}
+
+.field input,
+.field select {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 15px;
+    color: var(--ink);
+    background: #fff;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.field input:focus,
+.field select:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px var(--blue-tint);
+}
+
+.field.invalid input,
+.field.invalid select {
+    border-color: var(--red);
+}
+
+.field .err {
+    color: var(--red);
+    font-size: 12.5px;
+    margin-top: 6px;
+    display: none;
+}
+
+.field.invalid .err {
+    display: block;
+}
+
+.row2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    padding: 13px;
+    border-radius: 10px;
+    font-family: inherit;
+    font-weight: 500;
+    font-size: 15px;
+    cursor: pointer;
+    transition: background .18s ease, transform .18s ease;
+}
+
+.btn:hover:not(:disabled) {
+    background: var(--blue-hover);
+    transform: translateY(-1px);
+}
+
+.btn:disabled {
+    opacity: .7;
+    cursor: not-allowed;
+}
+
+.btn .spinner {
+    width: 18px;
+    height: 18px;
+    display: none;
+}
+
+.btn.loading .spinner {
+    display: inline-block;
+}
+
+.btn.loading .label {
+    opacity: .85;
+}
+
+.spin {
+    transform-origin: 16px 16px;
+    animation: rot 1s linear infinite;
+}
+
+@keyframes rot {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.alert {
+    display: none;
+    padding: 11px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    margin-bottom: 18px;
+}
+
+.alert.show {
+    display: block;
+}
+
+.alert.error {
+    background: #fdecec;
+    color: #b42318;
+    border: 1px solid #f6cecb;
+}
+
+.alert.success {
+    background: var(--green-tint);
+    color: var(--green-strong);
+    border: 1px solid #c3efdd;
+}
+
+.foot {
+    text-align: center;
+    font-size: 14px;
+    color: var(--muted);
+    margin-top: 22px;
+}
+
+.foot a {
+    color: var(--blue);
+    font-weight: 500;
+}
+
+.forgot {
+    text-align: right;
+    font-size: 13px;
+    margin: -6px 0 18px;
+}
+
+.forgot a {
+    color: var(--blue);
+}
+
+@media (max-width: 860px) {
+    .page {
+        grid-template-columns: 1fr;
+    }
+
+    .aside {
+        display: none;
+    }
+
+    .form-side {
+        padding: 32px 24px;
+    }
+}
+/* ============================================================
+   Forgot-password page — step-specific styles
+   Load AFTER auth.css:
+     <link rel="stylesheet" href="./auth.css" />
+     <link rel="stylesheet" href="./forgot-password.css" />
+   ============================================================ */
+
+/* Progress indicator (3 segments) */
+.steps-ind { display: flex; gap: 8px; margin-bottom: 26px; }
+.steps-ind span {
+  height: 4px; flex: 1; border-radius: 2px;
+  background: var(--border);
+  transition: background 0.3s ease;
+}
+.steps-ind span.active { background: var(--blue); }
+.steps-ind span.done { background: var(--green); }
+
+/* Step panels + enter animation */
+.step { display: none; }
+.step.active { display: block; animation: fp-fade 0.3s ease; }
+@keyframes fp-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* OTP input boxes */
+.otp-row {
+  display: flex; gap: 10px; justify-content: space-between; margin-bottom: 8px;
+}
+.otp-row input {
+  width: 100%; aspect-ratio: 1; text-align: center;
+  font-family: var(--font-mono); font-size: 22px; font-weight: 500;
+  border: 1px solid var(--border); border-radius: 10px; color: var(--ink);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.otp-row input:focus {
+  outline: none; border-color: var(--blue);
+  box-shadow: 0 0 0 3px var(--blue-tint);
+}
+
+/* Timer + resend row */
+.otp-meta {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px; margin: 6px 0 20px;
+}
+.timer { font-family: var(--font-mono); color: var(--muted); }
+.timer.expired { color: var(--red); }
+.resend {
+  background: none; border: none; color: var(--blue);
+  font-weight: 500; font-size: 13px; cursor: pointer; font-family: inherit; padding: 0;
+}
+.resend:disabled { color: var(--faint); cursor: not-allowed; }
+
+/* Misc */
+.sent-to { font-weight: 500; color: var(--ink); }
+.back-link {
+  display: inline-flex; align-items: center; gap: 6px;
+  color: var(--muted); font-size: 13.5px; margin-top: 18px;
+}
+.back-link:hover { color: var(--ink); }
+
+@media (max-width: 420px) {
+  .otp-row { gap: 7px; }
+  .otp-row input { font-size: 18px; }
+}
+/* ============================================================
+   ClinicFlow — Auth flow styles
+   Forgot Password / OTP Verification / Reset Password
+
+   Tokens below are taken directly from the design brief
+   (section 3, Brand Identity). This file intentionally does
+   NOT touch login/register — it only styles the three new
+   steps, sharing the same left marketing panel + card shell
+   pattern visible in the approved Login/Register screenshots.
+
+   If you already have a global auth stylesheet with these
+   same tokens under different variable names, swap the
+   `:root` block below for an @import of that file instead —
+   everything past the token block references these var names
+   only, so it should drop in cleanly.
+   ============================================================ */
+
+:root {
+  --af-blue: #1769e8;
+  --af-blue-strong: #1256c4;
+  --af-blue-soft: #eef5ff;
+  --af-green: #12c98b;
+  --af-green-soft: #eafbf5;
+  --af-green-text: #0e9d6c;
+  --af-warn: #f59e0b;
+  --af-warn-soft: #fef3e2;
+  --af-error: #ef4444;
+  --af-error-soft: #fdecec;
+  --af-ink: #17202a;
+  --af-muted: #667085;
+  --af-faint: #9aa4b2;
+  --af-bg: #f7faf9;
+  --af-white: #ffffff;
+  --af-border: #e6eae9;
+  --af-shadow: 0 20px 50px rgba(23, 32, 42, 0.08);
+  --af-radius-card: 24px;
+  --af-radius-field: 12px;
+  --af-fd: "Bricolage Grotesque", sans-serif;
+  --af-fb: "Inter", system-ui, sans-serif;
+  --af-fm: "IBM Plex Mono", monospace;
+}
+
+/* ---------- shell (matches Login/Register two-column layout) ---------- */
+.af-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--af-white);
+  font-family: var(--af-fb);
+  color: var(--af-ink);
+}
+
+.af-marketing {
+  padding: 56px 64px;
+  display: flex;
+  flex-direction: column;
+}
+
+.af-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--af-fb);
+  font-weight: 750;
+  font-size: 22px;
+  text-decoration: none;
+  color: var(--af-ink);
+}
+
+.af-brand img {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.af-brand .b-clinic {
+  color: var(--af-blue);
+}
+
+.af-brand .b-flow {
+  color: var(--af-green);
+}
+
+.af-marketing h1 {
+  font-family: var(--af-fd);
+  font-weight: 800;
+  font-size: 42px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin-top: 96px;
+  max-width: 11ch;
+}
+
+.af-marketing .af-lead {
+  color: var(--af-muted);
+  font-size: 16px;
+  line-height: 1.6;
+  margin-top: 18px;
+  max-width: 42ch;
+}
+
+.af-features {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 34px;
+}
+
+.af-feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  color: var(--af-muted);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.af-feature .af-ic {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--af-blue-soft);
+  color: var(--af-blue);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.af-queue-card {
+  margin-top: 40px;
+  background: var(--af-bg);
+  border: 1px solid var(--af-border);
+  border-radius: 16px;
+  padding: 20px 22px;
+  max-width: 340px;
+}
+
+.af-queue-card .af-eyebrow {
+  font-family: var(--af-fm);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--af-faint);
+}
+
+.af-queue-card .af-token {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.af-queue-card .af-token .num {
+  font-family: var(--af-fd);
+  font-weight: 800;
+  font-size: 34px;
+}
+
+.af-queue-card .af-token .status {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--af-green-text);
+  background: var(--af-green-soft);
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.af-queue-card .af-sub {
+  color: var(--af-muted);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.af-footnote {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--af-faint);
+  font-size: 13px;
+}
+
+/* ---------- right panel / card ---------- */
+.af-panel {
+  background: var(--af-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.af-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--af-white);
+  border: 1px solid var(--af-border);
+  border-radius: var(--af-radius-card);
+  box-shadow: var(--af-shadow);
+  padding: 40px 40px 36px;
+}
+
+.af-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--af-muted);
+  font-size: 14px;
+  font-weight: 500;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-bottom: 22px;
+  cursor: pointer;
+}
+
+.af-back:hover {
+  color: var(--af-ink);
+}
+
+.af-back svg {
+  width: 16px;
+  height: 16px;
+}
+
+.af-card h2 {
+  font-family: var(--af-fd);
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.af-card .af-desc {
+  color: var(--af-muted);
+  font-size: 14.5px;
+  line-height: 1.55;
+  margin-top: 10px;
+}
+
+.af-card .af-desc b {
+  color: var(--af-ink);
+  font-weight: 600;
+}
+
+/* progress bar — 3 real steps, so this is information, not decoration */
+.af-progress {
+  display: flex;
+  gap: 8px;
+  margin: 22px 0 28px;
+}
+
+.af-progress .seg {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--af-border);
+  overflow: hidden;
+}
+
+.af-progress .seg > i {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--af-blue);
+  transition: width 0.35s ease;
+}
+
+.af-progress .seg.done > i {
+  width: 100%;
+  background: var(--af-green);
+}
+
+.af-progress .seg.active > i {
+  width: 100%;
+}
+
+/* ---------- fields (match Login field styling from screenshots) ---------- */
+.af-field {
+  margin-bottom: 18px;
+}
+
+.af-field label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--af-ink);
+}
+
+.af-field .af-input-wrap {
+  position: relative;
+}
+
+.af-field input {
+  width: 100%;
+  padding: 13px 15px;
+  border: 1px solid var(--af-border);
+  border-radius: var(--af-radius-field);
+  font-family: inherit;
+  font-size: 15px;
+  color: var(--af-ink);
+  background: var(--af-white);
+}
+
+.af-field input::placeholder {
+  color: var(--af-faint);
+}
+
+.af-field input:focus {
+  outline: none;
+  border-color: var(--af-blue);
+  box-shadow: 0 0 0 3px var(--af-blue-soft);
+}
+
+.af-field.invalid input {
+  border-color: var(--af-error);
+}
+
+.af-field.invalid input:focus {
+  box-shadow: 0 0 0 3px var(--af-error-soft);
+}
+
+.af-field .err {
+  min-height: 18px;
+  color: var(--af-error);
+  font-size: 12.5px;
+  margin-top: 6px;
+}
+
+.af-toggle-pass {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: none;
+  color: var(--af-faint);
+  cursor: pointer;
+  padding: 4px;
+  display: grid;
+  place-items: center;
+}
+
+.af-toggle-pass:hover {
+  color: var(--af-muted);
+}
+
+/* password strength — subtle, not dominant */
+.af-strength {
+  margin-top: 10px;
+  display: none;
+}
+
+.af-strength.show {
+  display: block;
+}
+
+.af-strength .bars {
+  display: flex;
+  gap: 5px;
+}
+
+.af-strength .bars i {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--af-border);
+}
+
+.af-strength .label {
+  font-size: 12px;
+  color: var(--af-faint);
+  margin-top: 6px;
+}
+
+.af-strength[data-level="weak"] .bars i:nth-child(1) {
+  background: var(--af-error);
+}
+.af-strength[data-level="weak"] .label {
+  color: var(--af-error);
+}
+
+.af-strength[data-level="medium"] .bars i:nth-child(1),
+.af-strength[data-level="medium"] .bars i:nth-child(2) {
+  background: var(--af-warn);
+}
+.af-strength[data-level="medium"] .label {
+  color: var(--af-warn);
+}
+
+.af-strength[data-level="strong"] .bars i {
+  background: var(--af-green);
+}
+.af-strength[data-level="strong"] .label {
+  color: var(--af-green-text);
+}
+
+/* ---------- OTP boxes ---------- */
+.af-otp-row {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.af-otp-box {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  max-width: 56px;
+  text-align: center;
+  font-family: var(--af-fm);
+  font-size: 20px;
+  font-weight: 600;
+  border: 1px solid var(--af-border);
+  border-radius: var(--af-radius-field);
+  color: var(--af-ink);
+  background: var(--af-white);
+}
+
+.af-otp-box:focus {
+  outline: none;
+  border-color: var(--af-blue);
+  box-shadow: 0 0 0 3px var(--af-blue-soft);
+}
+
+.af-otp-row.invalid .af-otp-box {
+  border-color: var(--af-error);
+}
+
+.af-otp-error {
+  min-height: 18px;
+  color: var(--af-error);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.af-resend {
+  text-align: center;
+  font-size: 13.5px;
+  color: var(--af-muted);
+  margin-top: 18px;
+}
+
+.af-resend button {
+  border: none;
+  background: none;
+  color: var(--af-blue);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  font-size: 13.5px;
+}
+
+.af-resend button:disabled {
+  color: var(--af-faint);
+  cursor: default;
+  font-weight: 500;
+}
+
+/* ---------- button ---------- */
+.af-btn-primary {
+  width: 100%;
+  padding: 14px;
+  border-radius: var(--af-radius-field);
+  border: none;
+  background: var(--af-blue);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 4px;
+}
+
+.af-btn-primary:hover:not(:disabled) {
+  background: var(--af-blue-strong);
+}
+
+.af-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.af-btn-primary.loading {
+  position: relative;
+  color: transparent;
+}
+
+.af-btn-primary.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  animation: af-spin 0.7s linear infinite;
+}
+
+@keyframes af-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.af-below {
+  text-align: center;
+  margin-top: 22px;
+  font-size: 14px;
+  color: var(--af-muted);
+}
+
+.af-below a,
+.af-below button.af-link {
+  color: var(--af-blue);
+  font-weight: 600;
+  text-decoration: none;
+  border: none;
+  background: none;
+  cursor: pointer;
+  padding: 0;
+  font-size: inherit;
+  font-family: inherit;
+}
+
+/* ---------- alert ---------- */
+.alert {
+  display: none;
+  font-size: 13.5px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  margin-bottom: 18px;
+}
+
+.alert.show {
+  display: block;
+}
+
+.alert.error {
+  background: var(--af-error-soft);
+  color: #b91c1c;
+}
+
+.alert.success {
+  background: var(--af-green-soft);
+  color: var(--af-green-text);
+}
+
+/* ---------- success state ---------- */
+.af-success {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.af-success .af-check {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--af-green-soft);
+  color: var(--af-green-text);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 20px;
+}
+
+.af-success h2 {
+  margin-bottom: 10px;
+}
+
+.af-success .af-desc {
+  margin-bottom: 28px;
+}
+
+/* ---------- steps: only one visible at a time ---------- */
+.af-step {
+  display: none;
+}
+
+.af-step.active {
+  display: block;
+  animation: af-fade 0.2s ease;
+}
+
+@keyframes af-fade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 980px) {
+  .af-shell {
+    grid-template-columns: 1fr;
+  }
+  .af-marketing {
+    display: none;
+  }
+  .af-panel {
+    min-height: 100vh;
+    padding: 28px 18px;
+  }
+}
+
+@media (max-width: 420px) {
+  .af-card {
+    padding: 28px 22px 26px;
+  }
+  .af-otp-box {
+    max-width: 44px;
+    font-size: 17px;
+  }
+}

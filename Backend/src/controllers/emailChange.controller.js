@@ -5,7 +5,7 @@ import { User } from "../models/user.models.js";
 import { EmailChangeRequest } from "../models/emailChangeRequest.model.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
-import { sendEmail } from "../utils/sendemail.js";
+import { sendEmail } from "../utils/sendEmail.js";``
 import { emailChangeOtpTemplate } from "../utils/email/emailChangeOtp.js";
 
 const OTP_EXPIRY_MINUTES = 10;
