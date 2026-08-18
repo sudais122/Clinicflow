@@ -1,0 +1,26 @@
+# Version Control
+.git
+.gitignore
+
+# Dependencies 
+node_modules/
+vendor/
+.venv/
+
+# Environment Secrets & Credentials
+.env
+*.pem
+*.key
+.aws/
+
+# Build Out & Cache Logs
+dist/
+build/
+*.log
+.npm/
+.eslintcache
+
+# Docker Configurations
+Dockerfile
+docker-compose.yml
+.dockerignore

@@ -597,7 +597,6 @@ const login = async (req, res, next) => {
       );
 
   } catch (error) {
-    console.log("LOGIN ERROR:", error.message);
     return next(error);
   }
 };
