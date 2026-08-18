@@ -1918,5 +1918,68 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     const hash = location.hash.replace("#", "");
     showView(TITLES[hash] ? hash : "overview");
   }
+
+  /* ---------------- REPORT A PROBLEM ---------------- */
+  $("#reportBtn").addEventListener("click", () => {
+    $("#reportText").value = "";
+    $("#reportOverlay").classList.add("open");
+  });
+  $("#reportClose").addEventListener("click", () =>
+    $("#reportOverlay").classList.remove("open"),
+  );
+  $("#reportCancel").addEventListener("click", () =>
+    $("#reportOverlay").classList.remove("open"),
+  );
+  $("#reportOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "reportOverlay") {
+      $("#reportOverlay").classList.remove("open");
+    }
+  });
+  $("#reportForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msg = $("#reportText").value.trim();
+    if (!msg) return toast("Please describe the problem first.", "", true);
+
+    const btn = e.target.querySelector('button[type="submit"]');
+    btn.disabled = true;
+    btn.textContent = "Submitting…";
+    try {
+      let res;
+      try {
+        res = await fetch(API_BASE + "/support/report", {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: msg }),
+        });
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        /* empty body */
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      $("#reportOverlay").classList.remove("open");
+      toast("Report submitted", "Thanks — our team will look into it.");
+    } catch (err) {
+      toast("Couldn't submit report", err.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Submit Report";
+    }
+  });
   init();
 })();

@@ -4,4 +4,4 @@ COPY ./Backend .
  
 RUN npm install
 
-CMD ["node", "src/index.js"]
+CMD ["npm", "run", "dev"]

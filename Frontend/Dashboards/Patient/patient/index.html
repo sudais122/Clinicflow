@@ -202,7 +202,7 @@
             <div class="n" id="ddName"></div>
             <div class="e" id="ddEmail"></div>
           </div>
-          <a href="#view-profile" 
+          <a href="#profile" data-view="profile"
             ><svg
               viewBox="0 0 24 24"
               fill="none"
@@ -524,24 +524,12 @@
               </div>
             </div>
           </div>
-          <div class="help-actions">
-            <a class="help-action"
-              ><svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="2"
-              >
-                <path
-                  d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                />
-              </svg>
-              Contact Support</a
-            >
-            <a class="help-action"
-              ><svg
+          <div
+            class="help-actions"
+            style="grid-template-columns: repeat(2, 1fr)"
+          >
+            <button class="help-action" id="faqBtn">
+              <svg
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -554,10 +542,10 @@
                   stroke-linejoin="round"
                 />
               </svg>
-              FAQ</a
-            >
-            <a class="help-action"
-              ><svg
+              FAQ
+            </button>
+            <button class="help-action" id="reportBtn">
+              <svg
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -570,8 +558,8 @@
                 />
                 <path d="M12 9v4M12 17h.01" stroke-linecap="round" />
               </svg>
-              Report a Problem</a
-            >
+              Report a Problem
+            </button>
           </div>
           <div class="card faq-card">
             <div class="section-label">Frequently asked questions</div>
@@ -680,6 +668,55 @@
           </button>
         </div>
         <form id="ecForm" style="margin-top: 22px"></form>
+      </div>
+    </div>
+    <!-- REPORT A PROBLEM MODAL -->
+    <div class="overlay" id="reportOverlay">
+      <div class="modal" style="max-width: 520px">
+        <div class="modal-head">
+          <div>
+            <h2>Report a Problem</h2>
+            <div class="sub">Tell us what went wrong — we'll look into it.</div>
+          </div>
+          <button class="modal-close" id="reportClose">
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M18 6 6 18M6 6l12 12" stroke-linecap="round" />
+            </svg>
+          </button>
+        </div>
+        <form id="reportForm" style="margin-top: 22px">
+          <div class="field" style="margin-bottom: 22px">
+            <label>What's the issue?</label>
+            <textarea
+              id="reportText"
+              rows="5"
+              placeholder="Describe the problem you ran into…"
+              style="
+                width: 100%;
+                padding: 12px 14px;
+                border: 1px solid var(--line);
+                border-radius: 11px;
+                font-family: inherit;
+                font-size: 15px;
+                color: var(--ink);
+                resize: vertical;
+              "
+            ></textarea>
+          </div>
+          <div class="wfoot" style="border: none; padding: 0; margin: 0">
+            <button type="button" class="link-btn" id="reportCancel">
+              Cancel
+            </button>
+            <button type="submit" class="btn btn-primary">Submit Report</button>
+          </div>
+        </form>
       </div>
     </div>
     <!--  TOASTS  -->

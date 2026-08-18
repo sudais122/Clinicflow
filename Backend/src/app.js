@@ -14,6 +14,7 @@ import subscriptionroutes from "./routes/subscription.routes.js";
 import adminroutes from "./routes/admin.routes.js";
 import forgotPasswordRoutes from "./routes/Forgotpassword.routes.js";
 import emailChangeRoutes from "./routes/emailChange.routes.js";
+import reportRoutes from "./routes/reports.routes.js";
 
 const app = express();
 
@@ -46,6 +47,8 @@ app.use("/patient", patientroutes);
 app.use("/dashboard", dashboardroutes);
 app.use("/subscription", subscriptionroutes);
 app.use("/admin", adminroutes);
+
+app.use("/support", reportRoutes);
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
