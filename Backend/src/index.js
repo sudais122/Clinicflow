@@ -11,8 +11,6 @@ dotenv.config({
   path: path.join(__dirname, "../.env"),
 });
 
-console.log("hello test sdfsasfasdd");
-
 const PORT = process.env.PORT;
 
 const startServer = async () => {

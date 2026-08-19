@@ -28,7 +28,6 @@
       .map((w) => w[0])
       .join("")
       .toUpperCase();
-
   /* ---------------- STATE ---------------- */
   const STATE = {
     user: {
@@ -44,8 +43,8 @@
     doctors: [],
     appointments: [],
     notifications: [],
+    reports: [], // patient's own "Report a Problem" submissions
   };
-
 // Returns ALL active appointments (waiting/in-progress), sorted so the
   // most urgent one is first: in-progress beats waiting; among waiting
   // ones, whichever is closest to being served (fewest patients ahead)
@@ -252,6 +251,44 @@
     }
   }
 
+  async function loadMyReports() {
+    // GET /support/report/me — the patient's own "Report a Problem"
+    // submissions, each with a status of open / reviewed / resolved.
+    try {
+      let res;
+      try {
+        res = await fetch(API_BASE + "/support/report/me", {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        /* empty body */
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      STATE.reports = json?.data || [];
+    } catch (err) {
+      console.warn("GET /support/report/me failed:", err.message);
+      STATE.reports = [];
+    }
+  }
+
   /* ---------------- ROUTER ---------------- */
   const TITLES = {
     overview: "Overview",
@@ -274,6 +311,12 @@
       history.replaceState(null, "", "#" + name);
     if (name === "queue") renderQueue();
     if (name === "profile") renderProfile();
+    if (name === "help") {
+      // Refresh on every visit so status changes (open -> reviewed ->
+      // resolved) made by staff show up without a full page reload.
+      renderMyReports();
+      loadMyReports().then(renderMyReports);
+    }
     window.scrollTo(0, 0);
   }
   document.addEventListener("click", (e) => {
@@ -1814,6 +1857,51 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     );
   }
 
+  /* ---------------- MY REPORTS ---------------- */
+  // Renders the patient's own "Report a Problem" submissions with a
+  // status badge: open -> Pending, reviewed -> Under Review,
+  // resolved -> Resolved. Backed by GET /support/report/me.
+  const REPORT_STATUS_STYLE = {
+    open: { label: "Pending", bg: "#FEF3C7", fg: "#92400E" },
+    reviewed: { label: "Under Review", bg: "#DBEAFE", fg: "#1D4ED8" },
+    resolved: { label: "Resolved", bg: "#DCFCE7", fg: "#15803D" },
+  };
+
+  function renderMyReports() {
+    const box = $("#myReportsList");
+    if (!box) return;
+
+    const countEl = $("#myReportsCount");
+    if (countEl) countEl.textContent = STATE.reports.length;
+
+    if (!STATE.reports.length) {
+      box.innerHTML = `<div class="empty-state" style="padding:20px 0">
+        <p>You haven't submitted any reports yet.</p>
+      </div>`;
+      return;
+    }
+
+    box.innerHTML = STATE.reports
+      .map((r) => {
+        const s = REPORT_STATUS_STYLE[r.status] || REPORT_STATUS_STYLE.open;
+        const created = r.createdAt
+          ? new Date(r.createdAt).toLocaleDateString("en-US", {
+              year: "numeric",
+              month: "long",
+              day: "numeric",
+            })
+          : "";
+        return `<div class="hrow" style="align-items:flex-start">
+          <div>
+            <div class="dn">${escapeHtml(r.message)}</div>
+            <div class="dsub">${created}</div>
+          </div>
+          <span style="background:${s.bg};color:${s.fg};padding:4px 10px;border-radius:999px;font-size:12.5px;font-weight:600;white-space:nowrap">${s.label}</span>
+        </div>`;
+      })
+      .join("");
+  }
+
   /* ---------------- TOAST ---------------- */
   function toast(title, msg = "", isError = false) {
     const el = document.createElement("div");
@@ -1893,6 +1981,13 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     $("#ddName").textContent = u.fullname;
     $("#ddEmail").textContent = u.email;
   }
+  // message is user-entered free text, so it must be escaped before
+  // being injected as HTML anywhere (report list, etc.)
+  function escapeHtml(str) {
+    const d = document.createElement("div");
+    d.textContent = str || "";
+    return d.innerHTML;
+  }
 
   /* ---------------- INIT ---------------- */
   async function init() {
@@ -1910,10 +2005,13 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       toast("Couldn't load appointments", err.message, true);
     }
 
+    await loadMyReports();
+
     renderNotifs();
     renderOverview();
     renderAppointments();
     renderFAQ();
+    renderMyReports();
 
     const hash = location.hash.replace("#", "");
     showView(TITLES[hash] ? hash : "overview");
@@ -1974,6 +2072,11 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
 
       $("#reportOverlay").classList.remove("open");
       toast("Report submitted", "Thanks — our team will look into it.");
+
+      // Refresh the "My reports" list right away so the new
+      // submission (status: Pending) shows up without navigating away.
+      await loadMyReports();
+      renderMyReports();
     } catch (err) {
       toast("Couldn't submit report", err.message, true);
     } finally {
