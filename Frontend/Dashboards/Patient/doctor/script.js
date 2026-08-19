@@ -376,8 +376,8 @@ function renderLiveQueueCard(el, { withActions }) {
     <div class="lq-body">
       <div class="now-serving">
         <div class="k">Now Serving</div>
-        <div class="big" id="nsTok">#${STATE.nowServing}</div>
-        <div class="pname">${nameFor(STATE.nowServing)}</div>
+        <div class="big" id="nsTok">${tokenLabel(STATE.nowServing)}</div>
+        <div class="pname">${nowServingName()}</div>
         <div class="next-box"><div><div class="k">Next Patient</div><div class="nm">${nx ? nameFor(nx) : "—"}</div></div><div class="tk">${nx ? "#" + nx : "—"}</div></div>
       </div>
       <div class="lq-metrics">
@@ -479,8 +479,8 @@ function renderQueue() {
   $("#qcStatusBadge").className = `pill ${open ? "active" : "closed"}`;
   $("#qcStatusBadge").innerHTML =
     `<span class="d"></span> ${open ? "Queue Active" : "Queue Closed"}`;
-  $("#qcNow").textContent = "#" + STATE.nowServing;
-  $("#qcNowName").textContent = nameFor(STATE.nowServing);
+  $("#qcNow").textContent = tokenLabel(STATE.nowServing);
+  $("#qcNowName").textContent = nowServingName();
   const nx = nextWaiting(STATE.nowServing);
   $("#qcNextName").textContent = nx ? nameFor(nx) : "—";
   $("#qcNextTok").textContent = nx ? "#" + nx : "—";
@@ -500,8 +500,8 @@ function renderQueue() {
   $("#qcDelayBtn").onclick = openDelayModal;
   $("#qcResetBtn").onclick = resetQueue;
 
-  $("#svCur").textContent = "#" + STATE.nowServing;
-  $("#svCurName").textContent = nameFor(STATE.nowServing);
+  $("#svCur").textContent = tokenLabel(STATE.nowServing);
+  $("#svCurName").textContent = nowServingName();
   $("#svNext").textContent = nx ? "#" + nx : "—";
   $("#svNextName").textContent = nx ? nameFor(nx) : "—";
   const btn = $("#serveNextBtn");
@@ -707,7 +707,7 @@ function openDetails(tok) {
     ? `
     <div class="so-sec">Live queue</div>
     <div class="so-live">
-      <div><div class="lk">Current token</div><div class="lv blue">#${STATE.nowServing}</div></div>
+      <div><div class="lk">Current token</div><div class="lv blue">${tokenLabel(STATE.nowServing)}</div></div>
       <div><div class="lk">Patients ahead</div><div class="lv">${ahead}</div></div>
       <div><div class="lk">Estimated wait</div><div class="lv">~${ahead * STATE.perPatient + STATE.delay} min</div></div>
       <div><div class="lk">Status</div><div class="lv">${label(a.status)}</div></div>
@@ -1330,6 +1330,24 @@ const greetWord = () => {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Token 0 means "nobody has been called yet" — the clinic hasn't
+// started, or the queue has been reset. Token numbering starts at 1,
+// so 0 is never a real token and must never be shown as "#0".
+const tokenLabel = (n) => (n && n > 0 ? "#" + n : "—");
+
+// Same idea, but for the "who's currently being served" name/label:
+// distinguish "nobody yet because the clinic is closed" from "nobody
+// yet because the clinic just opened and hasn't called anyone" —
+// rather than falling through to a bare "—" with no context.
+function nowServingName() {
+  if (STATE.nowServing && STATE.nowServing > 0) {
+    return nameFor(STATE.nowServing);
+  }
+  return STATE.clinicOpen
+    ? "Waiting for the first patient"
+    : "Clinic is currently closed";
+}
 
 /* ============================================================
    SOCKET.IO — live queue push updates.

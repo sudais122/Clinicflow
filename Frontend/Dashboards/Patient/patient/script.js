@@ -73,6 +73,9 @@
     return {
       _id: a._id,
       id: a.appointmentId || a._id,
+      // Needed to join/leave this doctor's live queue room
+      // (queue_<doctorId> on the socket server) — see SOCKET.IO section.
+      doctorId: doc._id || null,
       patient: a.patientName,
       bookedBy: a.bookedBy?.fullname || "",
       doctor: docUser.fullname || "Doctor",
@@ -367,6 +370,11 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
         <div class="m"><div class="mk">Estimated wait</div><div class="mv">~${pq.wait} min</div></div>
       </div>
       <div class="queue-label">Queue position</div>
+      ${
+        queueStatusLine(primary)
+          ? `<div style="margin:0 0 14px;font-size:13.5px;color:var(--sub);background:var(--blue-tint);border:1px solid var(--line);border-radius:10px;padding:10px 14px;">${queueStatusLine(primary)}</div>`
+          : ""
+      }
       <div class="chips">${chipTrack(primary)}</div>
       <div class="uc-actions">
         <button class="btn btn-primary" data-view="queue">View Queue</button>
@@ -445,10 +453,24 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
 
   function chipTrack(a) {
     const q = a.queue || { nowServing: null, patientsAhead: 0 };
-    const serving = q.nowServing || a.token - q.patientsAhead - 1;
     const you = a.token;
+
+    // "Now serving" of 0 (or missing) means nobody has been called yet —
+    // the clinic hasn't started, or the queue simply hasn't moved.
+    // Token numbering starts at 1, so 0 is never a REAL token — never
+    // synthesize or render it as one (this was the source of the
+    // "0 -> 1" bug: a.token - patientsAhead - 1 evaluates to 0 for the
+    // first patient before anyone's been served).
+    const serving = q.nowServing && q.nowServing > 0 ? q.nowServing : null;
+
+    if (serving === null) {
+      // Nothing real to anchor a "flow" against yet — just show the
+      // patient's own token.
+      return `<span class="chip you">YOU #${you}</span>`;
+    }
+
     const out = [];
-    const start = Math.max(serving, you - 3);
+    const start = Math.max(serving, you - 3, 1);
     for (let n = start; n <= you; n++) {
       if (n === serving) out.push(`<span class="chip serving">#${n}</span>`);
       else if (n === you) out.push(`<span class="chip you">YOU #${n}</span>`);
@@ -456,6 +478,37 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       if (n < you) out.push(`<span class="chip-arrow">→</span>`);
     }
     return out.join("");
+  }
+
+  // Human-readable one-liner describing where this appointment stands
+  // right now. Rules:
+  //  - never say "0 -> 1"; token numbering starts at 1
+  //  - never show "Now Serving: 0" — 0 means "nobody yet", shown as "—"
+  //  - distinguish "clinic closed" from "your position in the queue"
+  function queueStatusLine(a) {
+    const q = a.queue || {
+      nowServing: null,
+      patientsAhead: 0,
+      clinicStatus: "not-started",
+    };
+    const clinicActive = q.clinicStatus === "active";
+    const isFirst = a.token === 1 || q.patientsAhead === 0;
+
+    if (!clinicActive) {
+      return isFirst
+        ? "The clinic is currently closed. You are first in the queue."
+        : "The clinic is currently closed.";
+    }
+
+    if (q.nowServing && q.nowServing === a.token) {
+      return "You are currently being seen by the doctor.";
+    }
+
+    if (isFirst) {
+      return "You are next. Please be ready.";
+    }
+
+    return "";
   }
 
   /* ---------------- MY APPOINTMENTS ---------------- */
@@ -541,6 +594,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     if (cards[0]) {
       cards[0].innerHTML = `
     <div class="section-label">Queue progress</div>
+    <div id="qMsg" style="margin:0 0 14px;font-size:13.5px;color:var(--sub);background:var(--blue-tint);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:none;"></div>
     <div class="chips" id="qChips"></div>
     <div class="q-progress-rows" id="qRows"></div>`;
     }
@@ -553,7 +607,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     };
     $("#queueSub").textContent = `${a.doctor} · ${a.clinic} · ${a.date}`;
     $("#qStatus").textContent =
-      q.clinicStatus === "active" ? "Queue is active" : "Not started yet";
+      q.clinicStatus === "active" ? "Queue is active" : "Clinic is closed";
     $("#qMetrics").innerHTML = `
     <div class="q-metric"><div class="mk">Now serving</div><div class="mv blue">${q.nowServing ? "#" + q.nowServing : "—"}</div></div>
     <div class="q-metric"><div class="mk">Your token</div><div class="mv">#${a.token}</div></div>
@@ -561,26 +615,45 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     <div class="q-metric"><div class="mk">Estimated wait</div><div class="mv">~${q.wait} min</div></div>`;
     $("#qChips").innerHTML = chipTrack(a);
 
-    const serving = q.nowServing || a.token - q.patientsAhead - 1;
+    const msgEl = $("#qMsg");
+    const msg = queueStatusLine(a);
+    if (msgEl) {
+      msgEl.textContent = msg;
+      msgEl.style.display = msg ? "block" : "none";
+    }
+
+    // "Now serving" of 0/missing means nobody's been called yet — never
+    // synthesize or render a "#0" row (see chipTrack for the same fix).
+    const serving = q.nowServing && q.nowServing > 0 ? q.nowServing : null;
     let rows = "";
-    for (let n = serving; n <= a.token; n++) {
-      const isYou = n === a.token,
-        isServing = n === serving;
-      const tokCls = isServing ? "serving" : isYou ? "you" : "";
-      const label = isServing
-        ? "Currently being seen"
-        : isYou
-          ? "Your token"
-          : "Waiting";
-      const right = isServing
-        ? "In progress"
-        : isYou
-          ? `~${q.wait} min`
-          : "In queue";
-      rows += `<div class="qp-row ${isYou ? "you" : ""}">
+    if (serving === null) {
+      const label = a.token === 1 ? "You're first in line" : "Waiting";
+      const right = q.clinicStatus === "active" ? "In queue" : "Clinic not open yet";
+      rows = `<div class="qp-row you">
+      <span class="qp-tok you">#${a.token}</span>
+      <span class="qp-label">${label}</span>
+      <span class="qp-right">${right}</span></div>`;
+    } else {
+      const start = Math.max(serving, 1);
+      for (let n = start; n <= a.token; n++) {
+        const isYou = n === a.token,
+          isServing = n === serving;
+        const tokCls = isServing ? "serving" : isYou ? "you" : "";
+        const label = isServing
+          ? "Currently being seen"
+          : isYou
+            ? "Your token"
+            : "Waiting";
+        const right = isServing
+          ? "In progress"
+          : isYou
+            ? `~${q.wait} min`
+            : "In queue";
+        rows += `<div class="qp-row ${isYou ? "you" : ""}">
       <span class="qp-tok ${tokCls}">#${n}</span>
       <span class="qp-label">${label}</span>
       <span class="qp-right">${right}</span></div>`;
+      }
     }
     $("#qRows").innerHTML = rows;
     $("#qStepper").innerHTML = stepperHTML(a.status);
@@ -1428,6 +1501,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       );
 
       await loadAppointments();
+      syncQueueRooms();
 
       renderOverview();
       renderAppointments();
@@ -1537,6 +1611,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
         }
 
         await loadAppointments();
+        syncQueueRooms();
         closeDetails();
         renderOverview();
         renderAppointments();
@@ -1793,8 +1868,25 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     $("#userMenu").classList.toggle("open");
   });
   document.addEventListener("click", () => closeMenus());
+
+  // stopPropagation keeps clicks *inside* the dropdown from bubbling to
+  // the document listener above (which would instantly close the menu).
+  // But #userMenu also contains data-view links (Profile, Help & Support),
+  // and the ROUTER itself is a document-level delegated listener — so
+  // stopPropagation was silently swallowing those nav clicks too, and
+  // showView() never ran. Fix: handle data-view links explicitly here
+  // (navigate + close the dropdown) before stopping propagation for
+  // everything else.
   $("#notifMenu").addEventListener("click", (e) => e.stopPropagation());
-  $("#userMenu").addEventListener("click", (e) => e.stopPropagation());
+  $("#userMenu").addEventListener("click", (e) => {
+    const link = e.target.closest("[data-view]");
+    if (link) {
+      e.preventDefault();
+      showView(link.dataset.view); // showView() already calls closeMenus()
+      return;
+    }
+    e.stopPropagation();
+  });
   function renderNotifs() {
     if (!STATE.notifications.length) {
       $("#notifList").innerHTML =
@@ -1871,12 +1963,14 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     const box = $("#myReportsList");
     if (!box) return;
 
+    // Optional count badge — only touched if the markup for it exists,
+    // so this is safe whether or not #myReportsCount was added to the HTML.
     const countEl = $("#myReportsCount");
     if (countEl) countEl.textContent = STATE.reports.length;
 
     if (!STATE.reports.length) {
-      box.innerHTML = `<div class="empty-state" style="padding:20px 0">
-        <p>You haven't submitted any reports yet.</p>
+      box.innerHTML = `<div class="reports-empty">
+        <p>You don't have any reports yet.</p>
       </div>`;
       return;
     }
@@ -1989,6 +2083,118 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     return d.innerHTML;
   }
 
+  /* ---------------- SOCKET.IO — live queue updates ---------------- */
+  // Requires the socket.io client library loaded on the page BEFORE
+  // this script, e.g.:
+  //   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  // If it's missing, the dashboard still works — it just won't get
+  // push updates and relies on the existing refetch-after-action
+  // calls (booking, cancelling) instead.
+  //
+  // Server contract (socket/socket.js + socket/socketEvents.js):
+  //   client -> server : "joinQueue"  (doctorId)
+  //   client -> server : "leaveQueue" (doctorId)
+  //   server -> room queue_<doctorId>:
+  //     "clinicStarted" { clinicStatus }
+  //     "clinicClosed"  { clinicStatus }
+  //     "queueUpdated"  { nowServing, lastToken, estimatedTimePerPatient, delayInMinutes }
+  //     "delayUpdated"  { delayInMinutes, nowServing, estimatedTimePerPatient }
+  let socket = null;
+
+  // Doctor rooms we believe the CURRENT socket connection is in.
+  // Room membership lives server-side per socket id, not per user —
+  // a reconnect gets a brand-new socket id and loses all prior
+  // membership even though this Set would otherwise still look
+  // "in sync". Reset it to empty on every fresh "connect".
+  let joinedRooms = new Set();
+
+  // Recomputes which doctors' queue rooms this patient should be
+  // watching right now (one per doctor with an active — waiting /
+  // in-progress — appointment) and joins/leaves rooms to match.
+  // Call this any time STATE.appointments changes.
+  function syncQueueRooms() {
+    if (!socket || !socket.connected) return;
+
+    const wanted = new Set(
+      activeAppts()
+        .map((a) => a.doctorId)
+        .filter(Boolean),
+    );
+
+    for (const doctorId of joinedRooms) {
+      if (!wanted.has(doctorId)) {
+        socket.emit("leaveQueue", doctorId);
+      }
+    }
+    for (const doctorId of wanted) {
+      if (!joinedRooms.has(doctorId)) {
+        socket.emit("joinQueue", doctorId);
+      }
+    }
+    joinedRooms = wanted;
+  }
+
+  // A queue push event only carries raw counters (nowServing,
+  // lastToken, delay, etc.) — it doesn't tell us per-appointment
+  // patientsAhead/wait or whether OUR token just flipped to
+  // "completed". That logic already lives server-side in
+  // GET /appointments/patient. So on every live event we just
+  // refetch appointments (source of truth) and re-render whatever's
+  // currently on screen — the same pattern already used after
+  // booking/cancelling.
+  async function refreshLiveViews() {
+    try {
+      await loadAppointments();
+    } catch (err) {
+      console.warn("Live queue refresh failed:", err.message);
+      return;
+    }
+    syncQueueRooms();
+    renderOverview();
+    renderAppointments();
+    if (!$("#view-queue").hidden) renderQueue();
+  }
+
+  function initSocket() {
+    if (typeof io !== "function") {
+      console.warn(
+        "socket.io client not found — live queue push updates disabled; the dashboard still works via refresh-after-action.",
+      );
+      return;
+    }
+
+    socket = io(API_BASE, { withCredentials: true });
+
+    // Fires on first connect AND every reconnect — rejoin from scratch
+    // each time since server-side room membership doesn't survive a
+    // dropped connection.
+    socket.on("connect", () => {
+      joinedRooms = new Set();
+      syncQueueRooms();
+    });
+
+    socket.on("queueUpdated", refreshLiveViews);
+    socket.on("clinicStarted", refreshLiveViews);
+    socket.on("clinicClosed", refreshLiveViews);
+    socket.on("delayUpdated", refreshLiveViews);
+
+    socket.on("connect_error", (err) => {
+      console.warn("Socket connection error:", err.message);
+    });
+
+    window.addEventListener("beforeunload", () => {
+      if (!socket) return;
+      joinedRooms.forEach((doctorId) => socket.emit("leaveQueue", doctorId));
+      socket.off("connect");
+      socket.off("queueUpdated");
+      socket.off("clinicStarted");
+      socket.off("clinicClosed");
+      socket.off("delayUpdated");
+      socket.off("connect_error");
+      socket.disconnect();
+    });
+  }
+
   /* ---------------- INIT ---------------- */
   async function init() {
     showView(location.hash.replace("#", "") || "overview");
@@ -2004,6 +2210,9 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     } catch (err) {
       toast("Couldn't load appointments", err.message, true);
     }
+
+    initSocket();
+    syncQueueRooms();
 
     await loadMyReports();
 
