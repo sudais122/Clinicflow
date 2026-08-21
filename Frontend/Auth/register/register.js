@@ -1,3 +1,51 @@
+// ---- Show / hide password toggle -----------------------------------
+// Generic: works for any ".pw-wrap" that contains an <input> and a
+// sibling ".eye" icon — no data-target attribute required, since it
+// just targets the input inside its own wrapper.
+
+const EYE_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>`;
+
+const EYE_OFF_ICON = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 7 11 7a13.16 13.16 0 0 1-4.17 4.71"/><path d="M6.61 6.61A13.53 13.53 0 0 0 1 11s4 7 11 7a10.94 10.94 0 0 0 5.39-1.61"/><path d="M9.9 14.1a3 3 0 1 0 4.2-4.2"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`;
+
+function showStep(step) {
+  document.getElementById("step-select").style.display =
+    step === "select" ? "block" : "none";
+  document
+    .getElementById("step-patient")
+    .classList.toggle("active", step === "patient");
+  document
+    .getElementById("step-doctor")
+    .classList.toggle("active", step === "doctor");
+  document.querySelector(".right").scrollTo(0, 0);
+}
+document.querySelectorAll(".pw-wrap .eye").forEach((eye) => {
+  eye.setAttribute("role", "button");
+  eye.setAttribute("tabindex", "0");
+  eye.setAttribute("aria-label", "Show password");
+
+  const toggle = () => {
+    const input = eye.parentElement.querySelector("input");
+    if (!input) return;
+    const isHidden = input.type === "password";
+    input.type = isHidden ? "text" : "password";
+    eye.innerHTML = isHidden ? EYE_OFF_ICON : EYE_ICON;
+    eye.setAttribute(
+      "aria-label",
+      isHidden ? "Hide password" : "Show password",
+    );
+  };
+
+  eye.addEventListener("click", toggle);
+  eye.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggle();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------
+
 const form = document.getElementById("registerForm");
 const alertBox = document.getElementById("alert");
 const btn = document.getElementById("submitBtn");

@@ -3,6 +3,7 @@ import { Router } from "express";
 import { adminLogin, adminLogout, getCurrentAdmin } from "../controllers/adminauth.controller.js";
 import { getOverview } from "../controllers/adminControllers/admin.controller.js";
 import { getProfile, updateProfile, changePassword } from "../controllers/adminControllers/adminProfile.controller.js";
+import { getTrends, getActivity } from "../controllers/adminControllers/adminAnalytics.controller.js";
 
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
 import { isAdmin } from "../middlewares/admin.middlewares.js";
@@ -12,6 +13,9 @@ const router = Router();
 router.post("/login", adminLogin);
 
 router.use(verifyJWT, isAdmin);
+
+router.get("/trends", getTrends);
+router.get("/activity", getActivity);
 
 router.post("/logout", adminLogout);
 router.get("/me", getCurrentAdmin);

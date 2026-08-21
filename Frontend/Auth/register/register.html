@@ -1,112 +1,553 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Create account — ClinicFlow</title>
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="../css/auth.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClinicFlow — Create Account</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,600;0,700;1,500&display=swap" rel="stylesheet">
 <style>
+  :root{
+    --blue:#2E5CF6;
+    --blue-dark:#1E3FBF;
+    --green:#22A06B;
+    --ink:#14161B;
+    --ink-soft:#5A5F6B;
+    --line:#E6E8EE;
+    --panel:#F7F8FA;
+    --white:#FFFFFF;
+    --danger:#E4572E;
+    --radius:14px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Inter',system-ui,sans-serif;
+    color:var(--ink);
+    background:var(--panel);
+  }
+  .app{
+    display:grid;
+    grid-template-columns: 1.05fr 1fr;
+    min-height:100vh;
+  }
+  /* LEFT */
+  .left{
+    padding:56px 64px;
+    display:flex;
+    flex-direction:column;
+    background:
+      radial-gradient(900px 500px at 90% -10%, rgba(46,92,246,0.06), transparent 60%),
+      var(--white);
+    border-right:1px solid var(--line);
+  }
+  .brand{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:64px;
+  }
+  .brand-mark{
+    width:34px;height:34px;border-radius:9px;
+    background:linear-gradient(135deg,var(--blue),var(--green));
+    display:flex;align-items:center;justify-content:center;
+  }
+  .brand-mark svg{width:18px;height:18px;}
+  .brand-name{
+    font-weight:800;font-size:19px;letter-spacing:-0.01em;
+  }
+  .brand-name span{color:var(--blue);}
+  .hero{
+    font-family:'Lora',serif;
+    font-weight:600;
+    font-size:44px;
+    line-height:1.14;
+    letter-spacing:-0.01em;
+    max-width:520px;
+    margin:0 0 18px 0;
+  }
+  .hero em{font-style:italic;color:var(--blue);}
+  .sub{
+    color:var(--ink-soft);
+    font-size:16px;
+    line-height:1.6;
+    max-width:460px;
+    margin-bottom:36px;
+  }
+  .features{
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+    margin-bottom:44px;
+  }
+  .feature{
+    display:flex;
+    gap:14px;
+    align-items:flex-start;
+  }
+  .feature-ico{
+    width:32px;height:32px;border-radius:9px;
+    background:#EAF0FF;
+    display:flex;align-items:center;justify-content:center;
+    flex:none;
+  }
+  .feature-ico svg{width:16px;height:16px;color:var(--blue);}
+  .feature p{margin:0;color:var(--ink-soft);font-size:14.5px;line-height:1.55;}
+  .queue-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:20px 22px;
+    max-width:340px;
+    margin-top:auto;
+  }
+  .queue-label{
+    font-size:11px;
+    font-weight:700;
+    letter-spacing:0.08em;
+    color:var(--ink-soft);
+    margin-bottom:8px;
+  }
+  .queue-row{display:flex;align-items:baseline;gap:10px;}
+  .queue-num{font-family:'Lora',serif;font-size:38px;font-weight:700;}
+  .queue-status{
+    font-size:12.5px;font-weight:600;color:var(--green);
+    background:#E7F7EF;padding:3px 9px;border-radius:999px;
+  }
+  .queue-sub{color:var(--ink-soft);font-size:13px;margin-top:6px;}
+  .foot-note{
+    display:flex;align-items:center;gap:8px;
+    color:#8B90A0;font-size:12.5px;margin-top:36px;
+  }
+
+  /* RIGHT */
+  .right{
+    display:flex;
+    align-items:flex-start;
+    justify-content:center;
+    padding:56px 40px;
+    overflow-y:auto;
+  }
+  .panel{
+    width:100%;
+    max-width:560px;
+  }
+
+  /* Account type selection */
+  .type-select{
+    margin-top:6vh;
+  }
+  .type-select h1{
+    font-family:'Lora',serif;
+    font-size:30px;
+    font-weight:700;
+    margin:0 0 8px 0;
+    letter-spacing:-0.01em;
+  }
+  .type-select .lede{
+    color:var(--ink-soft);
+    font-size:15px;
+    margin-bottom:34px;
+  }
+  .type-cards{
+    display:flex;
+    flex-direction:column;
+    gap:16px;
+  }
+  .type-card{
+    display:flex;
+    align-items:center;
+    gap:18px;
+    text-align:left;
+    background:var(--white);
+    border:1.5px solid var(--line);
+    border-radius:var(--radius);
+    padding:22px 24px;
+    cursor:pointer;
+    transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+    font-family:inherit;
+  }
+  .type-card:hover{
+    border-color:var(--blue);
+    box-shadow:0 6px 20px rgba(46,92,246,0.10);
+    transform:translateY(-1px);
+  }
+  .type-ico{
+    width:48px;height:48px;border-radius:12px;
+    display:flex;align-items:center;justify-content:center;
+    flex:none;
+  }
+  .type-ico.patient{background:#EAF0FF;}
+  .type-ico.doctor{background:#E7F7EF;}
+  .type-ico svg{width:24px;height:24px;}
+  .type-ico.patient svg{color:var(--blue);}
+  .type-ico.doctor svg{color:var(--green);}
+  .type-copy h3{margin:0 0 4px 0;font-size:16.5px;font-weight:700;}
+  .type-copy p{margin:0;color:var(--ink-soft);font-size:13.5px;line-height:1.5;}
+  .type-arrow{margin-left:auto;color:#B7BBC8;flex:none;}
+  .type-card:hover .type-arrow{color:var(--blue);}
+  .signin-line{
+    text-align:center;
+    margin-top:28px;
+    font-size:14px;
+    color:var(--ink-soft);
+  }
+  .signin-line a{color:var(--blue);font-weight:600;text-decoration:none;}
+
+  /* Forms */
+  .form-card{display:none;}
+  .form-card.active{display:block;}
+  .back-link{
+    display:inline-flex;align-items:center;gap:6px;
+    background:none;border:none;cursor:pointer;
+    color:var(--ink-soft);font-size:14px;font-family:inherit;
+    padding:0;margin-bottom:22px;
+  }
+  .back-link:hover{color:var(--ink);}
+  .form-card h1{
+    font-family:'Lora',serif;
+    font-size:27px;font-weight:700;margin:0 0 6px 0;letter-spacing:-0.01em;
+  }
+  .form-card > p.lede{color:var(--ink-soft);font-size:14.5px;margin:0 0 28px 0;}
+
+  .section-label{
+    font-size:11.5px;font-weight:700;letter-spacing:0.08em;
+    color:var(--blue);text-transform:uppercase;
+    display:flex;align-items:center;gap:10px;
+    margin:26px 0 16px 0;
+  }
+  .section-label:first-of-type{margin-top:0;}
+  .section-label::after{
+    content:"";flex:1;height:1px;background:var(--line);
+  }
+  .section-label.professional{color:var(--green);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px;}
+  .field{margin-bottom:16px;}
+  .field.full{grid-column:1 / -1;}
+  label{display:block;font-size:13.5px;font-weight:600;margin-bottom:7px;}
+  input, select, textarea{
+    width:100%;
+    border:1.5px solid var(--line);
+    border-radius:10px;
+    padding:11px 13px;
+    font-size:14.5px;
+    font-family:inherit;
+    color:var(--ink);
+    background:var(--white);
+    outline:none;
+    transition:border-color .15s ease, box-shadow .15s ease;
+  }
+  input::placeholder, textarea::placeholder{color:#A6ABB8;}
+  input:focus, select:focus, textarea:focus{
+    border-color:var(--blue);
+    box-shadow:0 0 0 3px rgba(46,92,246,0.12);
+  }
+  textarea{resize:vertical;min-height:88px;line-height:1.5;}
+  .pw-wrap{position:relative;}
+  .pw-wrap input{padding-right:42px;}
+  .pw-wrap .eye{
+    position:absolute;right:12px;top:50%;transform:translateY(-50%);
+    color:#9199A8;cursor:pointer;display:flex;
+  }
+  .pw-wrap .eye:hover{color:var(--ink);}
+  .hint{font-size:12px;color:#9199A8;margin-top:6px;}
+  .char-count{font-size:12px;color:#9199A8;margin-top:6px;text-align:right;}
+
+  /* Field-level error state (matches setFieldError/clearFieldError from auth.js) */
+  .field.invalid input, .field.invalid select, .field.invalid textarea{
+    border-color:var(--danger);
+  }
+  .field .err{
+    min-height:0;
+    font-size:12.5px;
+    color:var(--danger);
+    margin-top:6px;
+  }
+  .field .err:empty{margin-top:0;}
+
+  /* Alert box (matches showAlert/clearAlert from auth.js) */
+  .alert{
+    display:none;
+    font-size:14px;
+    font-weight:500;
+    padding:12px 14px;
+    border-radius:10px;
+    line-height:1.4;
+    margin-bottom:20px;
+  }
+  .alert.success{display:block;color:var(--green);background:#E7F7EF;border:1px solid #c3efdd;}
+  .alert.error{display:block;color:var(--danger);background:#FDECEC;border:1px solid #f6cecb;}
+
+  .submit-btn{
+    width:100%;
+    background:var(--blue);
+    color:#fff;
+    border:none;
+    border-radius:11px;
+    padding:14px;
+    font-size:15px;
+    font-weight:700;
+    font-family:inherit;
+    cursor:pointer;
+    margin-top:8px;
+    transition:background .15s ease;
+  }
+  .submit-btn.green{background:var(--green);}
+  .submit-btn:hover:not(:disabled){background:var(--blue-dark);}
+  .submit-btn.green:hover:not(:disabled){background:#1B8558;}
+  .submit-btn:disabled{opacity:.7;cursor:not-allowed;}
+
+  /* Loading state, toggled by setLoading() */
+  .submit-btn.is-loading{color:transparent;position:relative;pointer-events:none;}
+  .submit-btn.is-loading::after{
+    content:"";position:absolute;top:50%;left:50%;
+    width:18px;height:18px;margin:-9px 0 0 -9px;
+    border:2.5px solid rgba(255,255,255,.4);border-top-color:#fff;
+    border-radius:50%;animation:spin .7s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  @media (max-width: 980px){
+    .app{grid-template-columns:1fr;}
+    .left{display:none;}
+    .right{padding:32px 20px;}
+  }
 </style>
 </head>
 <body>
-<div class="page">
-  <aside class="aside">
-    <span class="aside-ring ar1"></span>
-    <span class="aside-ring ar2"></span>
-    <a class="brand" href="./index.html">
-      <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <path d="M2.6 13.4H7.6" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>
-        <path d="M1.6 17H6.4" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>
-        <path d="M3.1 20.6H7.9" stroke="#fff" stroke-width="2.1" stroke-linecap="round"/>
-        <path d="M8.9 22.6 A10 10 0 1 1 20 6.2" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-        <path d="M16.2 3.5 L21.8 5.0 L19.4 10.2 Z" fill="#fff"/>
-        <path d="M21.6 7.2 A10 10 0 1 1 8.6 22.8" stroke="rgba(255,255,255,.75)" stroke-width="3" stroke-linecap="round"/>
-        <path d="M16 11.2V20.8M11.2 16H20.8" stroke="rgba(255,255,255,.75)" stroke-width="4.4" stroke-linecap="round"/>
-      </svg>
-      ClinicFlow
-    </a>
-    <div class="aside-inner">
-      <h2>Book with confidence.</h2>
-      <p>Create your patient account and never guess your wait time again.</p>
+<div class="app">
+
+  <!-- LEFT MARKETING PANEL -->
+  <div class="left">
+    <div class="brand">
+      <div class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 7 4-14 2 7h6"/></svg>
+      </div>
+      <div class="brand-name">Clinic<span>Flow</span></div>
     </div>
-    <div class="aside-foot">Free to join. See your live queue from anywhere.</div>
-  </aside>
 
-  <div class="form-side">
-    <form class="card" id="registerForm" novalidate>
-      <h1>Create patient account</h1>
-      <p class="sub">A few details and you're ready to book.</p>
+    <h1 class="hero">Healthcare appointments,<br>without the <em>waiting uncertainty.</em></h1>
+    <p class="sub">ClinicFlow helps patients track their appointments and helps clinics manage their live patient queue.</p>
 
-      <div class="alert" id="alert"></div>
-
-      <div class="field" id="f-fullname">
-        <label for="fullname">Full name</label>
-        <input id="fullname" name="fullname" placeholder="Ali Ahmed" autocomplete="name" />
-        <div class="err"></div>
+    <div class="features">
+      <div class="feature">
+        <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
+        <p>Strict token-number queueing — no time-slot guesswork.</p>
       </div>
+      <div class="feature">
+        <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
+        <p>Live updates when the queue moves or a delay is added.</p>
+      </div>
+      <div class="feature">
+        <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <p>One workspace for clinic status, patients and appointments.</p>
+      </div>
+    </div>
 
-      <div class="row2">
-        <div class="field" id="f-email">
-          <label for="email">Email</label>
-          <input id="email" name="email" type="email" placeholder="you@example.com" autocomplete="email" />
-          <div class="err"></div>
+    <div class="queue-card">
+      <div class="queue-label">NOW SERVING</div>
+      <div class="queue-row">
+        <div class="queue-num">#14</div>
+        <div class="queue-status">In progress</div>
+      </div>
+      <div class="queue-sub">Next up · Token #15 · 6 waiting</div>
+    </div>
+
+    <div class="foot-note">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+      Secure access to your ClinicFlow account.
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right">
+    <div class="panel">
+
+      <!-- STEP 0: choose account type -->
+      <div id="step-select" class="type-select">
+        <h1>Create your account</h1>
+        <p class="lede">Choose how you'll use ClinicFlow to get started.</p>
+
+        <div class="type-cards">
+          <button class="type-card" onclick="showStep('patient')">
+            <div class="type-ico patient">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <div class="type-copy">
+              <h3>I'm a Patient</h3>
+              <p>Book appointments, track your token number and get live queue updates.</p>
+            </div>
+            <svg class="type-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
+
+          <button class="type-card" onclick="showStep('doctor')">
+            <div class="type-ico doctor">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V2"/><path d="M9 2h6"/><rect x="4" y="10" width="16" height="12" rx="2"/><path d="M12 14v4M10 16h4"/></svg>
+            </div>
+            <div class="type-copy">
+              <h3>I'm a Doctor</h3>
+              <p>Set up your clinic, manage your live patient queue and appointments.</p>
+            </div>
+            <svg class="type-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+          </button>
         </div>
-        <div class="field" id="f-phone">
-          <label for="phone">Phone</label>
-          <input id="phone" name="phone" placeholder="03001234567" autocomplete="tel" />
-          <div class="err"></div>
+
+        <div class="signin-line">Already have an account? <a href="../login/login.html">Sign in</a></div>
+      </div>
+
+      <!-- STEP: patient form — now a real <form> wired to register.js -->
+      <div id="step-patient" class="form-card">
+        <button type="button" class="back-link" onclick="showStep('select')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Change account type
+        </button>
+        <h1>Create your patient account</h1>
+        <p class="lede">Join ClinicFlow and manage your appointments with ease.</p>
+
+        <div id="alert" class="alert"></div>
+
+        <form id="registerForm" novalidate>
+          <div class="section-label">Account Information</div>
+          <div class="field full" id="f-fullname">
+            <label for="fullname">Full Name</label>
+            <input type="text" id="fullname" name="fullname" placeholder="Ayesha Khan">
+            <div class="err"></div>
+          </div>
+          <div class="field full" id="f-email">
+            <label for="reg-email">Email Address</label>
+            <input type="email" id="reg-email" name="email" placeholder="you@example.com">
+            <div class="err"></div>
+          </div>
+          <div class="field full" id="f-phone">
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" name="phone" placeholder="03XXXXXXXXX">
+            <div class="err"></div>
+          </div>
+          <div class="field full" id="f-password">
+            <label for="reg-password">Password</label>
+            <div class="pw-wrap">
+              <input type="password" id="reg-password" name="password" placeholder="Create a strong password">
+              <span class="eye"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            </div>
+            <div class="err"></div>
+          </div>
+
+          <div class="section-label">Personal Details</div>
+          <div class="grid2">
+            <div class="field" id="f-dob">
+              <label for="dob">Date of Birth</label>
+              <input type="date" id="dob" name="dateOfBirth">
+              <div class="err"></div>
+            </div>
+            <div class="field" id="f-gender">
+              <label for="gender">Gender</label>
+              <select id="gender" name="gender">
+                <option value="">Select gender</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="other">Other</option>
+              </select>
+              <div class="err"></div>
+            </div>
+          </div>
+          <div class="field full" id="f-blood">
+            <label for="bloodGroup">Blood Group</label>
+            <select id="bloodGroup" name="bloodGroup">
+              <option value="">Select blood group</option>
+              <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
+              <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
+            </select>
+            <div class="err"></div>
+          </div>
+
+          <button type="submit" class="submit-btn" id="submitBtn">Create Patient Account</button>
+        </form>
+
+        <div class="signin-line">Already have an account? <a href="../login/login.html">Sign In</a></div>
+      </div>
+
+      <!-- STEP: doctor form (Professional Details section) —
+           not yet wired to a backend script; see note below. -->
+      <div id="step-doctor" class="form-card">
+        <button type="button" class="back-link" onclick="showStep('select')">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+          Change account type
+        </button>
+        <h1>Create your doctor account</h1>
+        <p class="lede">Set up your clinic and manage your patient queue with ClinicFlow.</p>
+
+        <div class="section-label">Account Information</div>
+        <div class="grid2">
+          <div class="field">
+            <label>Full Name</label>
+            <input type="text" name="fullname" placeholder="Dr. Hassan Qureshi">
+          </div>
+          <div class="field">
+            <label>Email Address</label>
+            <input type="email" name="email" placeholder="you@example.com">
+          </div>
+          <div class="field">
+            <label>Phone Number</label>
+            <input type="tel" name="phone" placeholder="03XXXXXXXXX">
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <div class="pw-wrap">
+              <input type="password" name="password" placeholder="Create a strong password">
+              <span class="eye"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            </div>
+          </div>
         </div>
-      </div>
 
-      <div class="field" id="f-password">
-        <label for="password">Password</label>
-        <input id="password" name="password" type="password" placeholder="At least 8 characters" autocomplete="new-password" />
-        <div class="err"></div>
-      </div>
-
-      <div class="row2">
-        <div class="field" id="f-dob">
-          <label for="dateOfBirth">Date of birth</label>
-          <input id="dateOfBirth" name="dateOfBirth" type="date" />
-          <div class="err"></div>
+        <div class="section-label">Clinic Information</div>
+        <div class="grid2">
+          <div class="field">
+            <label>Specialization</label>
+            <input type="text" name="specialization" placeholder="General Physician">
+          </div>
+          <div class="field">
+            <label>Clinic Name</label>
+            <input type="text" name="clinicName" placeholder="Care Point Clinic">
+          </div>
         </div>
-        <div class="field" id="f-gender">
-          <label for="gender">Gender</label>
-          <select id="gender" name="gender">
-            <option value="" disabled selected>Select</option>
-            <option value="male">Male</option>
-            <option value="female">Female</option>
-            <option value="other">Other</option>
-          </select>
-          <div class="err"></div>
+        <div class="field full">
+          <label>Clinic Address</label>
+          <input type="text" name="clinicAddress" placeholder="24-B, Model Town Link Road, Lahore">
         </div>
+        <div class="field full">
+          <label>Consultation Fee (PKR)</label>
+          <input type="number" name="consultationFee" placeholder="3200">
+        </div>
+
+        <div class="section-label professional">Professional Details</div>
+        <div class="grid2">
+          <div class="field">
+            <label>License Number</label>
+            <input type="text" name="licenseNumber" placeholder="PMC-12345-P">
+            <div class="hint">Your PMDC / PMC registration number.</div>
+          </div>
+          <div class="field">
+            <label>Years of Experience</label>
+            <input type="number" min="0" name="yearsExperience" placeholder="e.g. 8">
+          </div>
+        </div>
+        <div class="field full">
+          <label>Bio</label>
+          <textarea maxlength="400" name="bio" placeholder="Tell patients a bit about your background, expertise and approach to care..." oninput="document.getElementById('bioCount').textContent = 400 - this.value.length"></textarea>
+          <div class="char-count"><span id="bioCount">400</span> characters remaining</div>
+        </div>
+
+        <button type="button" class="submit-btn green" onclick="alert('Doctor account creation is not wired to a backend yet (demo)')">Create Doctor Account</button>
+        <div class="signin-line">Already have an account? <a href="../login/login.html">Sign In</a></div>
       </div>
 
-      <div class="field" id="f-blood">
-        <label for="bloodGroup">Blood group</label>
-        <select id="bloodGroup" name="bloodGroup">
-          <option value="" disabled selected>Select</option>
-          <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
-          <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
-        </select>
-        <div class="err"></div>
-      </div>
-
-      <button type="submit" class="btn" id="submitBtn">
-        <svg class="spinner" viewBox="0 0 32 32" fill="none"><g class="spin"><path d="M8.9 22.6 A10 10 0 1 1 20 6.2" stroke="#fff" stroke-width="3" stroke-linecap="round"/><path d="M21.6 7.2 A10 10 0 1 1 8.6 22.8" stroke="rgba(255,255,255,.5)" stroke-width="3" stroke-linecap="round"/></g></svg>
-        <span class="label">Create account</span>
-      </button>
-
-      <div class="foot">Already have an account? <a href="../login/login.html">Log in</a></div>
-    </form>
+    </div>
   </div>
 </div>
 
-<script src="./config.js"></script>
-<script></script>
+<script src="../config.js"></script>
+<script src="../auth.js"></script>
 <script src="./register.js"></script>
 </body>
 </html>
