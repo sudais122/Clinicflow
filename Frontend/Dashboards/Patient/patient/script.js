@@ -2177,6 +2177,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     socket.on("clinicStarted", refreshLiveViews);
     socket.on("clinicClosed", refreshLiveViews);
     socket.on("delayUpdated", refreshLiveViews);
+    socket.on("queueLengthUpdated", refreshLiveViews);
 
     socket.on("connect_error", (err) => {
       console.warn("Socket connection error:", err.message);
@@ -2190,11 +2191,11 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       socket.off("clinicStarted");
       socket.off("clinicClosed");
       socket.off("delayUpdated");
+      socket.off("queueLengthUpdated");
       socket.off("connect_error");
       socket.disconnect();
     });
   }
-
   /* ---------------- INIT ---------------- */
   async function init() {
     showView(location.hash.replace("#", "") || "overview");

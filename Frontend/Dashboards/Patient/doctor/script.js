@@ -62,9 +62,8 @@ const ENDPOINTS = {
   queueReset: () => `${API_BASE}/queue/reset`,
   queueMe: () => `${API_BASE}/queue/me`,
   appointmentsDoctor: () => `${API_BASE}/appointments/doctor`,
-  appointmentStatus: (id) =>
-    `${API_BASE}${API_PREFIX}/appointments/${id}/status`,
-  logout: () => `${API_BASE}${API_PREFIX}/auth/logout`,
+  appointmentStatus: (id) => `${API_BASE}/appointments/${id}/status`,
+  logout: () => `${API_BASE}/auth/logout`,
   emailChangeRequest: () => `${API_BASE}/auth/email/request`,
   emailChangeVerify: () => `${API_BASE}/auth/email/verify`,
 };
@@ -103,6 +102,7 @@ const apiPost = (url, body) => apiCall(url, { method: "POST", body });
    Populated by loadAll() on init and refreshed after every action.
    ============================================================ */
 const DOCTOR = {
+  _id: "",
   name: "",
   email: "",
   phone: "",
@@ -188,6 +188,7 @@ async function loadDashboard(dateStr) {
   const res = await apiGet(url);
   const d = res.data;
 
+  DOCTOR._id = d.doctor?._id || DOCTOR._id;
   DOCTOR.doctorId = d.doctor?.doctorId || DOCTOR.doctorId;
   DOCTOR.name = d.doctor?.fullname || DOCTOR.name;
   DOCTOR.clinic = d.doctor?.clinicName || DOCTOR.clinic;
@@ -523,9 +524,7 @@ function renderQueue() {
     btn.onclick = serveNext;
     $("#serveNote").textContent =
       "Completing the current token moves the queue forward.";
-    btn.onclick = serveNext; // ← this line
   }
-  renderSequence($("#qcSeqList"));
   renderSequence($("#qcSeqList"));
 }
 
@@ -1349,11 +1348,7 @@ function nowServingName() {
     : "Clinic is currently closed";
 }
 
-/* ============================================================
-   SOCKET.IO — live queue push updates.
-   Requires the socket.io client script to be loaded on the page
-   BEFORE this file (see assumption #7 at the top).
-   ============================================================ */
+/* SOCKET.IO — live queue push updates*/
 let socket = null;
 function initSocket() {
   if (typeof io !== "function") {
@@ -1362,7 +1357,16 @@ function initSocket() {
     );
     return;
   }
+  if (!DOCTOR._id) {
+    console.warn("Doctor _id not loaded yet — cannot join queue room.");
+    return;
+  }
+
   socket = io(API_BASE, { withCredentials: true });
+
+  socket.on("connect", () => {
+    socket.emit("joinQueue", DOCTOR._id);
+  });
 
   socket.on("queueUpdated", (d) => {
     STATE.nowServing = d.nowServing ?? STATE.nowServing;
@@ -1385,12 +1389,31 @@ function initSocket() {
     STATE.perPatient = d.estimatedTimePerPatient ?? STATE.perPatient;
     refreshAll();
   });
+  socket.on("queueLengthUpdated", async () => {
+    try {
+      await loadAppointments();
+      refreshAll();
+    } catch (err) {
+      console.warn(
+        "Failed to refresh appointments after queueLengthUpdated:",
+        err.message,
+      );
+    }
+  });
+  socket.on("connect_error", (err) => {
+    console.warn("Socket connection error:", err.message);
+  });
 
   window.addEventListener("beforeunload", () => {
+    if (!socket) return;
+    if (DOCTOR._id) socket.emit("leaveQueue", DOCTOR._id);
+    socket.off("connect");
     socket.off("queueUpdated");
     socket.off("clinicStarted");
     socket.off("clinicClosed");
     socket.off("delayUpdated");
+    socket.off("queueLengthUpdated");
+    socket.off("connect_error");
     socket.disconnect();
   });
 }

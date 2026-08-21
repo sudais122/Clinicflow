@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ClinicFlow — Admin</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="shell">
+  <!-- SIDEBAR -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="brand-mark">+</span>
+      <span class="brand-name">ClinicFlow</span>
+      <span class="brand-tag">ADMIN</span>
+    </div>
+
+    <nav id="nav">
+      <div class="nav-group-label">Main</div>
+      <a href="#overview" data-view="overview" class="active">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+        Overview
+      </a>
+      <a href="#doctors" data-view="doctors">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2v4M15 2v4M4 8h16M6 8v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"/></svg>
+        Doctors
+      </a>
+      <a href="#patients" data-view="patients">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/><circle cx="18" cy="9" r="2.5"/><path d="M22 21c0-3-1.8-5-4.5-5.5"/></svg>
+        Patients
+      </a>
+      <a href="#clinics" data-view="clinics">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/></svg>
+        Clinics
+      </a>
+
+      <div class="nav-group-label">Management</div>
+      <a href="#subscriptions" data-view="subscriptions">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        Subscriptions
+      </a>
+      <a href="#reports" data-view="reports">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 16.5h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        Reports
+      </a>
+
+      <div class="nav-group-label">Account</div>
+      <a href="#profile" data-view="profile">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.5 3.5-7 8-7s8 2.5 8 7"/></svg>
+        Admin Profile
+      </a>
+      <a href="#settings" data-view="settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+        Settings
+      </a>
+    </nav>
+
+    <button class="logout-btn" id="logoutBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      Logout
+    </button>
+  </aside>
+
+  <!-- MAIN -->
+  <div class="main">
+    <button class="mobile-menu-btn" id="mobileMenuBtn">☰</button>
+    <header class="topbar">
+      <h1 id="pageTitle">Overview</h1>
+      <div class="topbar-right">
+        <div id="topName" class="admin-name">Admin</div>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- OVERVIEW -->
+      <section class="view" id="view-overview">
+        <div class="view-head">
+          <div>
+            <h2 id="ovGreeting">Good day</h2>
+            <p class="sub">System-wide health of doctors, patients and reports.</p>
+          </div>
+          <div class="period-select">
+            <select id="ovPeriod">
+              <option value="all">All time</option>
+              <option value="today">Today</option>
+              <option value="week">This week</option>
+              <option value="month">This month</option>
+              <option value="year">This year</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="stat-grid" id="ovStatGrid"></div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head">
+              <h3>Pending doctor approvals</h3>
+              <a href="#doctors" data-view="doctors" class="link-btn">Review</a>
+            </div>
+            <div id="ovPendingDoctors" class="quick-list"></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <h3>Latest problem reports</h3>
+              <a href="#reports" data-view="reports" class="link-btn">Open</a>
+            </div>
+            <div id="ovLatestReports" class="quick-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DOCTORS LIST -->
+      <section class="view" id="view-doctors" hidden>
+        <div class="view-head">
+          <div>
+            <h2>Doctors</h2>
+            <p class="sub">Verify, filter and manage every doctor registered on ClinicFlow.</p>
+          </div>
+        </div>
+
+        <div class="stat-grid" id="drStatGrid"></div>
+
+        <div class="filter-row">
+          <input type="text" id="drSearch" placeholder="Search name or email…">
+          <select id="drStatusFilter">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+          <input type="text" id="drSpecFilter" placeholder="Specialization…">
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Doctor</th><th>Specialization</th><th>Clinic</th><th>Status</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="drTableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="drPagination"></div>
+      </section>
+
+      <!-- DOCTOR DETAILS -->
+      <section class="view" id="view-doctorDetail" hidden>
+        <button class="back-btn" data-view="doctors">&larr; Back to Doctors</button>
+
+        <div class="detail-head">
+          <div>
+            <h2 id="ddName">—</h2>
+            <p class="sub" id="ddIdSpec">—</p>
+          </div>
+          <div id="ddActions" class="action-row"></div>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Doctor information</h3>
+            <div class="field-grid" id="ddInfoGrid"></div>
+          </div>
+          <div class="card">
+            <h3>Subscription</h3>
+            <div class="field-grid" id="ddSubGrid"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Appointments</h3>
+            <div class="appt-controls">
+              <input type="date" id="ddApptDate">
+              <span id="ddApptTotal" class="count-chip">0</span>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Patient Name</th><th>Appointment Date</th><th>Status</th></tr></thead>
+              <tbody id="ddApptBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- PATIENTS LIST -->
+      <section class="view" id="view-patients" hidden>
+        <div class="view-head">
+          <div>
+            <h2>Patients</h2>
+            <p class="sub">Every patient registered on ClinicFlow.</p>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <input type="text" id="ptSearch" placeholder="Search name or email…">
+          <select id="ptStatusFilter">
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Patient</th><th>Phone</th><th>Gender</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="ptTableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="ptPagination"></div>
+      </section>
+
+      <!-- PATIENT DETAILS -->
+      <section class="view" id="view-patientDetail" hidden>
+        <button class="back-btn" data-view="patients">&larr; Back to Patients</button>
+        <div class="detail-head">
+          <div>
+            <h2 id="pdName">—</h2>
+            <p class="sub" id="pdIdMeta">—</p>
+          </div>
+          <div id="pdActions" class="action-row"></div>
+        </div>
+        <div class="card">
+          <h3>Patient information</h3>
+          <div class="field-grid" id="pdInfoGrid"></div>
+        </div>
+        <div class="card">
+          <h3>Appointment history</h3>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Doctor</th><th>Clinic</th><th>Date</th><th>Status</th></tr></thead>
+              <tbody id="pdApptBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- CLINICS -->
+      <section class="view" id="view-clinics" hidden>
+        <div class="coming-soon">
+          <div class="cs-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 21V8l8-5 8 5v13"/><path d="M9 21v-6h6v6"/></svg>
+          </div>
+          <h2>Clinics — Coming Soon</h2>
+          <p>This feature is currently under development and will be available in a future ClinicFlow update.</p>
+        </div>
+      </section>
+
+      <!-- SUBSCRIPTIONS -->
+      <section class="view" id="view-subscriptions" hidden>
+        <div class="view-head">
+          <div>
+            <h2>Subscriptions</h2>
+            <p class="sub">Plans and renewals across all doctors.</p>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <input type="text" id="subSearch" placeholder="Search doctor…">
+          <select id="subPlanFilter">
+            <option value="">All plans</option>
+            <option value="free">Free</option>
+            <option value="paid">Paid</option>
+          </select>
+          <select id="subStatusFilter">
+            <option value="">All statuses</option>
+            <option value="active">Active</option>
+            <option value="expired">Expired</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Doctor</th><th>Plan</th><th>Status</th><th>Expiry</th><th>Actions</th></tr></thead>
+            <tbody id="subTableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="subPagination"></div>
+      </section>
+
+      <!-- REPORTS (PROBLEM REPORTS) -->
+      <section class="view" id="view-reports" hidden>
+        <div class="view-head">
+          <div>
+            <h2>Reports</h2>
+            <p class="sub">Issues raised by patients and doctors.</p>
+          </div>
+        </div>
+
+        <div class="stat-grid" id="repStatGrid"></div>
+
+        <div class="filter-row">
+          <select id="repStatusFilter">
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="inreview">In Review</option>
+            <option value="resolved">Resolved</option>
+          </select>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Reporter</th><th>Subject</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+            <tbody id="repTableBody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="repPagination"></div>
+      </section>
+
+      <!-- REPORT DETAILS -->
+      <section class="view" id="view-reportDetail" hidden>
+        <button class="back-btn" data-view="reports">&larr; Back to Reports</button>
+        <div class="card" id="rdCard"></div>
+      </section>
+
+      <!-- SETTINGS -->
+      <section class="view" id="view-settings" hidden>
+        <div class="view-head">
+          <div>
+            <h2>Settings</h2>
+            <p class="sub">Manage administrator preferences.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Account</h3>
+          <p class="muted">Manage your account details and password from the Admin Profile page.</p>
+          <a href="#profile" data-view="profile" class="btn btn-secondary">Go to Admin Profile</a>
+        </div>
+      </section>
+
+      <!-- ADMIN PROFILE -->
+      <section class="view" id="view-profile" hidden>
+        <div class="view-head">
+          <div>
+            <h2>Admin Profile</h2>
+            <p class="sub">Manage your administrator account.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 id="profName">—</h3>
+          <p class="muted" id="profStatus">—</p>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h3>Account details</h3></div>
+          <div class="field-grid" id="profGrid"></div>
+          <form id="profForm" class="edit-form">
+            <div class="field"><label>Full name</label><input type="text" id="profFullname"></div>
+            <div class="field"><label>Phone</label><input type="text" id="profPhone"></div>
+            <button type="submit" class="btn btn-primary">Save changes</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <h3>Change password</h3>
+          <form id="pwForm" class="edit-form">
+            <div class="field"><label>Current password</label><input type="password" id="pwCurrent" required></div>
+            <div class="field"><label>New password</label><input type="password" id="pwNew" required></div>
+            <button type="submit" class="btn btn-primary">Update password</button>
+          </form>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
