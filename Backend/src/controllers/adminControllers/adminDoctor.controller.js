@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { Doctor } from "../../models/doctor.models.js";
 import { User } from "../../models/user.models.js";
 import { Appointment } from "../../models/appointment.models.js";
+import { Subscription } from "../../models/subscription.models.js";   
 
 import ApiError from "../../utils/apierror.js";
 import ApiResponse from "../../utils/apiresponse.js";
@@ -77,13 +78,31 @@ const getDoctorDetails = async (req, res, next) => {
       throw new ApiError(404, "Doctor not found");
     }
 
-    const [totalAppointments, completed, cancelled, waiting, inProgress] = await Promise.all([
+    const [totalAppointments, completed, cancelled, waiting, inProgress, subscription] = await Promise.all([
       Appointment.countDocuments({ doctor: doctor._id }),
       Appointment.countDocuments({ doctor: doctor._id, status: "completed" }),
       Appointment.countDocuments({ doctor: doctor._id, status: "cancelled" }),
       Appointment.countDocuments({ doctor: doctor._id, status: "waiting" }),
       Appointment.countDocuments({ doctor: doctor._id, status: "in-progress" }),
+      Subscription.findOne({ doctor: doctor._id }).lean(),   // <-- NEW
     ]);
+
+    // A paid subscription past its endDate reads as "expired" even if the
+    // stored status hasn't been flipped yet — same derivation used in
+    // adminSubscription.controller.js's deriveStatus, kept in sync here.
+    let subscriptionInfo = null;
+    if (subscription) {
+      let liveStatus = subscription.status;
+      if (subscription.plan === "paid" && subscription.endDate && new Date(subscription.endDate) < new Date()) {
+        liveStatus = "expired";
+      }
+      subscriptionInfo = {
+        plan: subscription.plan,
+        status: liveStatus,
+        startDate: subscription.startDate,
+        endDate: subscription.endDate,
+      };
+    }
 
     return res.status(200).json(
       new ApiResponse(
@@ -102,9 +121,10 @@ const getDoctorDetails = async (req, res, next) => {
             consultationFee: doctor.consultationFee,
             bio: doctor.bio,
             status: doctor.status,
-            isSuspended: doctor.isSuspended,
-            suspensionReason: doctor.suspensionReason,
             clinicStatus: doctor.clinicStatus,
+            // isSuspended intentionally omitted from this response — kept
+            // in the DB per your earlier decision, but this dashboard
+            // never surfaces the word "Suspended" anywhere.
           },
           statistics: {
             totalAppointments,
@@ -113,6 +133,7 @@ const getDoctorDetails = async (req, res, next) => {
             waiting,
             inProgress,
           },
+          subscription: subscriptionInfo,   // <-- NEW
         },
         "Doctor details fetched",
       ),

@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 
 import { User } from "../models/user.models.js";
 import { Patient } from "../models/patient.models.js";
+import { Doctor } from "../models/doctor.models.js";
 
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
@@ -189,4 +190,4 @@ const getCurrentUser = async (req, res, next) => {
   }
 };
 
-export { updatePatientProfile ,getCurrentUser};
+export { updatePatientProfile, getCurrentUser };
