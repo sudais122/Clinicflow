@@ -43,6 +43,15 @@
       block near the bottom to activate. If `io` isn't found, the
       dashboard still works — it just won't get push updates and will
       rely on refetching after each action.
+
+   QUEUE LIFECYCLE (fixed):
+   "No patients waiting" and "clinic closed" are NOT the same state.
+   Finishing the last patient marks THAT APPOINTMENT completed via
+   PATCH /appointments/:id/status — nothing more. It never touches
+   clinicStatus. Closing the clinic is a separate, explicit doctor
+   action (the "Close Clinic" button -> toggleClinic() -> PATCH
+   /queue/end), independent of how many patients were served.
+   See serveNext() / renderQueue() below.
    ============================================================ */
 
 const CFG = window.CLINICFLOW_CONFIG || {};
@@ -114,6 +123,12 @@ const DOCTOR = {
   bio: "",
   experience: 0,
   licenseNumber: "",
+  // Account gating — from doctor.model.js. status defaults to
+  // "pending" until an admin approves it; isSuspended is a separate
+  // flag independent of status (see renderAccountBlocked below).
+  status: "pending",
+  isSuspended: false,
+  suspensionReason: "",
 };
 
 const STATE = {
@@ -139,6 +154,7 @@ const nameFor = (tok) =>
   STATE.appointments.find((a) => a.token === tok)?.patient || "—";
 const statusFor = (tok) =>
   STATE.appointments.find((a) => a.token === tok)?.status || "waiting";
+const apptFor = (tok) => STATE.appointments.find((a) => a.token === tok);
 const nextWaiting = (from) => {
   const tokens = STATE.appointments
     .map((a) => a.token)
@@ -193,6 +209,12 @@ async function loadDashboard(dateStr) {
   DOCTOR.name = d.doctor?.fullname || DOCTOR.name;
   DOCTOR.clinic = d.doctor?.clinicName || DOCTOR.clinic;
   DOCTOR.spec = d.doctor?.specialization || DOCTOR.spec;
+  // Plain fields on the Doctor document itself — should already be
+  // present here the same way clinicName/specialization are, since
+  // none of these require a populate/join.
+  DOCTOR.status = d.doctor?.status || DOCTOR.status;
+  DOCTOR.isSuspended = d.doctor?.isSuspended ?? DOCTOR.isSuspended;
+  DOCTOR.suspensionReason = d.doctor?.suspensionReason || "";
 
   STATE.clinicOpen = d.clinicStatus === "open";
   STATE.nowServing = d.currentServingToken ?? STATE.nowServing;
@@ -440,7 +462,10 @@ function renderSequence(el) {
   el.innerHTML = out;
 }
 
-/* ---------- CLINIC OPEN / CLOSE ---------- */
+/* ---------- CLINIC OPEN / CLOSE ----------
+   The ONLY two places clinicStatus is ever changed. Whether there
+   are patients waiting, in progress, or none at all has no bearing
+   on this — closing is always an explicit doctor action. */
 async function toggleClinic() {
   if (!STATE.clinicOpen) {
     try {
@@ -505,19 +530,40 @@ function renderQueue() {
   $("#svCurName").textContent = nowServingName();
   $("#svNext").textContent = nx ? "#" + nx : "—";
   $("#svNextName").textContent = nx ? nameFor(nx) : "—";
+
+  // ---- Serve/Complete button state -----------------------------
+  // Three independent facts decide what this button does:
+  //   1. is the clinic open at all?
+  //   2. is there a patient currently in-progress?
+  //   3. is there another patient waiting after them?
+  // None of these ever imply "close the clinic" — that stays a
+  // separate action the doctor takes with the Close Clinic button.
   const btn = $("#serveNextBtn");
+  const current = apptFor(STATE.nowServing);
+  const currentInProgress = current && current.status === "in-progress";
+
   if (!open) {
     btn.disabled = true;
     btn.textContent = "Serve Next Patient →";
     btn.onclick = serveNext;
     $("#serveNote").textContent =
       "Open the clinic to continue serving patients.";
-  } else if (!nx) {
-    btn.disabled = false;
-    btn.textContent = "Finish Appointments";
-    btn.onclick = finishAppointments;
+  } else if (!nx && !currentInProgress) {
+    // Nobody in progress and nobody waiting — genuinely nothing left
+    // to serve right now. This is a normal, valid state; it does
+    // NOT mean the clinic should close.
+    btn.disabled = true;
+    btn.textContent = "All Patients Served";
+    btn.onclick = null;
     $("#serveNote").textContent =
-      "All patients have been served. Finish appointments to close the clinic.";
+      "All patients have been served. The queue stays open — close the clinic whenever you're ready using the button above.";
+  } else if (!nx && currentInProgress) {
+    // Last patient of the day, still in progress.
+    btn.disabled = false;
+    btn.textContent = "Complete Current Patient";
+    btn.onclick = serveNext;
+    $("#serveNote").textContent =
+      "This is the last patient in today's queue. Completing them won't close the clinic.";
   } else {
     btn.disabled = false;
     btn.textContent = "Serve Next Patient →";
@@ -525,48 +571,55 @@ function renderQueue() {
     $("#serveNote").textContent =
       "Completing the current token moves the queue forward.";
   }
+
   renderSequence($("#qcSeqList"));
 }
 
+/* Completes whichever patient is currently in-progress (if any),
+   then — only if someone is waiting — advances the queue to them.
+   Never touches clinicStatus. This is the single fix for
+   "appointment not moving from waiting/in-progress to completed". */
 async function serveNext() {
   if (!STATE.clinicOpen) return;
+
+  const current = apptFor(STATE.nowServing);
   const nx = nextWaiting(STATE.nowServing);
-  if (!nx) return toast("Queue empty", "No more patients waiting.", true);
+
+  if (!current && !nx) {
+    return toast("Queue empty", "No more patients waiting.", true);
+  }
 
   const btn = $("#serveNextBtn");
   const prevLabel = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Serving…";
+  btn.textContent = nx ? "Serving…" : "Completing…";
+
   try {
-    await apiPatch(ENDPOINTS.queueNext());
-    toast("Serving next patient", `Now serving #${nx}.`);
+    // Step 1 — explicitly mark the current appointment completed.
+    // This PATCH is the piece that was missing: queue/next alone
+    // was only ever moving the "now serving" pointer, never the
+    // appointment's own status field.
+    if (current && current.status === "in-progress") {
+      await apiPatch(ENDPOINTS.appointmentStatus(current.id), {
+        status: "completed",
+      });
+    }
+
+    // Step 2 — only advance the queue pointer if someone is waiting.
+    if (nx) {
+      await apiPatch(ENDPOINTS.queueNext());
+      toast("Serving next patient", `Now serving #${nx}.`);
+    } else {
+      toast("Patient completed", "All patients have been served.");
+    }
+
     await loadAll(STATE.selectedDate);
     refreshAll();
   } catch (err) {
-    toast("Couldn't advance the queue", err.message, true);
+    toast("Couldn't update the queue", err.message, true);
     btn.disabled = false;
     btn.textContent = prevLabel;
   }
-}
-
-function finishAppointments() {
-  confirmModal({
-    tone: "warn",
-    title: "Finish today's appointments?",
-    body: "All patients have been served. This will close the clinic for today. You can reopen it anytime.",
-    confirmText: "Finish & Close Clinic",
-    danger: true,
-    onConfirm: async () => {
-      try {
-        const res = await apiPatch(ENDPOINTS.queueEnd());
-        applyQueueDoc(res.data);
-        toast("Appointments finished", "Clinic closed for today.");
-        refreshAll();
-      } catch (err) {
-        toast("Couldn't close the clinic", err.message, true);
-      }
-    },
-  });
 }
 
 function resetQueue() {
@@ -1419,6 +1472,64 @@ function initSocket() {
 }
 
 /* ---------- INIT ---------- */
+/* ---------- ACCOUNT GATING ----------
+   status/isSuspended come straight off the Doctor document (see
+   doctor.model.js). A doctor can log in successfully — the account
+   exists and the password is correct — but still not be allowed to
+   USE the dashboard yet. This runs once, right after loadAll(),
+   before any view is shown, and fully replaces the page rather than
+   rendering the dashboard underneath a banner: someone who isn't
+   approved shouldn't be able to see live patient/queue data at all. */
+function renderAccountBlocked({ title, message, tone = "warn" }) {
+  const iconPath =
+    tone === "danger"
+      ? '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01" stroke-linecap="round"/>'
+      : '<circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01" stroke-linecap="round"/>';
+  const iconBg = tone === "danger" ? "#FDECEC" : "#FEF3E2";
+  const iconColor = tone === "danger" ? "#DC2626" : "#B45309";
+
+  document.body.innerHTML = `
+    <div style="
+      position:fixed;inset:0;background:#F6F7FA;
+      display:flex;align-items:center;justify-content:center;
+      padding:24px;font-family:'Inter',system-ui,-apple-system,sans-serif;
+    ">
+      <div style="
+        background:#fff;border-radius:20px;max-width:440px;width:100%;
+        padding:44px 40px;text-align:center;
+        box-shadow:0 20px 60px rgba(16,24,43,.12);
+        color:#1c2333;
+      ">
+        <div style="
+          width:64px;height:64px;border-radius:50%;
+          background:${iconBg};color:${iconColor};
+          display:flex;align-items:center;justify-content:center;
+          margin:0 auto 20px;
+        ">
+          <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPath}</svg>
+        </div>
+        <h2 style="font-family:'Bricolage Grotesque',sans-serif;font-size:21px;font-weight:800;margin:0 0 10px;">${title}</h2>
+        <p style="color:#6b7180;font-size:14.5px;line-height:1.6;margin:0 0 28px;">${message}</p>
+        <button id="blockedLogoutBtn" style="
+          width:100%;border:none;border-radius:10px;background:#3d6df2;color:#fff;
+          font-size:15px;font-weight:700;padding:13px;cursor:pointer;font-family:inherit;
+        ">Log Out</button>
+      </div>
+    </div>
+  `;
+
+  document
+    .getElementById("blockedLogoutBtn")
+    .addEventListener("click", async () => {
+      try {
+        await apiPost(ENDPOINTS.logout());
+      } catch (err) {
+        console.warn("Logout request failed, redirecting anyway:", err.message);
+      }
+      window.location.href = "../../../Auth/login/login.html";
+    });
+}
+
 async function init() {
   renderFAQ();
   try {
@@ -1437,6 +1548,38 @@ async function init() {
       return;
     }
   }
+
+  // Check suspension before pending/inactive — a suspended account
+  // should show the suspension reason even if status also happens
+  // to be something else.
+  if (DOCTOR.isSuspended) {
+    renderAccountBlocked({
+      tone: "danger",
+      title: "Your account has been suspended",
+      message: DOCTOR.suspensionReason
+        ? `Reason: ${DOCTOR.suspensionReason}`
+        : "Please contact support for more information.",
+    });
+    return;
+  }
+  if (DOCTOR.status === "pending") {
+    renderAccountBlocked({
+      tone: "warn",
+      title: "Your account is pending approval",
+      message:
+        "Your account is not yet approved by the admin. You'll be notified by email once it's approved — usually within 24 hours.",
+    });
+    return;
+  }
+  if (DOCTOR.status === "inactive") {
+    renderAccountBlocked({
+      tone: "danger",
+      title: "Your account is inactive",
+      message: "Please contact support if you believe this is a mistake.",
+    });
+    return;
+  }
+
   renderNotifs();
   syncTopbarIdentity();
   const h = location.hash.replace("#", "");

@@ -313,6 +313,96 @@
     .left{display:none;}
     .right{padding:32px 20px;}
   }
+
+  /* Toast notifications — post-registration feedback */
+  .toast-stack{
+    position:fixed;
+    right:20px;bottom:20px;
+    display:flex;flex-direction:column;gap:10px;
+    z-index:1100;
+    max-width:340px;
+    width:calc(100% - 40px);
+  }
+  .toast{
+    background:var(--white);
+    border:1px solid var(--line);
+    border-left:4px solid var(--green);
+    border-radius:12px;
+    padding:14px 16px;
+    box-shadow:0 12px 30px rgba(20,22,27,.14);
+    display:flex;gap:10px;align-items:flex-start;
+    animation:toastIn .25s ease;
+    transition:opacity .3s ease;
+  }
+  .toast.error{border-left-color:var(--danger);}
+  @keyframes toastIn{
+    from{opacity:0;transform:translateY(8px);}
+    to{opacity:1;transform:none;}
+  }
+  .toast .t-ic{
+    width:22px;height:22px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    background:#E7F7EF;color:var(--green);
+    font-size:12px;font-weight:800;flex:none;margin-top:1px;
+  }
+  .toast.error .t-ic{background:#FDECEC;color:var(--danger);}
+  .toast .t-title{font-size:14px;font-weight:700;margin-bottom:2px;}
+  .toast .t-msg{font-size:13px;color:var(--ink-soft);line-height:1.45;}
+
+  @media (max-width: 480px){
+    .toast-stack{right:12px;bottom:12px;left:12px;max-width:none;width:auto;}
+  }
+
+  /* Full-screen success overlay — replaces the toast for account
+     creation. Covers the whole viewport; dismissed only by an
+     explicit click (button, backdrop, or Escape), never on a timer,
+     so the person always has time to read it. */
+  .success-overlay{
+    display:none;
+    position:fixed;inset:0;
+    background:rgba(15,17,22,.68);
+    backdrop-filter:blur(2px);
+    align-items:center;justify-content:center;
+    padding:24px;
+    z-index:2000;
+    cursor:pointer;
+  }
+  .success-overlay.open{display:flex;}
+  .success-modal{
+    background:var(--white);
+    border-radius:22px;
+    padding:44px 40px 36px;
+    max-width:440px;
+    width:100%;
+    text-align:center;
+    box-shadow:0 30px 80px rgba(15,17,22,.35);
+    cursor:default;
+    animation:successPop .28s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes successPop{
+    from{opacity:0;transform:translateY(14px) scale(.96);}
+    to{opacity:1;transform:none;}
+  }
+  .success-icon{
+    width:68px;height:68px;border-radius:50%;
+    background:#E7F7EF;color:var(--green);
+    display:flex;align-items:center;justify-content:center;
+    margin:0 auto 22px;
+  }
+  .success-modal h2{
+    font-family:'Lora',serif;
+    font-size:23px;font-weight:700;margin:0 0 12px 0;
+    letter-spacing:-0.01em;
+  }
+  .success-modal p{
+    color:var(--ink-soft);
+    font-size:15px;line-height:1.6;
+    margin:0 0 28px 0;
+  }
+  .success-modal .submit-btn{margin-top:0;}
+  .success-dismiss-hint{
+    font-size:12px;color:#B7BBC8;margin-top:16px;
+  }
 </style>
 </head>
 <body>
@@ -396,7 +486,7 @@
         <div class="signin-line">Already have an account? <a href="../login/login.html">Sign in</a></div>
       </div>
 
-      <!-- STEP: patient form — now a real <form> wired to register.js -->
+      <!-- STEP: patient form — wired to register.js -->
       <div id="step-patient" class="form-card">
         <button type="button" class="back-link" onclick="showStep('select')">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
@@ -467,8 +557,7 @@
         <div class="signin-line">Already have an account? <a href="../login/login.html">Sign In</a></div>
       </div>
 
-      <!-- STEP: doctor form (Professional Details section) —
-           not yet wired to a backend script; see note below. -->
+      <!-- STEP: doctor form — now wired to register-doctor.js -->
       <div id="step-doctor" class="form-card">
         <button type="button" class="back-link" onclick="showStep('select')">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
@@ -477,68 +566,85 @@
         <h1>Create your doctor account</h1>
         <p class="lede">Set up your clinic and manage your patient queue with ClinicFlow.</p>
 
-        <div class="section-label">Account Information</div>
-        <div class="grid2">
-          <div class="field">
-            <label>Full Name</label>
-            <input type="text" name="fullname" placeholder="Dr. Hassan Qureshi">
-          </div>
-          <div class="field">
-            <label>Email Address</label>
-            <input type="email" name="email" placeholder="you@example.com">
-          </div>
-          <div class="field">
-            <label>Phone Number</label>
-            <input type="tel" name="phone" placeholder="03XXXXXXXXX">
-          </div>
-          <div class="field">
-            <label>Password</label>
-            <div class="pw-wrap">
-              <input type="password" name="password" placeholder="Create a strong password">
-              <span class="eye"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <div id="doctorAlert" class="alert"></div>
+
+        <form id="registerDoctorForm" novalidate>
+          <div class="section-label">Account Information</div>
+          <div class="grid2">
+            <div class="field" id="f-dr-fullname">
+              <label for="dr-fullname">Full Name</label>
+              <input type="text" id="dr-fullname" name="fullname" placeholder="Hassan Qureshi">
+              <div class="hint">No need to add "Dr." — we'll add it automatically.</div>
+              <div class="err"></div>
+            </div>
+            <div class="field" id="f-dr-email">
+              <label for="dr-email">Email Address</label>
+              <input type="email" id="dr-email" name="email" placeholder="you@example.com">
+              <div class="err"></div>
+            </div>
+            <div class="field" id="f-dr-phone">
+              <label for="dr-phone">Phone Number</label>
+              <input type="tel" id="dr-phone" name="phone" placeholder="03XXXXXXXXX">
+              <div class="err"></div>
+            </div>
+            <div class="field" id="f-dr-password">
+              <label for="dr-password">Password</label>
+              <div class="pw-wrap">
+                <input type="password" id="dr-password" name="password" placeholder="Create a strong password">
+                <span class="eye"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+              </div>
+              <div class="err"></div>
             </div>
           </div>
-        </div>
 
-        <div class="section-label">Clinic Information</div>
-        <div class="grid2">
-          <div class="field">
-            <label>Specialization</label>
-            <input type="text" name="specialization" placeholder="General Physician">
+          <div class="section-label">Clinic Information</div>
+          <div class="grid2">
+            <div class="field" id="f-specialization">
+              <label for="specialization">Specialization</label>
+              <input type="text" id="specialization" name="specialization" placeholder="General Physician">
+              <div class="err"></div>
+            </div>
+            <div class="field" id="f-clinicName">
+              <label for="clinicName">Clinic Name</label>
+              <input type="text" id="clinicName" name="clinicName" placeholder="Care Point Clinic">
+              <div class="err"></div>
+            </div>
           </div>
-          <div class="field">
-            <label>Clinic Name</label>
-            <input type="text" name="clinicName" placeholder="Care Point Clinic">
+          <div class="field full" id="f-clinicAddress">
+            <label for="clinicAddress">Clinic Address</label>
+            <input type="text" id="clinicAddress" name="clinicAddress" placeholder="24-B, Model Town Link Road, Lahore">
+            <div class="err"></div>
           </div>
-        </div>
-        <div class="field full">
-          <label>Clinic Address</label>
-          <input type="text" name="clinicAddress" placeholder="24-B, Model Town Link Road, Lahore">
-        </div>
-        <div class="field full">
-          <label>Consultation Fee (PKR)</label>
-          <input type="number" name="consultationFee" placeholder="3200">
-        </div>
+          <div class="field full" id="f-consultationFee">
+            <label for="consultationFee">Consultation Fee (PKR)</label>
+            <input type="number" id="consultationFee" name="consultationFee" min="0" placeholder="3200">
+            <div class="err"></div>
+          </div>
 
-        <div class="section-label professional">Professional Details</div>
-        <div class="grid2">
-          <div class="field">
-            <label>License Number</label>
-            <input type="text" name="licenseNumber" placeholder="PMC-12345-P">
-            <div class="hint">Your PMDC / PMC registration number.</div>
+          <div class="section-label professional">Professional Details</div>
+          <div class="grid2">
+            <div class="field" id="f-licenseNumber">
+              <label for="licenseNumber">License Number</label>
+              <input type="text" id="licenseNumber" name="licenseNumber" placeholder="PMC-12345-P">
+              <div class="hint">Your PMDC / PMC registration number.</div>
+              <div class="err"></div>
+            </div>
+            <div class="field" id="f-experience">
+              <label for="experience">Years of Experience</label>
+              <input type="number" min="0" max="70" id="experience" name="experience" placeholder="e.g. 8">
+              <div class="err"></div>
+            </div>
           </div>
-          <div class="field">
-            <label>Years of Experience</label>
-            <input type="number" min="0" name="yearsExperience" placeholder="e.g. 8">
+          <div class="field full" id="f-bio">
+            <label for="bio">Bio <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label>
+            <textarea maxlength="1000" id="bio" name="bio" placeholder="Tell patients a bit about your background, expertise and approach to care..." oninput="document.getElementById('bioCount').textContent = 1000 - this.value.length"></textarea>
+            <div class="char-count"><span id="bioCount">1000</span> characters remaining</div>
+            <div class="err"></div>
           </div>
-        </div>
-        <div class="field full">
-          <label>Bio</label>
-          <textarea maxlength="400" name="bio" placeholder="Tell patients a bit about your background, expertise and approach to care..." oninput="document.getElementById('bioCount').textContent = 400 - this.value.length"></textarea>
-          <div class="char-count"><span id="bioCount">400</span> characters remaining</div>
-        </div>
 
-        <button type="button" class="submit-btn green" onclick="alert('Doctor account creation is not wired to a backend yet (demo)')">Create Doctor Account</button>
+          <button type="submit" class="submit-btn green" id="submitBtnDoctor">Create Doctor Account</button>
+        </form>
+
         <div class="signin-line">Already have an account? <a href="../login/login.html">Sign In</a></div>
       </div>
 
@@ -546,8 +652,33 @@
   </div>
 </div>
 
+<!-- Toast notifications -->
+<div id="toasts" class="toast-stack"></div>
+
+<!-- Full-screen success overlay — click anywhere (backdrop, button,
+     or press Escape) to dismiss and continue to sign in. -->
+<div id="successOverlay" class="success-overlay">
+  <div class="success-modal">
+    <div class="success-icon">
+      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    </div>
+    <h2 id="successTitle">Account created successfully</h2>
+    <p id="successMessage"></p>
+    <button type="button" class="submit-btn green" id="successCloseBtn">Continue to Sign In</button>
+    <div class="success-dismiss-hint">Click anywhere outside this box to dismiss</div>
+  </div>
+</div>
+
 <script src="../config.js"></script>
 <script src="../auth.js"></script>
 <script src="./register.js"></script>
+<script>
+  function showStep(step){
+    document.getElementById('step-select').style.display = step === 'select' ? 'block' : 'none';
+    document.getElementById('step-patient').classList.toggle('active', step === 'patient');
+    document.getElementById('step-doctor').classList.toggle('active', step === 'doctor');
+    document.querySelector('.right').scrollTo(0,0);
+  }
+</script>
 </body>
 </html>
