@@ -21,13 +21,17 @@ const reportSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["open", "reviewed", "resolved"],
-      default: "open",
+      enum: ["pending", "inreview", "resolved"],
+      default: "pending",
+    },
+    resolution: {
+      type: String,
+      trim: true,
+      maxlength: 1000,
+      default: undefined,
     },
   },
-  {
-    timestamps: true,
-  },
+  { timestamps: true },
 );
 
 export const Report = mongoose.model("Report", reportSchema);

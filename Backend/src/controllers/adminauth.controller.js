@@ -1,37 +1,14 @@
-import bcrypt from "bcrypt";
-import jwt from "jsonwebtoken";
-
+import { Admin } from "../models/admin.models.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 
+const isProd = process.env.NODE_ENV === "production";
 const cookieOptions = {
   httpOnly: true,
-  secure: true,
+  secure: isProd,
+  sameSite: isProd ? "none" : "lax",
 };
 
-
-const generateAdminAccessToken = () =>
-  jwt.sign(
-    {
-      _id: process.env.ADMIN_ID || "admin",
-      email: process.env.ADMIN_EMAIL,
-      role: "admin",
-    },
-    process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY },
-  );
-
-const generateAdminRefreshToken = () =>
-  jwt.sign(
-    {
-      _id: process.env.ADMIN_ID || "admin",
-      role: "admin",
-    },
-    process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY },
-  );
-
-// POST /admin/login
 const adminLogin = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -40,28 +17,26 @@ const adminLogin = async (req, res, next) => {
       throw new ApiError(400, "Email and password are required");
     }
 
-    if (
-      !process.env.ADMIN_EMAIL ||
-      !process.env.ADMIN_PASSWORD_HASH
-    ) {
-      throw new ApiError(500, "Admin credentials are not configured");
-    }
+    const admin = await Admin.findOne({ email: email.toLowerCase().trim() });
 
-    const emailMatches =
-      email.toLowerCase() === process.env.ADMIN_EMAIL.toLowerCase();
-
-    const passwordMatches = await bcrypt.compare(
-      password,
-      process.env.ADMIN_PASSWORD_HASH,
-    );
-
-    // Same generic error for either miss (don't reveal which was wrong).
-    if (!emailMatches || !passwordMatches) {
+    if (!admin) {
       throw new ApiError(401, "Invalid admin credentials");
     }
 
-    const accessToken = generateAdminAccessToken();
-    const refreshToken = generateAdminRefreshToken();
+    const passwordMatches = await admin.isPasswordCorrect(password);
+    if (!passwordMatches) {
+      throw new ApiError(401, "Invalid admin credentials");
+    }
+
+    if (admin.isActive === false) {
+      throw new ApiError(403, "This admin account has been deactivated");
+    }
+
+    const accessToken = admin.generateAccessToken();
+    const refreshToken = admin.generateRefreshToken();
+
+    admin.refreshToken = refreshToken;
+    await admin.save({ validateBeforeSave: false });
 
     return res
       .status(200)
@@ -72,8 +47,9 @@ const adminLogin = async (req, res, next) => {
           200,
           {
             admin: {
-              _id: process.env.ADMIN_ID || "admin",
-              email: process.env.ADMIN_EMAIL,
+              _id: admin._id,
+              fullname: admin.fullname,
+              email: admin.email,
               role: "admin",
             },
             accessToken,
@@ -87,9 +63,10 @@ const adminLogin = async (req, res, next) => {
   }
 };
 
-// POST /admin/logout
 const adminLogout = async (req, res, next) => {
   try {
+    await Admin.findByIdAndUpdate(req.user._id, { $set: { refreshToken: "" } });
+
     return res
       .status(200)
       .clearCookie("accessToken", cookieOptions)
@@ -100,7 +77,6 @@ const adminLogout = async (req, res, next) => {
   }
 };
 
-// GET /admin/me 
 const getCurrentAdmin = async (req, res, next) => {
   try {
     return res

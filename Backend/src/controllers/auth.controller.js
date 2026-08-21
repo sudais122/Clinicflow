@@ -7,6 +7,7 @@ import { User } from "../models/user.models.js";
 import { Doctor } from "../models/doctor.models.js";
 import { Patient } from "../models/patient.models.js";
 import { Subscription } from "../models/subscription.models.js";
+import { Admin } from "../models/admin.models.js";
 import { Queue } from "../models/queue.models.js";
 import { Counter } from "../models/counter.models.js";
 
@@ -783,39 +784,46 @@ const refreshAccessToken = async (req, res, next) => {
     try {
       decodedToken = jwt.verify(
         incomingRefreshToken,
-        process.env.REFRESH_TOKEN_SECRET
+        process.env.REFRESH_TOKEN_SECRET,
       );
     } catch (error) {
       throw new ApiError(401, "Invalid or expired refresh token");
     }
 
-    const user = await User.findById(decodedToken?._id);
-    if (!user) {
+    if (!mongoose.isValidObjectId(decodedToken?._id)) {
       throw new ApiError(401, "Invalid refresh token");
     }
-    if (incomingRefreshToken !== user.refreshToken) {
+
+    const account =
+      decodedToken.role === "admin"
+        ? await Admin.findById(decodedToken._id)
+        : await User.findById(decodedToken._id);
+
+    if (!account) {
+      throw new ApiError(401, "Invalid refresh token");
+    }
+    if (incomingRefreshToken !== account.refreshToken) {
       throw new ApiError(401, "Refresh token is expired or already used");
     }
 
     const { accessToken, refreshToken } =
-      await generateAccessAndRefreshTokens(user);
+      await generateAccessAndRefreshTokens(account);
 
     return res
       .status(200)
-      .cookie("accessToken", accessToken, cookieOptions)
-      .cookie("refreshToken", refreshToken, cookieOptions)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
       .json(
         new ApiResponse(
           200,
           { accessToken, refreshToken },
-          "Access token refreshed successfully"
-        )
+          "Access token refreshed successfully",
+        ),
       );
   } catch (error) {
     next(error);
   }
 };
-
 // logout
 const logout = async (req, res, next) => {
   try {

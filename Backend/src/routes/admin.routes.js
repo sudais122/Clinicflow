@@ -1,39 +1,25 @@
 import { Router } from "express";
-import {
-  adminLogin,
-  adminLogout,
-  getCurrentAdmin,
-} from "../controllers/adminauth.controller.js";
 
-import {
-  getAllDoctors,
-  getAllPatients,
-  getAllAppointments,
-  getAllSubscriptions,
-  getAdminDashboard,
-  deactivateUser,
-  activateUser 
-} from "../controllers/admin.controller.js";
+import { adminLogin, adminLogout, getCurrentAdmin } from "../controllers/adminauth.controller.js";
+import { getOverview } from "../controllers/adminControllers/admin.controller.js";
+import { getProfile, updateProfile, changePassword } from "../controllers/adminControllers/adminProfile.controller.js";
+
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
 import { isAdmin } from "../middlewares/admin.middlewares.js";
 
 const router = Router();
 
-// Public: admin login
 router.post("/login", adminLogin);
 
-router.use(verifyJWT);
-router.use(isAdmin);
+router.use(verifyJWT, isAdmin);
 
 router.post("/logout", adminLogout);
 router.get("/me", getCurrentAdmin);
 
-router.get("/doctors", getAllDoctors);
-router.get("/patients", getAllPatients);
-router.get("/appointments", getAllAppointments);
-router.get("/subscriptions", getAllSubscriptions);
-router.get("/dashboard", getAdminDashboard);
-router.patch("/users/:userId/deactivate", deactivateUser);
-router.patch("/users/:userId/activate", activateUser);
+router.get("/overview", getOverview);
+
+router.get("/profile", getProfile);
+router.patch("/profile", updateProfile);
+router.patch("/profile/password", changePassword);
 
 export default router;

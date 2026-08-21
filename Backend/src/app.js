@@ -11,10 +11,16 @@ import doctorroutes from "./routes/doctor.routes.js";
 import patientroutes from "./routes/patient.routes.js";
 import dashboardroutes from "./routes/doctorDashboard.routes.js";
 import subscriptionroutes from "./routes/subscription.routes.js";
-import adminroutes from "./routes/admin.routes.js";
 import forgotPasswordRoutes from "./routes/Forgotpassword.routes.js";
 import emailChangeRoutes from "./routes/emailChange.routes.js";
 import reportRoutes from "./routes/reports.routes.js";
+
+//admin
+import adminRouter from "./routes/admin.routes.js";
+import adminDoctorRouter from "./routes/adminDoctor.routes.js";
+import adminPatientRouter from "./routes/adminPatient.routes.js";
+import adminSubscriptionRouter from "./routes/adminSubscription.routes.js";
+import adminReportRouter from "./routes/adminReport.routes.js";
 
 const app = express();
 
@@ -46,9 +52,15 @@ app.use("/auth/email", emailChangeRoutes);
 app.use("/patient", patientroutes);
 app.use("/dashboard", dashboardroutes);
 app.use("/subscription", subscriptionroutes);
-app.use("/admin", adminroutes);
 
 app.use("/support", reportRoutes);
+
+//admin routes
+app.use("/admin", adminRouter);
+app.use("/admin/doctors", adminDoctorRouter);
+app.use("/admin/patients", adminPatientRouter);
+app.use("/admin/subscriptions", adminSubscriptionRouter);
+app.use("/admin/reports", adminReportRouter);
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
