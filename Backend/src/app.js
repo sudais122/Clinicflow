@@ -39,9 +39,11 @@ app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(express.static("../../frontend"));
 app.use(cookieParser());
 
+//auth routes
 app.use("/auth", authroutes);
 app.use("/auth/password", forgotPasswordRoutes);
 
+//docotor
 app.use("/appointments", appointmentroutes);
 app.use("/queue", queueroutes);
 

@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
 
 
 import { User } from "../models/user.models.js";
@@ -9,7 +8,6 @@ import { Patient } from "../models/patient.models.js";
 import { Subscription } from "../models/subscription.models.js";
 import { Admin } from "../models/admin.models.js";
 import { Queue } from "../models/queue.models.js";
-import { Counter } from "../models/counter.models.js";
 
 import { generateDoctorId } from "../utils/id's/doctor.js";
 import { generatePatientId } from "../utils/id's/Patient.js";
@@ -184,15 +182,23 @@ const registerDoctor = async (req, res, next) => {
 
     // Normalize values
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim();
     const normalizedLicenseNumber = licenseNumber.trim();
 
-    // Email already exists
+    // Email or phone already exists — one query, then report which
+    // field actually collided (same pattern as registerPatient).
     const existedUser = await User.findOne({
-      email: normalizedEmail,
+      $or: [{ email: normalizedEmail }, { phone: normalizedPhone }],
     });
 
     if (existedUser) {
-      throw new ApiError(409, "Email already exists");
+      if (existedUser.email === normalizedEmail) {
+        throw new ApiError(409, "Email already exists");
+      }
+
+      if (existedUser.phone === normalizedPhone) {
+        throw new ApiError(409, "Phone number already exists");
+      }
     }
 
     // License number already exists
@@ -214,7 +220,7 @@ const registerDoctor = async (req, res, next) => {
             fullname: finalFullname,
             email: normalizedEmail,
             password,
-            phone,
+            phone: normalizedPhone,
             role: "doctor",
           },
         ],

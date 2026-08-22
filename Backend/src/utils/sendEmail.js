@@ -1,15 +1,10 @@
 import nodemailer from "nodemailer";
 
 export async function sendEmail({ to, subject, html }) {
-  console.log("=== sendEmail called ===");
-  console.log("GMAIL_USER:", process.env.GMAIL_USER);
-console.log("APP_PASSWORD length:", process.env.GMAIL_APP_PASSWORD?.length);
-  console.log("To:", to);
-
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
-      user: process.env.GMAIL_USER,       
+      user: process.env.GMAIL_USER,
       pass: process.env.GMAIL_APP_PASSWORD,
     },
   });
@@ -22,10 +17,16 @@ console.log("APP_PASSWORD length:", process.env.GMAIL_APP_PASSWORD?.length);
       html,
     });
 
-    console.log("Email sent:", data.messageId);
     return { success: true, data };
   } catch (err) {
     console.error("Email failed:", err.message);
-    return { success: false, error: err.message };
+    // Throw instead of returning a failure object — issueOtp() in
+    // Forgotpassword.controller.js awaits sendEmail() without
+    // checking a return value, so a swallowed failure here means
+    // forgotPassword/resendOtp would respond 200 "code sent" to the
+    // frontend even when no email actually went out.
+    throw new Error(
+      "Could not send the email. Please try again in a moment.",
+    );
   }
 }
