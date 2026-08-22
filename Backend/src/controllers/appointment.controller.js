@@ -9,6 +9,7 @@ import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 
 import { generateAppointmentId } from "../utils/id's/appointment.js";
+import { emitQueueLengthUpdated } from "../socket/socketEvents.js";
 
 const allowedTransitions = {
   waiting: ["in-progress", "cancelled"],

@@ -45,7 +45,7 @@
     notifications: [],
     reports: [], // patient's own "Report a Problem" submissions
   };
-// Returns ALL active appointments (waiting/in-progress), sorted so the
+  // Returns ALL active appointments (waiting/in-progress), sorted so the
   // most urgent one is first: in-progress beats waiting; among waiting
   // ones, whichever is closest to being served (fewest patients ahead)
   // comes first; ties broken by earlier appointment date.
@@ -64,12 +64,27 @@
   // (e.g. the Queue page, which shows one appointment's live position).
   const activeAppt = () => activeAppts()[0];
 
-
   function mapAppointment(a) {
     const doc = a.doctor || {};
     const docUser = doc.user || {};
     const dt = a.appointmentDate ? new Date(a.appointmentDate) : null;
     const q = a.queue;
+
+    // Local-calendar-day ISO string (YYYY-MM-DD), built from the SAME
+    // Date object used for display, using local getters (getFullYear/
+    // getMonth/getDate) — never UTC ones. This is computed once here
+    // and used directly for date-filter comparisons in
+    // renderAppointments(), instead of the old approach of re-parsing
+    // the human-readable display string and calling .toISOString()
+    // (which returns the UTC calendar day, not the local one — for
+    // any timezone ahead of UTC, like Pakistan/UTC+5, that silently
+    // shifts the date back by a day and breaks the date filter).
+    const dateISO = dt
+      ? `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
+          dt.getDate(),
+        ).padStart(2, "0")}`
+      : "";
+
     return {
       _id: a._id,
       id: a.appointmentId || a._id,
@@ -89,9 +104,7 @@
             day: "numeric",
           })
         : "—",
-      time: dt
-        ? dt.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
-        : "—",
+      dateISO,
       fee: doc.consultationFee || 0,
       token: a.tokenNumber,
       status: a.status,
@@ -121,12 +134,6 @@
 
   /* ---------------- LOADERS ---------------- */
   async function loadUser() {
-    // GET /patient/me returns the User doc AND the Patient-only
-    // fields together, under `data.profile`. One request, not two —
-    // the previous second fetch to /patient/profile with
-    // method:"PATCH" and no body was never a valid "read" call;
-    // it was hitting updatePatientProfile with an empty body and
-    // getting a 400 back every time. Removed entirely.
     let userRes;
     try {
       userRes = await fetch(API_BASE + "/patient/me", {
@@ -161,8 +168,6 @@
     STATE.user.email = user.email || "";
     STATE.user.phone = user.phone || "";
 
-    // Patient-only fields arrive nested under `profile` in this
-    // same response (from getCurrentUser's { ...user, profile }).
     applyPatientProfile(user.profile);
   }
 
@@ -178,10 +183,6 @@
           day: "numeric",
         })
       : STATE.user.dob;
-    // updatePatientProfile's response (from the edit form, below)
-    // nests a populated `user` object; getCurrentUser's `profile`
-    // does not. These no-op harmlessly when absent, so this
-    // function works for both response shapes.
     if (patient.user?.fullname) STATE.user.fullname = patient.user.fullname;
     if (patient.user?.email) STATE.user.email = patient.user.email;
     if (patient.user?.phone) STATE.user.phone = patient.user.phone;
@@ -255,8 +256,6 @@
   }
 
   async function loadMyReports() {
-    // GET /support/report/me — the patient's own "Report a Problem"
-    // submissions, each with a status of open / reviewed / resolved.
     try {
       let res;
       try {
@@ -315,8 +314,6 @@
     if (name === "queue") renderQueue();
     if (name === "profile") renderProfile();
     if (name === "help") {
-      // Refresh on every visit so status changes (open -> reviewed ->
-      // resolved) made by staff show up without a full page reload.
       renderMyReports();
       loadMyReports().then(renderMyReports);
     }
@@ -336,9 +333,9 @@
   });
 
   /* ---------------- OVERVIEW ---------------- */
-function renderOverview() {
+  function renderOverview() {
     const u = STATE.user;
-$("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
+    $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     const actives = activeAppts();
     const wrap = $("#upcomingWrap");
 
@@ -349,7 +346,11 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       <button class="btn btn-primary" data-book>Book New Appointment</button></div>`;
     } else {
       const [primary, ...others] = actives;
-      const pq = primary.queue || { nowServing: null, patientsAhead: 0, wait: 0 };
+      const pq = primary.queue || {
+        nowServing: null,
+        patientsAhead: 0,
+        wait: 0,
+      };
 
       const primaryCard = `
     <div class="section-label">Current appointment</div>
@@ -359,7 +360,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
           <div class="clinic-eyebrow">${primary.clinic}</div>
           <h2>${primary.doctor}</h2>
           <div class="spec">${primary.spec}</div>
-          <div class="meta">${primary.date} · ${primary.time} · Patient: <b>${primary.patient}</b></div>
+          <div class="meta">${primary.date} · Patient: <b>${primary.patient}</b></div>
         </div>
         <span class="pill ${primary.status}"><span class="d"></span> ${cap(primary.status)}</span>
       </div>
@@ -395,7 +396,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
           <div class="clinic-eyebrow">${o.clinic}</div>
           <h2 style="font-size:20px">${o.doctor}</h2>
           <div class="spec">${o.spec}</div>
-          <div class="meta">${o.date} · ${o.time} · Patient: <b>${o.patient}</b></div>
+          <div class="meta">${o.date} · Patient: <b>${o.patient}</b></div>
         </div>
         <span class="pill ${o.status}"><span class="d"></span> ${cap(o.status)}</span>
       </div>
@@ -436,7 +437,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
           <div>
             <div class="dn">${a.doctor}</div>
             <div class="dsub">
-              ${a.patient} · ${a.date} · ${a.time}
+              ${a.patient} · ${a.date}
             </div>
           </div>
 
@@ -454,18 +455,9 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
   function chipTrack(a) {
     const q = a.queue || { nowServing: null, patientsAhead: 0 };
     const you = a.token;
-
-    // "Now serving" of 0 (or missing) means nobody has been called yet —
-    // the clinic hasn't started, or the queue simply hasn't moved.
-    // Token numbering starts at 1, so 0 is never a REAL token — never
-    // synthesize or render it as one (this was the source of the
-    // "0 -> 1" bug: a.token - patientsAhead - 1 evaluates to 0 for the
-    // first patient before anyone's been served).
     const serving = q.nowServing && q.nowServing > 0 ? q.nowServing : null;
 
     if (serving === null) {
-      // Nothing real to anchor a "flow" against yet — just show the
-      // patient's own token.
       return `<span class="chip you">YOU #${you}</span>`;
     }
 
@@ -480,11 +472,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     return out.join("");
   }
 
-  // Human-readable one-liner describing where this appointment stands
-  // right now. Rules:
-  //  - never say "0 -> 1"; token numbering starts at 1
-  //  - never show "Now Serving: 0" — 0 means "nobody yet", shown as "—"
-  //  - distinguish "clinic closed" from "your position in the queue"
   function queueStatusLine(a) {
     const q = a.queue || {
       nowServing: null,
@@ -523,7 +510,11 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     else if (apptFilter === "cancelled")
       list = list.filter((a) => a.status === "cancelled");
     if (apptDateFilter)
-      list = list.filter((a) => toISO(a.date) === apptDateFilter);
+      // Compare against dateISO computed once in mapAppointment() from
+      // local date parts — NOT the old toISO(a.date), which re-parsed
+      // the human-readable display string and called .toISOString(),
+      // silently shifting the date by a day in timezones ahead of UTC.
+      list = list.filter((a) => a.dateISO === apptDateFilter);
 
     const box = $("#apptList");
     if (!list.length) {
@@ -554,7 +545,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       <div class="appt-meta">
         <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-5.2-7-11a7 7 0 0 1 14 0c0 5.8-7 11-7 11Z"/><circle cx="12" cy="10" r="2.5"/></svg> ${a.clinic}</span>
         <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M3 9h18M8 2v4M16 2v4" stroke-linecap="round"/></svg> ${a.date}</span>
-        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2" stroke-linecap="round"/></svg> ${a.time}</span>
       </div>${metrics}
     </div>`;
       })
@@ -622,13 +612,12 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       msgEl.style.display = msg ? "block" : "none";
     }
 
-    // "Now serving" of 0/missing means nobody's been called yet — never
-    // synthesize or render a "#0" row (see chipTrack for the same fix).
     const serving = q.nowServing && q.nowServing > 0 ? q.nowServing : null;
     let rows = "";
     if (serving === null) {
       const label = a.token === 1 ? "You're first in line" : "Waiting";
-      const right = q.clinicStatus === "active" ? "In queue" : "Clinic not open yet";
+      const right =
+        q.clinicStatus === "active" ? "In queue" : "Clinic not open yet";
       rows = `<div class="qp-row you">
       <span class="qp-tok you">#${a.token}</span>
       <span class="qp-label">${label}</span>
@@ -882,13 +871,13 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
 
   /* ---------------- BOOKING WIZARD ---------------- */
   const book = {
-  step: 1,
-  forWhom: "self",
-  patientName: "",
-  patientPhone: "",
-  doctor: null,
-  date: "",
-};
+    step: 1,
+    forWhom: "self",
+    patientName: "",
+    patientPhone: "",
+    doctor: null,
+    date: "",
+  };
 
   async function loadDoctors() {
     try {
@@ -1234,6 +1223,7 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
           type="date"
           id="wDate"
           value="${book.date}"
+          min="${todayISO()}"
         />
 
       </div>
@@ -1274,7 +1264,21 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       const dateInput = $("#wDate");
 
       dateInput.onchange = (e) => {
-        book.date = e.target.value;
+        const val = e.target.value;
+
+        if (val && val < todayISO()) {
+          toast(
+            "Invalid date",
+            "You can't book an appointment in the past.",
+            true,
+          );
+          e.target.value = "";
+          book.date = "";
+          $("#wNext").disabled = true;
+          return;
+        }
+
+        book.date = val;
 
         $("#wNext").disabled = !book.date;
       };
@@ -1287,6 +1291,14 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       $("#wNext").onclick = () => {
         if (!book.date) {
           return toast("Select an appointment date.", "", true);
+        }
+
+        if (book.date < todayISO()) {
+          return toast(
+            "Invalid date",
+            "You can't book an appointment in the past.",
+            true,
+          );
         }
 
         book.step = 4;
@@ -1434,6 +1446,14 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       return toast("Please select an appointment date.", "", true);
     }
 
+    if (book.date < todayISO()) {
+      return toast(
+        "Invalid date",
+        "You can't book an appointment in the past.",
+        true,
+      );
+    }
+
     if (!book.patientName.trim()) {
       return toast("Patient name is required.", "", true);
     }
@@ -1557,7 +1577,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       <div class="so-row"><span class="k">Clinic</span><span class="v">${a.clinic}</span></div>
       <div class="so-row"><span class="k">Clinic address</span><span class="v">${a.address}</span></div>
       <div class="so-row"><span class="k">Appointment date</span><span class="v">${a.date}</span></div>
-      <div class="so-row"><span class="k">Appointment time</span><span class="v">${a.time}</span></div>
       <div class="so-row"><span class="k">Consultation fee</span><span class="v">PKR ${a.fee.toLocaleString()}</span></div>
     </div>
     ${live}
@@ -1792,7 +1811,9 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       form.onsubmit = async (e) => {
         e.preventDefault();
 
-        const otp = $$(".otp-box", form).map((b) => b.value).join("");
+        const otp = $$(".otp-box", form)
+          .map((b) => b.value)
+          .join("");
         if (otp.length !== 6) return toast("Enter all 6 digits.", "", true);
 
         const btn = $("#ecVerify");
@@ -1869,20 +1890,12 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
   });
   document.addEventListener("click", () => closeMenus());
 
-  // stopPropagation keeps clicks *inside* the dropdown from bubbling to
-  // the document listener above (which would instantly close the menu).
-  // But #userMenu also contains data-view links (Profile, Help & Support),
-  // and the ROUTER itself is a document-level delegated listener — so
-  // stopPropagation was silently swallowing those nav clicks too, and
-  // showView() never ran. Fix: handle data-view links explicitly here
-  // (navigate + close the dropdown) before stopping propagation for
-  // everything else.
   $("#notifMenu").addEventListener("click", (e) => e.stopPropagation());
   $("#userMenu").addEventListener("click", (e) => {
     const link = e.target.closest("[data-view]");
     if (link) {
       e.preventDefault();
-      showView(link.dataset.view); // showView() already calls closeMenus()
+      showView(link.dataset.view);
       return;
     }
     e.stopPropagation();
@@ -1950,9 +1963,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
   }
 
   /* ---------------- MY REPORTS ---------------- */
-  // Renders the patient's own "Report a Problem" submissions with a
-  // status badge: open -> Pending, reviewed -> Under Review,
-  // resolved -> Resolved. Backed by GET /support/report/me.
   const REPORT_STATUS_STYLE = {
     open: { label: "Pending", bg: "#FEF3C7", fg: "#92400E" },
     reviewed: { label: "Under Review", bg: "#DBEAFE", fg: "#1D4ED8" },
@@ -1963,8 +1973,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     const box = $("#myReportsList");
     if (!box) return;
 
-    // Optional count badge — only touched if the markup for it exists,
-    // so this is safe whether or not #myReportsCount was added to the HTML.
     const countEl = $("#myReportsCount");
     if (countEl) countEl.textContent = STATE.reports.length;
 
@@ -2065,9 +2073,16 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       day: "numeric",
     });
   }
-  function toISO(nice) {
-    const d = new Date(nice);
-    return isNaN(d) ? "" : d.toISOString().slice(0, 10);
+  // Today's date as YYYY-MM-DD in LOCAL time (same local-getters
+  // approach as mapAppointment's dateISO) — used to block booking an
+  // appointment in the past, both as the date input's min= attribute
+  // and as a JS-side re-check, since min= alone doesn't stop every
+  // browser from accepting a typed/pasted past date.
+  function todayISO() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate(),
+    ).padStart(2, "0")}`;
   }
   function syncUserChrome() {
     const u = STATE.user;
@@ -2075,8 +2090,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     $("#ddName").textContent = u.fullname;
     $("#ddEmail").textContent = u.email;
   }
-  // message is user-entered free text, so it must be escaped before
-  // being injected as HTML anywhere (report list, etc.)
   function escapeHtml(str) {
     const d = document.createElement("div");
     d.textContent = str || "";
@@ -2084,34 +2097,9 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
   }
 
   /* ---------------- SOCKET.IO — live queue updates ---------------- */
-  // Requires the socket.io client library loaded on the page BEFORE
-  // this script, e.g.:
-  //   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  // If it's missing, the dashboard still works — it just won't get
-  // push updates and relies on the existing refetch-after-action
-  // calls (booking, cancelling) instead.
-  //
-  // Server contract (socket/socket.js + socket/socketEvents.js):
-  //   client -> server : "joinQueue"  (doctorId)
-  //   client -> server : "leaveQueue" (doctorId)
-  //   server -> room queue_<doctorId>:
-  //     "clinicStarted" { clinicStatus }
-  //     "clinicClosed"  { clinicStatus }
-  //     "queueUpdated"  { nowServing, lastToken, estimatedTimePerPatient, delayInMinutes }
-  //     "delayUpdated"  { delayInMinutes, nowServing, estimatedTimePerPatient }
   let socket = null;
-
-  // Doctor rooms we believe the CURRENT socket connection is in.
-  // Room membership lives server-side per socket id, not per user —
-  // a reconnect gets a brand-new socket id and loses all prior
-  // membership even though this Set would otherwise still look
-  // "in sync". Reset it to empty on every fresh "connect".
   let joinedRooms = new Set();
 
-  // Recomputes which doctors' queue rooms this patient should be
-  // watching right now (one per doctor with an active — waiting /
-  // in-progress — appointment) and joins/leaves rooms to match.
-  // Call this any time STATE.appointments changes.
   function syncQueueRooms() {
     if (!socket || !socket.connected) return;
 
@@ -2134,14 +2122,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
     joinedRooms = wanted;
   }
 
-  // A queue push event only carries raw counters (nowServing,
-  // lastToken, delay, etc.) — it doesn't tell us per-appointment
-  // patientsAhead/wait or whether OUR token just flipped to
-  // "completed". That logic already lives server-side in
-  // GET /appointments/patient. So on every live event we just
-  // refetch appointments (source of truth) and re-render whatever's
-  // currently on screen — the same pattern already used after
-  // booking/cancelling.
   async function refreshLiveViews() {
     try {
       await loadAppointments();
@@ -2165,9 +2145,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
 
     socket = io(API_BASE, { withCredentials: true });
 
-    // Fires on first connect AND every reconnect — rejoin from scratch
-    // each time since server-side room membership doesn't survive a
-    // dropped connection.
     socket.on("connect", () => {
       joinedRooms = new Set();
       syncQueueRooms();
@@ -2283,8 +2260,6 @@ $("#greeting").textContent = `${greetWord()}, ${u.fullname || ""}`;
       $("#reportOverlay").classList.remove("open");
       toast("Report submitted", "Thanks — our team will look into it.");
 
-      // Refresh the "My reports" list right away so the new
-      // submission (status: Pending) shows up without navigating away.
       await loadMyReports();
       renderMyReports();
     } catch (err) {

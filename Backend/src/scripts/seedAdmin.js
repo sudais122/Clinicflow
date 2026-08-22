@@ -1,8 +1,7 @@
-import mongoose from "mongoose";
-import dotenv from "dotenv";
-import { Admin } from "../models/admin.models.js";
+import "../loadEnv.js";
 
-dotenv.config();
+import mongoose from "mongoose";
+import { Admin } from "../models/admin.models.js";
 
 const run = async () => {
   await mongoose.connect(process.env.MONGODB_URI);

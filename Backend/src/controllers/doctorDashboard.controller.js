@@ -57,17 +57,21 @@ const getDoctorDashboard = async (req, res, next) => {
         200,
         {
           doctor: {
+            _id:              doctor._id,              
             doctorId:        doctor.doctorId,
             fullname:        doctor.user?.fullname,
-            email:           doctor.user?.email,        // ← added
+            email:           doctor.user?.email,
             clinicName:      doctor.clinicName,
-            clinicAddress:   doctor.clinicAddress,      // ← added
+            clinicAddress:   doctor.clinicAddress,
             specialization:  doctor.specialization,
-            licenseNumber:   doctor.licenseNumber,      // ← added
-            experience:      doctor.experience,         // ← added
-            consultationFee: doctor.consultationFee,    // ← added
-            bio:             doctor.bio,                // ← added
-            clinicStatus:    doctor.clinicStatus,       // ← added
+            licenseNumber:   doctor.licenseNumber,
+            experience:      doctor.experience,
+            consultationFee: doctor.consultationFee,
+            bio:             doctor.bio,
+            clinicStatus:    doctor.clinicStatus,
+            status:           doctor.status,             
+            isSuspended:      doctor.isSuspended,        
+            suspensionReason: doctor.suspensionReason,   
           },
           selectedDate,
           clinicStatus:            queue?.clinicStatus ?? "closed",
