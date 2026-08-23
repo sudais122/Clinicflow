@@ -18,6 +18,38 @@ const allowedTransitions = {
   cancelled: [],
 };
 
+// Pakistan Standard Time = UTC+5, no DST. Hardcoded rather than
+// relying on the server process's local timezone — the frontend
+// books appointments using the BROWSER's local midnight (assumed
+// Pakistan) converted to UTC, so the backend needs to agree on that
+// same fixed offset unconditionally, regardless of where/how the
+// server itself is hosted or configured.
+//
+// TODO: pull this into a shared utils/date.js and import it here and
+// in doctorDashboard.controller.js instead of keeping two copies —
+// they must stay in sync manually right now.
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+// "YYYY-MM-DD" -> { startOfDay, endOfDay } as UTC instants marking
+// midnight-to-midnight in Pakistan time for that calendar date.
+function pktDayBoundsUTC(dateStr) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) return null;
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+
+  const startOfDay = new Date(
+    Date.UTC(year, month - 1, day, 0, 0, 0, 0) - PKT_OFFSET_MS,
+  );
+  if (isNaN(startOfDay.getTime())) return null;
+
+  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
+
+  return { startOfDay, endOfDay };
+}
+
 // 1. Book Appointment
 const bookAppointment = async (req, res, next) => {
   try {
@@ -280,7 +312,7 @@ const bookAppointment = async (req, res, next) => {
   }
 };
 
-// 2. Get Patient Appointments  
+// 2. Get Patient Appointments
 const getPatientAppointments = async (req, res, next) => {
   try {
     // Resolve the Patient profile from the logged-in user (JWT -> req.user).
@@ -315,7 +347,6 @@ const getPatientAppointments = async (req, res, next) => {
       queueByDoctor[q.doctor.toString()] = q;
     }
 
-    // Attach live queue info only to active appointments; past ones don't need it.
     const data = appointments.map((appt) => {
       const isActive =
         appt.status === "waiting" || appt.status === "in-progress";
@@ -352,7 +383,7 @@ const getPatientAppointments = async (req, res, next) => {
   }
 };
 
-// 3. Get Doctor Appointments  (doctor only)
+// 3. Get Doctor Appointments  
 const getDoctorAppointments = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
@@ -360,7 +391,21 @@ const getDoctorAppointments = async (req, res, next) => {
       throw new ApiError(404, "Doctor profile not found");
     }
 
-    const appointments = await Appointment.find({ doctor: doctor._id })
+    const { date } = req.query;
+    if (!date) {
+      throw new ApiError(400, "Date is required");
+    }
+
+    const bounds = pktDayBoundsUTC(date);
+    if (!bounds) {
+      throw new ApiError(400, "Invalid date — expected YYYY-MM-DD");
+    }
+    const { startOfDay, endOfDay } = bounds;
+
+    const appointments = await Appointment.find({
+      doctor: doctor._id,
+      appointmentDate: { $gte: startOfDay, $lte: endOfDay },
+    })
       .populate({
         path: "patient",
         select: "gender bloodGroup user",
@@ -376,7 +421,7 @@ const getDoctorAppointments = async (req, res, next) => {
   }
 };
 
-// 4. Update Appointment Status  
+// 4. Update Appointment Status
 const updateAppointmentStatus = async (req, res, next) => {
   try {
     const { appointmentId } = req.params;
@@ -425,7 +470,7 @@ const updateAppointmentStatus = async (req, res, next) => {
   }
 };
 
-// 5. Cancel Appointment  
+// 5. Cancel Appointment
 const cancelAppointment = async (req, res, next) => {
   try {
     const { appointmentId } = req.params;

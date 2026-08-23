@@ -2,11 +2,13 @@ import mongoose from "mongoose";
 
 import { User } from "../models/user.models.js";
 import { Doctor } from "../models/doctor.models.js";
+import { bookAppointment } from "./appointment.controller.js";
 
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
+import { Appointment } from "../models/appointment.models.js";
 
-// PATCH /doctor/profile   
+// PATCH /doctor/profile
 const updateDoctorProfile = async (req, res, next) => {
   try {
     const {
@@ -35,10 +37,16 @@ const updateDoctorProfile = async (req, res, next) => {
 
     if (fullname !== undefined) {
       if (fullname.length < 3 || fullname.length > 50) {
-        throw new ApiError(400, "Full name must be between 3 and 50 characters");
+        throw new ApiError(
+          400,
+          "Full name must be between 3 and 50 characters",
+        );
       }
       if (!/^[A-Za-z\s.]+$/.test(fullname)) {
-        throw new ApiError(400, "Full name can contain only letters and spaces");
+        throw new ApiError(
+          400,
+          "Full name can contain only letters and spaces",
+        );
       }
     }
     if (phone !== undefined) {
@@ -46,24 +54,39 @@ const updateDoctorProfile = async (req, res, next) => {
         throw new ApiError(400, "Please enter a valid phone number");
       }
     }
-    if (clinicName !== undefined && (clinicName.length < 3 || clinicName.length > 100)) {
-      throw new ApiError(400, "Clinic name must be between 3 and 100 characters");
+    if (
+      clinicName !== undefined &&
+      (clinicName.length < 3 || clinicName.length > 100)
+    ) {
+      throw new ApiError(
+        400,
+        "Clinic name must be between 3 and 100 characters",
+      );
     }
     if (
       clinicAddress !== undefined &&
       (clinicAddress.length < 10 || clinicAddress.length > 200)
     ) {
-      throw new ApiError(400, "Clinic address must be between 10 and 200 characters");
+      throw new ApiError(
+        400,
+        "Clinic address must be between 10 and 200 characters",
+      );
     }
     if (
       specialization !== undefined &&
       (specialization.length < 3 || specialization.length > 50)
     ) {
-      throw new ApiError(400, "Specialization must be between 3 and 50 characters");
+      throw new ApiError(
+        400,
+        "Specialization must be between 3 and 50 characters",
+      );
     }
     if (consultationFee !== undefined) {
       if (isNaN(consultationFee) || Number(consultationFee) <= 0) {
-        throw new ApiError(400, "Consultation fee must be a number greater than 0");
+        throw new ApiError(
+          400,
+          "Consultation fee must be a number greater than 0",
+        );
       }
     }
     if (bio !== undefined && bio.length > 1000) {
@@ -71,7 +94,10 @@ const updateDoctorProfile = async (req, res, next) => {
     }
     if (experience !== undefined) {
       if (isNaN(experience) || Number(experience) < 0) {
-        throw new ApiError(400, "Experience must be a number of 0 or more years");
+        throw new ApiError(
+          400,
+          "Experience must be a number of 0 or more years",
+        );
       }
     }
 
@@ -98,13 +124,16 @@ const updateDoctorProfile = async (req, res, next) => {
 
       const doctorUpdates = {};
       if (clinicName !== undefined) doctorUpdates.clinicName = clinicName;
-      if (clinicAddress !== undefined) doctorUpdates.clinicAddress = clinicAddress;
-      if (specialization !== undefined) doctorUpdates.specialization = specialization;
+      if (clinicAddress !== undefined)
+        doctorUpdates.clinicAddress = clinicAddress;
+      if (specialization !== undefined)
+        doctorUpdates.specialization = specialization;
       if (consultationFee !== undefined) {
         doctorUpdates.consultationFee = Number(consultationFee);
       }
       if (bio !== undefined) doctorUpdates.bio = bio;
-      if (experience !== undefined) doctorUpdates.experience = Number(experience);
+      if (experience !== undefined)
+        doctorUpdates.experience = Number(experience);
 
       if (Object.keys(doctorUpdates).length > 0) {
         await Doctor.findByIdAndUpdate(
@@ -119,7 +148,10 @@ const updateDoctorProfile = async (req, res, next) => {
       await session.abortTransaction();
       throw error instanceof ApiError
         ? error
-        : new ApiError(500, error?.message || "Failed to update doctor profile");
+        : new ApiError(
+            500,
+            error?.message || "Failed to update doctor profile",
+          );
     } finally {
       session.endSession();
     }
@@ -134,14 +166,18 @@ const updateDoctorProfile = async (req, res, next) => {
     return res
       .status(200)
       .json(
-        new ApiResponse(200, updatedDoctor, "Doctor profile updated successfully"),
+        new ApiResponse(
+          200,
+          updatedDoctor,
+          "Doctor profile updated successfully",
+        ),
       );
   } catch (error) {
     next(error);
   }
 };
 
-// GET /doctor/me   
+// GET /doctor/me
 const getCurrentDoctorProfile = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id })
@@ -167,7 +203,7 @@ const getAvailableDoctors = async (req, res, next) => {
   try {
     const doctors = await Doctor.find()
       .select(
-        "doctorId specialization clinicName clinicAddress consultationFee user"
+        "doctorId specialization clinicName clinicAddress consultationFee user",
       )
       .populate({
         path: "user",
@@ -185,16 +221,71 @@ const getAvailableDoctors = async (req, res, next) => {
       consultationFee: doctor.consultationFee,
     }));
 
-    return res.status(200).json(
-      new ApiResponse(
-        200,
-        formattedDoctors,
-        "Doctors fetched successfully"
-      )
-    );
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, formattedDoctors, "Doctors fetched successfully"),
+      );
   } catch (error) {
     next(error);
   }
 };
 
-export { updateDoctorProfile, getAvailableDoctors, getCurrentDoctorProfile };
+// 3. Get Doctor Appointments
+const getDoctorAppointments = async (req, res, next) => {
+  try {
+    const doctor = await Doctor.findOne({ user: req.user._id });
+
+    if (!doctor) {
+      throw new ApiError(404, "Doctor profile not found");
+    }
+
+    const { date } = req.query;
+
+    // Date is required
+    if (!date) {
+      throw new ApiError(400, "Date is required");
+    }
+
+    const bounds = pktDayBoundsUTC(date);
+    if (!bounds) {
+      throw new ApiError(400, "Invalid date — expected YYYY-MM-DD");
+    }
+    const { startOfDay, endOfDay } = bounds;
+
+    const appointments = await Appointment.find({
+      doctor: doctor._id,
+      appointmentDate: {
+        $gte: startOfDay,
+        $lte: endOfDay,
+      },
+    })
+      .populate({
+        path: "patient",
+        select: "gender bloodGroup user",
+        populate: {
+          path: "user",
+          select: "fullname email",
+        },
+      })
+      .sort({ tokenNumber: 1 });
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(
+          200,
+          appointments,
+          "Doctor appointments fetched"
+        )
+      );
+  } catch (error) {
+    next(error);
+  }
+};
+export {
+  updateDoctorProfile,
+  getAvailableDoctors,
+  getCurrentDoctorProfile,
+  getDoctorAppointments,
+};
