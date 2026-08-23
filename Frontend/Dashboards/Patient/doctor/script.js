@@ -52,6 +52,20 @@
    action (the "Close Clinic" button -> toggleClinic() -> PATCH
    /queue/end), independent of how many patients were served.
    See serveNext() / renderQueue() below.
+
+   DATE SCOPING (fixed):
+   loadAppointments() previously never received the selected date at
+   all — loadAll() called it with zero arguments, and even if it had,
+   GET /appointments/doctor never read a date query param on the
+   backend. Every appointment the doctor ever had was fetched
+   regardless of which day was selected, so navigating days (Previous
+   Day / Next Day / the date picker) never actually changed what
+   showed up in Overview's "Today's Appointments", the Queue page, or
+   the Appointments table. Both are fixed now: loadAll() resolves the
+   selected date via loadDashboard() first, then passes THAT exact
+   date into loadAppointments(), which appends it as ?date=... — and
+   the backend controller needs the matching fix (see
+   getDoctorAppointments) to actually filter by it.
    ============================================================ */
 
 const CFG = window.CLINICFLOW_CONFIG || {};
@@ -100,16 +114,12 @@ async function apiCall(url, { method = "GET", body } = {}) {
     err.payload = payload;
     throw err;
   }
-  return payload; // ApiResponse shape: { statusCode, data, message, success }
+  return payload; 
 }
 const apiGet = (url) => apiCall(url, { method: "GET" });
 const apiPatch = (url, body) => apiCall(url, { method: "PATCH", body });
 const apiPost = (url, body) => apiCall(url, { method: "POST", body });
 
-/* ============================================================
-   LIVE STATE — replaces the old hard-coded mock objects.
-   Populated by loadAll() on init and refreshed after every action.
-   ============================================================ */
 const DOCTOR = {
   _id: "",
   name: "",
@@ -123,9 +133,6 @@ const DOCTOR = {
   bio: "",
   experience: 0,
   licenseNumber: "",
-  // Account gating — from doctor.model.js. status defaults to
-  // "pending" until an admin approves it; isSuspended is a separate
-  // flag independent of status (see renderAccountBlocked below).
   status: "pending",
   isSuspended: false,
   suspensionReason: "",
@@ -257,8 +264,16 @@ function applyQueueDoc(q) {
   STATE.delay = q.delayInMinutes ?? STATE.delay;
 }
 
-async function loadAppointments() {
-  const res = await apiGet(ENDPOINTS.appointmentsDoctor());
+// dateStr is now REQUIRED-in-practice: loadAll() always passes
+// STATE.selectedDate (resolved by loadDashboard) so this stays in
+// sync with the stats cards. Left optional here only so this
+// function can still be called standalone (e.g. after cancelling an
+// appointment) without having to re-derive the date at each call site.
+async function loadAppointments(dateStr) {
+  const url = dateStr
+    ? `${ENDPOINTS.appointmentsDoctor()}?date=${encodeURIComponent(dateStr)}`
+    : ENDPOINTS.appointmentsDoctor();
+  const res = await apiGet(url);
   const list = res.data || [];
   STATE.appointments = list
     .map((a) => ({
@@ -283,7 +298,11 @@ async function loadAppointments() {
 
 async function loadAll(dateStr) {
   await loadDashboard(dateStr);
-  await Promise.all([loadQueueMe(), loadAppointments(), loadDoctorProfile()]);
+  await Promise.all([
+    loadQueueMe(),
+    loadAppointments(STATE.selectedDate),
+    loadDoctorProfile(),
+  ]);
 }
 
 /* ---------- ROUTER ---------- */
@@ -462,10 +481,7 @@ function renderSequence(el) {
   el.innerHTML = out;
 }
 
-/* ---------- CLINIC OPEN / CLOSE ----------
-   The ONLY two places clinicStatus is ever changed. Whether there
-   are patients waiting, in progress, or none at all has no bearing
-   on this — closing is always an explicit doctor action. */
+/* ---------- CLINIC OPEN / CLOSE ---------- */
 async function toggleClinic() {
   if (!STATE.clinicOpen) {
     try {
@@ -532,12 +548,6 @@ function renderQueue() {
   $("#svNextName").textContent = nx ? nameFor(nx) : "—";
 
   // ---- Serve/Complete button state -----------------------------
-  // Three independent facts decide what this button does:
-  //   1. is the clinic open at all?
-  //   2. is there a patient currently in-progress?
-  //   3. is there another patient waiting after them?
-  // None of these ever imply "close the clinic" — that stays a
-  // separate action the doctor takes with the Close Clinic button.
   const btn = $("#serveNextBtn");
   const current = apptFor(STATE.nowServing);
   const currentInProgress = current && current.status === "in-progress";
@@ -549,9 +559,6 @@ function renderQueue() {
     $("#serveNote").textContent =
       "Open the clinic to continue serving patients.";
   } else if (!nx && !currentInProgress) {
-    // Nobody in progress and nobody waiting — genuinely nothing left
-    // to serve right now. This is a normal, valid state; it does
-    // NOT mean the clinic should close.
     btn.disabled = true;
     btn.textContent = "All Patients Served";
     btn.onclick = null;
@@ -575,10 +582,7 @@ function renderQueue() {
   renderSequence($("#qcSeqList"));
 }
 
-/* Completes whichever patient is currently in-progress (if any),
-   then — only if someone is waiting — advances the queue to them.
-   Never touches clinicStatus. This is the single fix for
-   "appointment not moving from waiting/in-progress to completed". */
+/* Completes whichever patient is currently in-progress (if any),*/
 async function serveNext() {
   if (!STATE.clinicOpen) return;
 
@@ -595,10 +599,6 @@ async function serveNext() {
   btn.textContent = nx ? "Serving…" : "Completing…";
 
   try {
-    // Step 1 — explicitly mark the current appointment completed.
-    // This PATCH is the piece that was missing: queue/next alone
-    // was only ever moving the "now serving" pointer, never the
-    // appointment's own status field.
     if (current && current.status === "in-progress") {
       await apiPatch(ENDPOINTS.appointmentStatus(current.id), {
         status: "completed",
@@ -634,7 +634,7 @@ function resetQueue() {
         const res = await apiPatch(ENDPOINTS.queueReset());
         applyQueueDoc(res.data);
         toast("Queue reset", "The queue has been reset.");
-        await loadAppointments();
+        await loadAppointments(STATE.selectedDate);
         refreshAll();
       } catch (err) {
         toast("Couldn't reset the queue", err.message, true);
@@ -677,6 +677,8 @@ let apptFilter = "all",
 function renderAppointments() {
   $("#dateCur").textContent = STATE.clinicDayLabel;
   $("#apptDayLabel").textContent = STATE.clinicDayLabel;
+  const dateInput = $("#apptDate");
+  if (dateInput && STATE.selectedDate) dateInput.value = STATE.selectedDate;
   let list = appts();
   if (apptFilter !== "all") list = list.filter((a) => a.status === apptFilter);
   if (apptSearch) {
@@ -810,7 +812,7 @@ document.addEventListener("click", (e) => {
           status: "cancelled",
         });
         toast("Appointment cancelled", `Token #${tok} has been cancelled.`);
-        await loadAppointments();
+        await loadAppointments(STATE.selectedDate);
         refreshAll();
       } catch (err) {
         toast("Couldn't cancel the appointment", err.message, true);
@@ -1383,15 +1385,8 @@ const greetWord = () => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Token 0 means "nobody has been called yet" — the clinic hasn't
-// started, or the queue has been reset. Token numbering starts at 1,
-// so 0 is never a real token and must never be shown as "#0".
 const tokenLabel = (n) => (n && n > 0 ? "#" + n : "—");
 
-// Same idea, but for the "who's currently being served" name/label:
-// distinguish "nobody yet because the clinic is closed" from "nobody
-// yet because the clinic just opened and hasn't called anyone" —
-// rather than falling through to a bare "—" with no context.
 function nowServingName() {
   if (STATE.nowServing && STATE.nowServing > 0) {
     return nameFor(STATE.nowServing);
@@ -1444,7 +1439,7 @@ function initSocket() {
   });
   socket.on("queueLengthUpdated", async () => {
     try {
-      await loadAppointments();
+      await loadAppointments(STATE.selectedDate);
       refreshAll();
     } catch (err) {
       console.warn(
@@ -1472,14 +1467,7 @@ function initSocket() {
 }
 
 /* ---------- INIT ---------- */
-/* ---------- ACCOUNT GATING ----------
-   status/isSuspended come straight off the Doctor document (see
-   doctor.model.js). A doctor can log in successfully — the account
-   exists and the password is correct — but still not be allowed to
-   USE the dashboard yet. This runs once, right after loadAll(),
-   before any view is shown, and fully replaces the page rather than
-   rendering the dashboard underneath a banner: someone who isn't
-   approved shouldn't be able to see live patient/queue data at all. */
+/* ---------- ACCOUNT GATING ----------*/
 function renderAccountBlocked({ title, message, tone = "warn" }) {
   const iconPath =
     tone === "danger"
