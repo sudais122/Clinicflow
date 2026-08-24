@@ -61,13 +61,24 @@ const appointmentSchema = new mongoose.Schema(
       default: "waiting",
       index: true,
     },
+    consultationFee: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["unpaid", "paid"],
+      default: "unpaid",
+    },
+
+    paidAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
   },
 );
 
-export const Appointment = mongoose.model(
-  "Appointment",
-  appointmentSchema,
-);
+export const Appointment = mongoose.model("Appointment", appointmentSchema);

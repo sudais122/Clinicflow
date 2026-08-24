@@ -5,6 +5,7 @@ import {
   getDoctorAppointments,
   updateAppointmentStatus,
   cancelAppointment,
+  markAppointmentPaid,
 } from "../controllers/appointment.controller.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
 
@@ -19,5 +20,6 @@ router.patch("/:appointmentId/cancel", cancelAppointment);
 // Doctor-facing
 router.get("/doctor", getDoctorAppointments);
 router.patch("/:appointmentId/status", updateAppointmentStatus);
+router.patch("/:appointmentId/pay", markAppointmentPaid);
 
 export default router;

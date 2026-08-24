@@ -86,6 +86,8 @@ const ENDPOINTS = {
   queueMe: () => `${API_BASE}/queue/me`,
   appointmentsDoctor: () => `${API_BASE}/appointments/doctor`,
   appointmentStatus: (id) => `${API_BASE}/appointments/${id}/status`,
+  appointmentPay: (id) => `${API_BASE}/appointments/${id}/pay`,
+  revenue: (params) => `${API_BASE}/revenue?${new URLSearchParams(params).toString()}`,
   logout: () => `${API_BASE}/auth/logout`,
   emailChangeRequest: () => `${API_BASE}/auth/email/request`,
   emailChangeVerify: () => `${API_BASE}/auth/email/verify`,
@@ -114,12 +116,16 @@ async function apiCall(url, { method = "GET", body } = {}) {
     err.payload = payload;
     throw err;
   }
-  return payload; 
+  return payload; // ApiResponse shape: { statusCode, data, message, success }
 }
 const apiGet = (url) => apiCall(url, { method: "GET" });
 const apiPatch = (url, body) => apiCall(url, { method: "PATCH", body });
 const apiPost = (url, body) => apiCall(url, { method: "POST", body });
 
+/* ============================================================
+   LIVE STATE — replaces the old hard-coded mock objects.
+   Populated by loadAll() on init and refreshed after every action.
+   ============================================================ */
 const DOCTOR = {
   _id: "",
   name: "",
@@ -133,6 +139,9 @@ const DOCTOR = {
   bio: "",
   experience: 0,
   licenseNumber: "",
+  // Account gating — from doctor.model.js. status defaults to
+  // "pending" until an admin approves it; isSuspended is a separate
+  // flag independent of status (see renderAccountBlocked below).
   status: "pending",
   isSuspended: false,
   suspensionReason: "",
@@ -154,6 +163,16 @@ const STATE = {
     end: "—",
   },
   notifications: [],
+  revenue: {
+    range: "28", // "7" | "28" | "custom" — which button is active
+    from: "",     // only meaningful when range === "custom"
+    to: "",
+    totalRevenue: 0,
+    paidAppointments: 0,
+    averageConsultationFee: 0,
+    appointments: [],
+    loaded: false,
+  },
 };
 
 /* ---------- derived helpers over live STATE.appointments ---------- */
@@ -188,8 +207,16 @@ const waitingCount = () =>
 const appts = () => STATE.appointments; // kept for drop-in compatibility with render code
 
 /* LOADERS — pull real data from the backend*/
+// Explicit timeZone: "Asia/Karachi" on both formatters — without
+// this, these use the BROWSER's local timezone implicitly, which can
+// render a different calendar day than the one actually selected via
+// the PKT-based backend filter (see getDoctorDashboard /
+// getDoctorAppointments). Matches the backend's PKT_OFFSET_MS
+// assumption explicitly instead of hoping the browser happens to
+// agree.
 function formatLongDate(d) {
   return new Date(d).toLocaleDateString("en-US", {
+    timeZone: "Asia/Karachi",
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -198,10 +225,25 @@ function formatLongDate(d) {
 }
 function formatShortDate(d) {
   return new Date(d).toLocaleDateString("en-US", {
+    timeZone: "Asia/Karachi",
     year: "numeric",
     month: "long",
     day: "numeric",
   });
+}
+
+// Adds `delta` days to a "YYYY-MM-DD" string using pure UTC
+// arithmetic — Date.UTC()/getUTCDate()/setUTCDate() never consult the
+// browser's local timezone at all, so this is correct regardless of
+// what timezone the machine running the dashboard happens to be set
+// to. This is what datePrev/dateNext use below, replacing the old
+// `new Date(str); d.setDate(...); d.toISOString()` pattern, which
+// silently depended on the browser's LOCAL timezone matching PKT.
+function addDaysToISO(iso, delta) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
 }
 
 async function loadDashboard(dateStr) {
@@ -225,6 +267,11 @@ async function loadDashboard(dateStr) {
 
   STATE.clinicOpen = d.clinicStatus === "open";
   STATE.nowServing = d.currentServingToken ?? STATE.nowServing;
+  // This is the single source of truth for "which day is selected"
+  // across the whole dashboard — the backend resolves it (defaults
+  // to today if dateStr was undefined) and every other loader below
+  // uses THIS value, not the raw dateStr argument, so they can never
+  // drift apart from what the stats cards are showing.
   STATE.selectedDate = d.selectedDate;
   STATE.clinicDayLabel = formatLongDate(d.selectedDate);
 }
@@ -285,6 +332,9 @@ async function loadAppointments(dateStr) {
       date: formatShortDate(a.appointmentDate),
       clinic: DOCTOR.clinic,
       createdAt: formatShortDate(a.createdAt),
+      fee: a.consultationFee ?? 0,
+      paymentStatus: a.paymentStatus || "unpaid",
+      paidAt: a.paidAt || null,
     }))
     .sort((a, b) => a.token - b.token);
 
@@ -298,6 +348,10 @@ async function loadAppointments(dateStr) {
 
 async function loadAll(dateStr) {
   await loadDashboard(dateStr);
+  // Use STATE.selectedDate (the backend-resolved date), not the raw
+  // dateStr argument — this is what was silently missing before, and
+  // is why the appointments list/table never actually changed when
+  // navigating days.
   await Promise.all([
     loadQueueMe(),
     loadAppointments(STATE.selectedDate),
@@ -305,11 +359,37 @@ async function loadAll(dateStr) {
   ]);
 }
 
+// Loads STATE.revenue for whichever range is currently active.
+// Called lazily — only when the Revenue view is actually opened or a
+// range button is clicked — not as part of loadAll(), since revenue
+// isn't needed for the Overview/Queue/Appointments pages at all
+// (only a tiny summary card on Overview needs SOME numbers, and that
+// reuses this same loader on first render).
+async function loadRevenue() {
+  const r = STATE.revenue;
+  const params =
+    r.range === "custom"
+      ? { from: r.from, to: r.to }
+      : { range: r.range };
+
+  const res = await apiGet(ENDPOINTS.revenue(params));
+  const d = res.data;
+
+  r.totalRevenue = d.totalRevenue ?? 0;
+  r.paidAppointments = d.paidAppointments ?? 0;
+  r.averageConsultationFee = d.averageConsultationFee ?? 0;
+  r.from = d.from || r.from;
+  r.to = d.to || r.to;
+  r.appointments = d.appointments || [];
+  r.loaded = true;
+}
+
 /* ---------- ROUTER ---------- */
 const TITLES = {
   overview: "Overview",
   appointments: "Appointments",
   queue: "Queue",
+  revenue: "Revenue",
   profile: "Profile",
   subscription: "Subscription",
   help: "Help & Support",
@@ -328,6 +408,7 @@ function showView(name) {
   if (name === "overview") renderOverview();
   if (name === "appointments") renderAppointments();
   if (name === "queue") renderQueue();
+  if (name === "revenue") openRevenueView();
   if (name === "profile") renderProfile();
   if (name === "subscription") renderSubscription();
   window.scrollTo(0, 0);
@@ -403,9 +484,43 @@ function renderOverview() {
   renderLiveQueueCard($("#liveQueueCard"), { withActions: true });
   renderSequence($("#seqList"));
 
+  // Render immediately with whatever's cached (zeros on first ever
+  // load), then re-render once the real numbers come back — same
+  // optimistic-then-refresh pattern as the rest of this dashboard.
+  renderRevenueCard($("#revenueCard"));
+  if (!STATE.revenue.loaded) {
+    loadRevenue()
+      .then(() => renderRevenueCard($("#revenueCard")))
+      .catch((err) => console.warn("Revenue load failed:", err.message));
+  }
+
   $("#overviewAppts").innerHTML = `
     <div class="aph"><div><h2>Today's Appointments</h2><div class="sub">${STATE.clinicDayLabel}</div></div><span class="count-chip">${c.total}</span></div>
     ${apptTableHTML(appts())}`;
+}
+
+// Small summary card — total for the currently active range, paid
+// appointment count, and a button into the full Revenue page.
+function renderRevenueCard(el) {
+  if (!el) return;
+  const r = STATE.revenue;
+  const scopeLabel =
+    r.range === "custom" && r.from && r.to
+      ? `${r.from} – ${r.to}`
+      : `Last ${r.range} days`;
+
+  el.innerHTML = `
+    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted,#6b7180);text-transform:uppercase;margin-bottom:6px;">Revenue</div>
+        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:28px;font-weight:800;line-height:1;">PKR ${r.totalRevenue.toLocaleString()}</div>
+        <div style="font-size:13px;color:var(--muted,#6b7180);margin-top:6px;">
+          ${scopeLabel} · ${r.paidAppointments} paid appointment${r.paidAppointments === 1 ? "" : "s"}
+        </div>
+      </div>
+      <button class="btn btn-primary" id="viewRevenueBtn">View Revenue</button>
+    </div>`;
+  $("#viewRevenueBtn").onclick = () => showView("revenue");
 }
 
 function renderLiveQueueCard(el, { withActions }) {
@@ -481,7 +596,10 @@ function renderSequence(el) {
   el.innerHTML = out;
 }
 
-/* ---------- CLINIC OPEN / CLOSE ---------- */
+/* ---------- CLINIC OPEN / CLOSE ----------
+   The ONLY two places clinicStatus is ever changed. Whether there
+   are patients waiting, in progress, or none at all has no bearing
+   on this — closing is always an explicit doctor action. */
 async function toggleClinic() {
   if (!STATE.clinicOpen) {
     try {
@@ -548,6 +666,12 @@ function renderQueue() {
   $("#svNextName").textContent = nx ? nameFor(nx) : "—";
 
   // ---- Serve/Complete button state -----------------------------
+  // Three independent facts decide what this button does:
+  //   1. is the clinic open at all?
+  //   2. is there a patient currently in-progress?
+  //   3. is there another patient waiting after them?
+  // None of these ever imply "close the clinic" — that stays a
+  // separate action the doctor takes with the Close Clinic button.
   const btn = $("#serveNextBtn");
   const current = apptFor(STATE.nowServing);
   const currentInProgress = current && current.status === "in-progress";
@@ -559,6 +683,9 @@ function renderQueue() {
     $("#serveNote").textContent =
       "Open the clinic to continue serving patients.";
   } else if (!nx && !currentInProgress) {
+    // Nobody in progress and nobody waiting — genuinely nothing left
+    // to serve right now. This is a normal, valid state; it does
+    // NOT mean the clinic should close.
     btn.disabled = true;
     btn.textContent = "All Patients Served";
     btn.onclick = null;
@@ -582,7 +709,10 @@ function renderQueue() {
   renderSequence($("#qcSeqList"));
 }
 
-/* Completes whichever patient is currently in-progress (if any),*/
+/* Completes whichever patient is currently in-progress (if any),
+   then — only if someone is waiting — advances the queue to them.
+   Never touches clinicStatus. This is the single fix for
+   "appointment not moving from waiting/in-progress to completed". */
 async function serveNext() {
   if (!STATE.clinicOpen) return;
 
@@ -599,6 +729,10 @@ async function serveNext() {
   btn.textContent = nx ? "Serving…" : "Completing…";
 
   try {
+    // Step 1 — explicitly mark the current appointment completed.
+    // This PATCH is the piece that was missing: queue/next alone
+    // was only ever moving the "now serving" pointer, never the
+    // appointment's own status field.
     if (current && current.status === "in-progress") {
       await apiPatch(ENDPOINTS.appointmentStatus(current.id), {
         status: "completed",
@@ -677,6 +811,15 @@ let apptFilter = "all",
 function renderAppointments() {
   $("#dateCur").textContent = STATE.clinicDayLabel;
   $("#apptDayLabel").textContent = STATE.clinicDayLabel;
+  // Keep the date picker's own displayed value in sync with whatever
+  // is actually loaded. Without this, Previous Day/Next Day change
+  // STATE.selectedDate and reload the data correctly, but the
+  // <input type="date"> itself is never touched — it silently drifts
+  // out of sync. A native date input only fires "change" when its
+  // value actually differs from what's currently shown, so clicking
+  // a date in the picker that happens to match its own STALE
+  // displayed value does nothing at all, leaving the doctor stuck on
+  // whatever day the buttons had navigated to.
   const dateInput = $("#apptDate");
   if (dateInput && STATE.selectedDate) dateInput.value = STATE.selectedDate;
   let list = appts();
@@ -689,23 +832,55 @@ function renderAppointments() {
         (a.appointmentId || "").toLowerCase().includes(q),
     );
   }
+  // Reflects whichever scope is active: the "All" status tab shows
+  // the total for the currently selected clinic day; switching to
+  // Waiting/Completed/etc. narrows it to that status; the date
+  // picker/Previous/Next Day buttons change which day's appointments
+  // this total is drawn from in the first place (see loadAll fix).
   $("#apptCount").textContent = list.length;
   $("#apptTableWrap").innerHTML = list.length
     ? apptTableHTML(list)
     : `<div class="empty-state"><h3>No appointments for this date.</h3><p>Try a different date or filter.</p></div>`;
 }
 function apptTableHTML(list) {
-  return `<table class="appt-table"><thead><tr><th>Token</th><th>Patient</th><th>Appointment Date</th><th>Status</th><th>Action</th></tr></thead><tbody>
+  return `<table class="appt-table"><thead><tr><th>Token</th><th>Patient</th><th>Appointment Date</th><th>Status</th><th>Payment</th><th>Action</th></tr></thead><tbody>
     ${list
-      .map(
-        (a) => `<tr>
+      .map((a) => {
+        const paid = a.paymentStatus === "paid";
+        const paymentCell = paid
+          ? `<span class="pill completed"><span class="d"></span> Paid</span>`
+          : `<button class="btn btn-ghost" style="padding:6px 12px;font-size:12.5px;" data-markpaid="${a.id}" data-token="${a.token}">Mark Paid</button>`;
+        return `<tr>
       <td class="tk">#${a.token}</td><td class="pt">${a.patient}</td><td class="dt">${a.date}</td>
       <td><span class="pill ${a.status}"><span class="d"></span> ${label(a.status)}</span></td>
-      <td class="act"><button class="view-btn" data-details="${a.token}">View</button></td></tr>`,
-      )
+      <td>${paymentCell}</td>
+      <td class="act"><button class="view-btn" data-details="${a.token}">View</button></td></tr>`;
+      })
       .join("")}
   </tbody></table>`;
 }
+// Inline "Mark Paid" clicks from any appointments table (Overview's
+// "Today's Appointments" and the full Appointments page both render
+// via apptTableHTML, so one delegated listener covers both).
+document.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-markpaid]");
+  if (!btn) return;
+  const apptId = btn.dataset.markpaid;
+  const tok = btn.dataset.token;
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try {
+    await apiPatch(ENDPOINTS.appointmentPay(apptId));
+    toast("Marked as paid", `Token #${tok} — payment recorded.`);
+    await loadAppointments(STATE.selectedDate);
+    STATE.revenue.loaded = false; // revenue totals just changed
+    refreshAll();
+  } catch (err) {
+    toast("Couldn't mark as paid", err.message, true);
+    btn.disabled = false;
+    btn.textContent = "Mark Paid";
+  }
+});
 $("#apptTabs").addEventListener("click", (e) => {
   const t = e.target.closest(".tab");
   if (!t) return;
@@ -730,16 +905,14 @@ $("#apptDate").addEventListener("change", async (e) => {
   }
 });
 $("#datePrev").addEventListener("click", async () => {
-  const d = new Date(STATE.selectedDate || Date.now());
-  d.setDate(d.getDate() - 1);
-  await loadAll(d.toISOString().slice(0, 10));
+  const base = STATE.selectedDate || new Date().toISOString().slice(0, 10);
+  await loadAll(addDaysToISO(base, -1));
   refreshAll();
   toast("Previous day", "Loaded previous clinic day.");
 });
 $("#dateNext").addEventListener("click", async () => {
-  const d = new Date(STATE.selectedDate || Date.now());
-  d.setDate(d.getDate() + 1);
-  await loadAll(d.toISOString().slice(0, 10));
+  const base = STATE.selectedDate || new Date().toISOString().slice(0, 10);
+  await loadAll(addDaysToISO(base, 1));
   refreshAll();
   toast("Next day", "Loaded next clinic day.");
 });
@@ -771,6 +944,17 @@ function openDetails(tok) {
     ? `
     <button class="btn btn-danger-ghost" style="width:100%;margin-top:22px" data-cancelappt="${a.id}" data-token="${tok}">Cancel Appointment</button>`
     : "";
+  const paid = a.paymentStatus === "paid";
+  const payment = `
+    <div class="so-sec">Payment</div>
+    <div class="so-rows">
+      <div class="so-row"><span class="k">Consultation Fee</span><span class="v">PKR ${Number(a.fee || 0).toLocaleString()}</span></div>
+      <div class="so-row"><span class="k">Payment</span><span class="v">
+        <span class="pill ${paid ? "completed" : "waiting"}"><span class="d"></span> ${paid ? "Paid" : "Unpaid"}</span>
+      </span></div>
+      ${paid && a.paidAt ? `<div class="so-row"><span class="k">Paid At</span><span class="v">${new Date(a.paidAt).toLocaleString("en-US", { timeZone: "Asia/Karachi", hour: "numeric", minute: "2-digit", hour12: true })}</span></div>` : ""}
+    </div>
+    ${!paid ? `<button class="btn btn-primary" style="width:100%;margin-top:14px" id="markPaidBtn" data-appt-id="${a.id}">Mark as Paid</button>` : ""}`;
   $("#slideover").innerHTML = `
     <div class="so-head"><div class="so-title">Appointment details</div>
       <button class="modal-close" id="soClose"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg></button></div>
@@ -782,10 +966,32 @@ function openDetails(tok) {
       <div class="so-row"><span class="k">Appointment Date</span><span class="v">${a.date}</span></div>
       <div class="so-row"><span class="k">Clinic</span><span class="v">${a.clinic}</span></div>
       <div class="so-row"><span class="k">Created At</span><span class="v">${a.createdAt}</span></div>
-    </div>${live}${actions}`;
+    </div>${payment}${live}${actions}`;
   $("#slideover").classList.add("open");
   $("#soBackdrop").classList.add("open");
   $("#soClose").onclick = closeDetails;
+  const markPaidBtn = $("#markPaidBtn");
+  if (markPaidBtn) {
+    markPaidBtn.onclick = async () => {
+      markPaidBtn.disabled = true;
+      markPaidBtn.textContent = "Saving…";
+      try {
+        await apiPatch(ENDPOINTS.appointmentPay(markPaidBtn.dataset.apptId));
+        toast("Marked as paid", `Token #${a.token} — payment recorded.`);
+        await loadAppointments(STATE.selectedDate);
+        // Revenue totals just changed — force a refetch next time the
+        // Overview/Revenue view is shown rather than showing stale
+        // numbers until the doctor happens to switch ranges.
+        STATE.revenue.loaded = false;
+        openDetails(tok);
+        refreshAll();
+      } catch (err) {
+        toast("Couldn't mark as paid", err.message, true);
+        markPaidBtn.disabled = false;
+        markPaidBtn.textContent = "Mark as Paid";
+      }
+    };
+  }
 }
 function closeDetails() {
   $("#slideover").classList.remove("open");
@@ -1120,6 +1326,130 @@ function renderEmailChange() {
     };
   }
 }
+/* ---------- REVENUE ---------- */
+// Called by showView("revenue"). Renders whatever's cached first
+// (instant, no flash of empty content on repeat visits), then always
+// re-fetches for the currently active range so the numbers are fresh.
+async function openRevenueView() {
+  renderRevenueView();
+  try {
+    await loadRevenue();
+    renderRevenueView();
+  } catch (err) {
+    toast("Couldn't load revenue", err.message, true);
+  }
+}
+
+function renderRevenueView() {
+  const r = STATE.revenue;
+  const wrap = $("#revenueWrap");
+  if (!wrap) return;
+
+  const rangeBtn = (value, label) => `
+    <button class="btn ${r.range === value ? "btn-primary" : "btn-ghost"}" data-revenue-range="${value}">${label}</button>`;
+
+  const customForm =
+    r.range === "custom"
+      ? `
+    <div class="card" style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-top:14px;">
+      <div class="field" style="margin:0;">
+        <label>From</label>
+        <input type="date" id="revenueFrom" value="${r.from}" max="${r.to || ""}">
+      </div>
+      <div class="field" style="margin:0;">
+        <label>To</label>
+        <input type="date" id="revenueTo" value="${r.to}">
+      </div>
+      <button class="btn btn-primary" id="revenueApplyBtn">Apply</button>
+    </div>`
+      : "";
+
+  const scopeLabel =
+    r.range === "custom" && r.from && r.to
+      ? `${r.from} – ${r.to}`
+      : `Last ${r.range} days`;
+
+  const rows = r.appointments.length
+    ? r.appointments
+        .map(
+          (a) => `
+    <tr>
+      <td class="pt">${a.patientName}</td>
+      <td class="dt">${formatShortDate(a.appointmentDate)}</td>
+      <td>PKR ${Number(a.consultationFee || 0).toLocaleString()}</td>
+      <td><span class="pill completed"><span class="d"></span> Paid</span></td>
+    </tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="4"><div class="empty-state"><h3>No paid appointments in this range.</h3></div></td></tr>`;
+
+  wrap.innerHTML = `
+    <div class="card filter-bar">
+      <div class="fb-top" style="gap:10px;">
+        ${rangeBtn("7", "Last 7 Days")}
+        ${rangeBtn("28", "Last 28 Days")}
+        ${rangeBtn("custom", "Custom Date")}
+      </div>
+    </div>
+    ${customForm}
+    <div class="stat-grid" style="margin-top:20px;">
+      <div class="stat"><div class="st-top">Total Revenue</div><div class="st-val">PKR ${r.totalRevenue.toLocaleString()}</div></div>
+      <div class="stat"><div class="st-top">Paid Appointments</div><div class="st-val">${r.paidAppointments}</div></div>
+      <div class="stat"><div class="st-top">Average Consultation</div><div class="st-val">PKR ${r.averageConsultationFee.toLocaleString()}</div></div>
+    </div>
+    <div class="card appt-panel mt24">
+      <div class="aph">
+        <div><h2>Paid Appointments</h2><div class="sub">${scopeLabel}</div></div>
+        <span class="count-chip">${r.paidAppointments}</span>
+      </div>
+      <table class="appt-table">
+        <thead><tr><th>Patient</th><th>Date</th><th>Fee</th><th>Payment</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+
+  $$("[data-revenue-range]", wrap).forEach((btn) => {
+    btn.onclick = async () => {
+      const value = btn.dataset.revenueRange;
+      STATE.revenue.range = value;
+      if (value !== "custom") {
+        try {
+          await loadRevenue();
+        } catch (err) {
+          toast("Couldn't load revenue", err.message, true);
+        }
+      }
+      renderRevenueView();
+    };
+  });
+
+  const applyBtn = $("#revenueApplyBtn");
+  if (applyBtn) {
+    applyBtn.onclick = async () => {
+      const from = $("#revenueFrom").value;
+      const to = $("#revenueTo").value;
+      if (!from || !to) {
+        return toast("Select both dates", "", true);
+      }
+      if (to < from) {
+        return toast("Invalid range", "'To' can't be before 'From'.", true);
+      }
+      STATE.revenue.from = from;
+      STATE.revenue.to = to;
+      applyBtn.disabled = true;
+      applyBtn.textContent = "Loading…";
+      try {
+        await loadRevenue();
+        renderRevenueView();
+      } catch (err) {
+        toast("Couldn't load revenue", err.message, true);
+        applyBtn.disabled = false;
+        applyBtn.textContent = "Apply";
+      }
+    };
+  }
+}
+
 /* ---------- SUBSCRIPTION (MOCK — no backend route provided) ---------- */
 function renderSubscription() {
   const s = STATE.subscription;
@@ -1385,8 +1715,15 @@ const greetWord = () => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Token 0 means "nobody has been called yet" — the clinic hasn't
+// started, or the queue has been reset. Token numbering starts at 1,
+// so 0 is never a real token and must never be shown as "#0".
 const tokenLabel = (n) => (n && n > 0 ? "#" + n : "—");
 
+// Same idea, but for the "who's currently being served" name/label:
+// distinguish "nobody yet because the clinic is closed" from "nobody
+// yet because the clinic just opened and hasn't called anyone" —
+// rather than falling through to a bare "—" with no context.
 function nowServingName() {
   if (STATE.nowServing && STATE.nowServing > 0) {
     return nameFor(STATE.nowServing);
@@ -1467,7 +1804,14 @@ function initSocket() {
 }
 
 /* ---------- INIT ---------- */
-/* ---------- ACCOUNT GATING ----------*/
+/* ---------- ACCOUNT GATING ----------
+   status/isSuspended come straight off the Doctor document (see
+   doctor.model.js). A doctor can log in successfully — the account
+   exists and the password is correct — but still not be allowed to
+   USE the dashboard yet. This runs once, right after loadAll(),
+   before any view is shown, and fully replaces the page rather than
+   rendering the dashboard underneath a banner: someone who isn't
+   approved shouldn't be able to see live patient/queue data at all. */
 function renderAccountBlocked({ title, message, tone = "warn" }) {
   const iconPath =
     tone === "danger"

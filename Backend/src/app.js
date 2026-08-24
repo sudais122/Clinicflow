@@ -14,6 +14,7 @@ import subscriptionroutes from "./routes/subscription.routes.js";
 import forgotPasswordRoutes from "./routes/Forgotpassword.routes.js";
 import emailChangeRoutes from "./routes/emailChange.routes.js";
 import reportRoutes from "./routes/reports.routes.js";
+import revenueRoutes from "./routes/Revenue.routes.js";
 
 //admin
 import adminRouter from "./routes/admin.routes.js";
@@ -54,6 +55,7 @@ app.use("/auth/email", emailChangeRoutes);
 app.use("/patient", patientroutes);
 app.use("/dashboard", dashboardroutes);
 app.use("/subscription", subscriptionroutes);
+app.use("/revenue", revenueRoutes);
 
 app.use("/support", reportRoutes);
 

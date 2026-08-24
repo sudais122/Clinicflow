@@ -7,6 +7,7 @@ import { Patient } from "../models/patient.models.js";
 
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
+import { pktDayBoundsUTC } from "../utils/date.js";
 
 import { generateAppointmentId } from "../utils/id's/appointment.js";
 import { emitQueueLengthUpdated } from "../socket/socketEvents.js";
@@ -18,37 +19,6 @@ const allowedTransitions = {
   cancelled: [],
 };
 
-// Pakistan Standard Time = UTC+5, no DST. Hardcoded rather than
-// relying on the server process's local timezone — the frontend
-// books appointments using the BROWSER's local midnight (assumed
-// Pakistan) converted to UTC, so the backend needs to agree on that
-// same fixed offset unconditionally, regardless of where/how the
-// server itself is hosted or configured.
-//
-// TODO: pull this into a shared utils/date.js and import it here and
-// in doctorDashboard.controller.js instead of keeping two copies —
-// they must stay in sync manually right now.
-const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
-
-// "YYYY-MM-DD" -> { startOfDay, endOfDay } as UTC instants marking
-// midnight-to-midnight in Pakistan time for that calendar date.
-function pktDayBoundsUTC(dateStr) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
-  if (!match) return null;
-
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-
-  const startOfDay = new Date(
-    Date.UTC(year, month - 1, day, 0, 0, 0, 0) - PKT_OFFSET_MS,
-  );
-  if (isNaN(startOfDay.getTime())) return null;
-
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
-
-  return { startOfDay, endOfDay };
-}
 
 // 1. Book Appointment
 const bookAppointment = async (req, res, next) => {
@@ -197,6 +167,12 @@ const bookAppointment = async (req, res, next) => {
             appointmentDate: date,
             tokenNumber,
             status: "waiting",
+            // Snapshotted at booking time — see the note on this
+            // field in the schema. Revenue calculations always sum
+            // THIS value, never doctor.consultationFee live, so a
+            // later fee change never rewrites past revenue.
+            consultationFee: doctor.consultationFee,
+            paymentStatus: "unpaid",
           },
         ],
         { session },
@@ -347,6 +323,7 @@ const getPatientAppointments = async (req, res, next) => {
       queueByDoctor[q.doctor.toString()] = q;
     }
 
+    // Attach live queue info only to active appointments; past ones don't need it.
     const data = appointments.map((appt) => {
       const isActive =
         appt.status === "waiting" || appt.status === "in-progress";
@@ -383,7 +360,10 @@ const getPatientAppointments = async (req, res, next) => {
   }
 };
 
-// 3. Get Doctor Appointments  
+// 3. Get Doctor Appointments  (doctor only)
+// date is REQUIRED — a query param of ?date=YYYY-MM-DD scoping the
+// result to that single Pakistan-time calendar day, using the same
+// pktDayBoundsUTC() helper defined at the top of this file.
 const getDoctorAppointments = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
@@ -513,10 +493,52 @@ const cancelAppointment = async (req, res, next) => {
   }
 };
 
+// 6. Mark Appointment Paid 
+const markAppointmentPaid = async (req, res, next) => {
+  try {
+    const { appointmentId } = req.params;
+
+    if (!mongoose.isValidObjectId(appointmentId)) {
+      throw new ApiError(400, "Invalid appointment id");
+    }
+
+    const doctor = await Doctor.findOne({ user: req.user._id });
+    if (!doctor) {
+      throw new ApiError(403, "Only a doctor can mark an appointment as paid");
+    }
+
+    const appointment = await Appointment.findById(appointmentId);
+    if (!appointment) {
+      throw new ApiError(404, "Appointment not found");
+    }
+
+    if (appointment.doctor.toString() !== doctor._id.toString()) {
+      throw new ApiError(403, "You are not allowed to update this appointment");
+    }
+
+    if (appointment.paymentStatus === "paid") {
+      throw new ApiError(400, "Appointment is already marked as paid");
+    }
+
+    appointment.paymentStatus = "paid";
+    appointment.paidAt = new Date();
+    await appointment.save();
+
+    return res
+      .status(200)
+      .json(
+        new ApiResponse(200, appointment, "Appointment marked as paid"),
+      );
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   bookAppointment,
   getPatientAppointments,
   getDoctorAppointments,
   updateAppointmentStatus,
   cancelAppointment,
+  markAppointmentPaid,
 };
