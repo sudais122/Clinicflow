@@ -84,20 +84,11 @@
             Profile</a
           >
           <a href="#revenue" data-view="revenue">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-            >
-              <path
-                d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
-            Revenue
-          </a>
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  Revenue
+</a>
           <a href="#subscription" data-view="subscription"
             ><svg
               viewBox="0 0 24 24"
@@ -238,6 +229,7 @@
               <div id="seqList"></div>
             </div>
           </div>
+          <div id="revenueCard" class="mt24"></div>
           <div class="card appt-panel mt24" id="overviewAppts"></div>
         </section>
 
@@ -430,6 +422,19 @@
             </button>
           </div>
           <div class="card profile-card" id="profileCard"></div>
+        </section>
+
+        <!-- REVENUE -->
+        <section class="view" id="view-revenue" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Revenue</h1>
+              <p class="lead">
+                Track paid appointments and earnings for your clinic.
+              </p>
+            </div>
+          </div>
+          <div id="revenueWrap"></div>
         </section>
 
         <!-- SUBSCRIPTION -->
