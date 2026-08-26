@@ -87,7 +87,8 @@ const ENDPOINTS = {
   appointmentsDoctor: () => `${API_BASE}/appointments/doctor`,
   appointmentStatus: (id) => `${API_BASE}/appointments/${id}/status`,
   appointmentPay: (id) => `${API_BASE}/appointments/${id}/pay`,
-  revenue: (params) => `${API_BASE}/revenue?${new URLSearchParams(params).toString()}`,
+  revenue: (params) =>
+    `${API_BASE}/revenue?${new URLSearchParams(params).toString()}`,
   logout: () => `${API_BASE}/auth/logout`,
   emailChangeRequest: () => `${API_BASE}/auth/email/request`,
   emailChangeVerify: () => `${API_BASE}/auth/email/verify`,
@@ -165,7 +166,7 @@ const STATE = {
   notifications: [],
   revenue: {
     range: "28", // "7" | "28" | "custom" — which button is active
-    from: "",     // only meaningful when range === "custom"
+    from: "", // only meaningful when range === "custom"
     to: "",
     totalRevenue: 0,
     paidAppointments: 0,
@@ -368,9 +369,7 @@ async function loadAll(dateStr) {
 async function loadRevenue() {
   const r = STATE.revenue;
   const params =
-    r.range === "custom"
-      ? { from: r.from, to: r.to }
-      : { range: r.range };
+    r.range === "custom" ? { from: r.from, to: r.to } : { range: r.range };
 
   const res = await apiGet(ENDPOINTS.revenue(params));
   const d = res.data;
@@ -505,17 +504,20 @@ function renderRevenueCard(el) {
   if (!el) return;
   const r = STATE.revenue;
   const scopeLabel =
-    r.range === "custom" && r.from && r.to
-      ? `${r.from} – ${r.to}`
+    r.from && r.to
+      ? `${formatShortDate(r.from)} – ${formatShortDate(r.to)}`
       : `Last ${r.range} days`;
 
   el.innerHTML = `
-    <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap;">
-      <div>
-        <div style="font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--muted,#6b7180);text-transform:uppercase;margin-bottom:6px;">Revenue</div>
-        <div style="font-family:'Bricolage Grotesque',sans-serif;font-size:28px;font-weight:800;line-height:1;">PKR ${r.totalRevenue.toLocaleString()}</div>
-        <div style="font-size:13px;color:var(--muted,#6b7180);margin-top:6px;">
-          ${scopeLabel} · ${r.paidAppointments} paid appointment${r.paidAppointments === 1 ? "" : "s"}
+    <div class="card revenue-summary">
+      <div class="revenue-summary-left">
+        <span class="revenue-summary-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2.5"/><circle cx="12" cy="12" r="3"/><path d="M6 10h.01M18 14h.01"/></svg>
+        </span>
+        <div>
+          <div class="revenue-summary-label">Revenue</div>
+          <div class="revenue-summary-value">PKR ${r.totalRevenue.toLocaleString()}</div>
+          <div class="revenue-summary-sub">${scopeLabel} · ${r.paidAppointments} paid appointment${r.paidAppointments === 1 ? "" : "s"}</div>
         </div>
       </div>
       <button class="btn btn-primary" id="viewRevenueBtn">View Revenue</button>
@@ -1346,17 +1348,30 @@ function renderRevenueView() {
   if (!wrap) return;
 
   const rangeBtn = (value, label) => `
-    <button class="btn ${r.range === value ? "btn-primary" : "btn-ghost"}" data-revenue-range="${value}">${label}</button>`;
+    <button class="revenue-range-btn ${r.range === value ? "active" : ""}" data-revenue-range="${value}">${label}</button>`;
 
+  // Resolved from/to come back from the backend for EVERY range, not
+  // just "custom" (see loadRevenue), so this reflects the real dates
+  // behind "7 Days" / "28 Days" too, not just the button label.
+  const scopeLabel =
+    r.from && r.to
+      ? `${formatShortDate(r.from)} – ${formatShortDate(r.to)}`
+      : r.range === "custom"
+        ? "Choose a date range"
+        : `Last ${r.range} days`;
+
+  // Custom-date fields now live INSIDE the same toolbar card as the
+  // range tabs (separated by a hairline), instead of popping up as a
+  // second, visually disconnected card underneath.
   const customForm =
     r.range === "custom"
       ? `
-    <div class="card" style="display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap;margin-top:14px;">
-      <div class="field" style="margin:0;">
+    <div class="revenue-custom-panel">
+      <div class="field">
         <label>From</label>
         <input type="date" id="revenueFrom" value="${r.from}" max="${r.to || ""}">
       </div>
-      <div class="field" style="margin:0;">
+      <div class="field">
         <label>To</label>
         <input type="date" id="revenueTo" value="${r.to}">
       </div>
@@ -1364,10 +1379,34 @@ function renderRevenueView() {
     </div>`
       : "";
 
-  const scopeLabel =
-    r.range === "custom" && r.from && r.to
-      ? `${r.from} – ${r.to}`
-      : `Last ${r.range} days`;
+  // Same icon-tile pattern as Overview's statGrid (st-ic + tone
+  // class), so these three stats read as part of the same design
+  // system instead of the plain text-only tiles they were before.
+  const statTiles = [
+    [
+      "Total Revenue",
+      `PKR ${r.totalRevenue.toLocaleString()}`,
+      "blue",
+      '<rect x="2" y="6" width="20" height="12" rx="2.5"/><circle cx="12" cy="12" r="3"/><path d="M6 10h.01M18 14h.01"/',
+    ],
+    [
+      "Paid Appointments",
+      r.paidAppointments,
+      "green",
+      '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/',
+    ],
+    [
+      "Average Consultation",
+      `PKR ${r.averageConsultationFee.toLocaleString()}`,
+      "amber",
+      '<path d="M4 20V10M12 20V4M20 20V13"/><path d="M3 20h18"/',
+    ],
+  ]
+    .map(
+      ([k, v, tone, ic]) => `
+    <div class="stat"><div class="st-top"><span class="st-ic ${tone}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ic}</svg></span>${k}</div><div class="st-val">${v}</div></div>`,
+    )
+    .join("");
 
   const rows = r.appointments.length
     ? r.appointments
@@ -1384,19 +1423,21 @@ function renderRevenueView() {
     : `<tr><td colspan="4"><div class="empty-state"><h3>No paid appointments in this range.</h3></div></td></tr>`;
 
   wrap.innerHTML = `
-    <div class="card filter-bar">
-      <div class="fb-top" style="gap:10px;">
-        ${rangeBtn("7", "Last 7 Days")}
-        ${rangeBtn("28", "Last 28 Days")}
-        ${rangeBtn("custom", "Custom Date")}
+    <div class="card revenue-toolbar">
+      <div class="revenue-toolbar-row">
+        <div class="revenue-range" role="tablist" aria-label="Revenue date range">
+          ${rangeBtn("7", "7 Days")}
+          ${rangeBtn("28", "28 Days")}
+          ${rangeBtn("custom", "Custom")}
+        </div>
+        <div class="revenue-scope">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2.5"/><path d="M3 9h18M8 2v4M16 2v4" stroke-linecap="round"/></svg>
+          ${scopeLabel}
+        </div>
       </div>
+      ${customForm}
     </div>
-    ${customForm}
-    <div class="stat-grid" style="margin-top:20px;">
-      <div class="stat"><div class="st-top">Total Revenue</div><div class="st-val">PKR ${r.totalRevenue.toLocaleString()}</div></div>
-      <div class="stat"><div class="st-top">Paid Appointments</div><div class="st-val">${r.paidAppointments}</div></div>
-      <div class="stat"><div class="st-top">Average Consultation</div><div class="st-val">PKR ${r.averageConsultationFee.toLocaleString()}</div></div>
-    </div>
+    <div class="stat-grid" style="margin-top:20px;">${statTiles}</div>
     <div class="card appt-panel mt24">
       <div class="aph">
         <div><h2>Paid Appointments</h2><div class="sub">${scopeLabel}</div></div>
