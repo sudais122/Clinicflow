@@ -46,6 +46,4 @@ REFRESH_TOKEN_EXPIRY=
 ```text
 client/
 server/
-README.md
-package.json
 
