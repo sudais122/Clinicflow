@@ -15,7 +15,7 @@ import forgotPasswordRoutes from "./routes/Forgotpassword.routes.js";
 import emailChangeRoutes from "./routes/emailChange.routes.js";
 import reportRoutes from "./routes/reports.routes.js";
 import revenueRoutes from "./routes/Revenue.routes.js";
-import paymentRoutes from "./routes/patient.routes.js";
+import paymentRoutes from "./routes/Payment.routes.js";
 
 //admin
 import adminRouter from "./routes/admin.routes.js";

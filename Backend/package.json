@@ -7,7 +7,7 @@
     "dev": "nodemon --legacy-watch src/index.js",
     "start": "node src/index.js",
     "lint": "eslint .",
-    "test": "echo \"No tests yet\" && exit 0"
+    "test": "jest" 
   },
   "keywords": [],
   "author": "",

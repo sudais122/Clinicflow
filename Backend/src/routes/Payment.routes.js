@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { submitPayment, getMyPayments } from "../controllers/payment.controller.js";
+import { submitPayment, getMyPayments } from "../controllers/Payment.controller.js";
 import { uploadScreenshot } from "../middlewares/Multer.middleware.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
 

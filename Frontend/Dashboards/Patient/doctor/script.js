@@ -34,9 +34,16 @@
    5. `cancelAppointment` is patient-only (checks Patient ownership),
       so the doctor dashboard's "Cancel Appointment" button calls
       `updateAppointmentStatus` with `{ status: "cancelled" }` instead.
-   6. Subscription + notifications have no backend routes in what was
-      shared, so those two panels are left mocked — clearly marked
-      below — until those endpoints exist.
+   6. Notifications have no backend route in what was shared, so that
+      panel is still mocked. Subscription is NOW wired to the real
+      payment endpoints (see the PAYMENTS section below) — the plan
+      cards and "Current Plan" summary still read from
+      STATE.subscription, which loadDashboard() now populates from
+      d.doctor?.subscription IF your Doctor schema has that field
+      (see the approvePayment ADJUST note in payment.controller.js).
+      If it doesn't yet, that part stays showing "Free/Active" even
+      after an admin approves a payment — the payment history/status
+      below it is real either way.
    7. Realtime: socket.io-client must be loaded on the page
       (e.g. `<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>`
       in doctor-dashboard.html, before this script) for the socket
@@ -92,6 +99,8 @@ const ENDPOINTS = {
   logout: () => `${API_BASE}/auth/logout`,
   emailChangeRequest: () => `${API_BASE}/auth/email/request`,
   emailChangeVerify: () => `${API_BASE}/auth/email/verify`,
+  submitPayment: () => `${API_BASE}/payments`,
+  myPayments: () => `${API_BASE}/payments/me`,
 };
 
 /* ---------- fetch helpers ---------- */
@@ -122,6 +131,34 @@ async function apiCall(url, { method = "GET", body } = {}) {
 const apiGet = (url) => apiCall(url, { method: "GET" });
 const apiPatch = (url, body) => apiCall(url, { method: "PATCH", body });
 const apiPost = (url, body) => apiCall(url, { method: "POST", body });
+
+// Multipart/form-data upload — used for the payment-proof screenshot.
+// Deliberately does NOT set Content-Type: when the body is a
+// FormData instance the browser sets the multipart boundary itself;
+// setting it manually breaks the upload.
+async function apiUpload(url, formData) {
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    body: formData,
+  });
+
+  let payload = null;
+  try {
+    payload = await res.json();
+  } catch {
+    /* no JSON body */
+  }
+
+  if (!res.ok) {
+    const message = payload?.message || `Request failed (${res.status})`;
+    const err = new Error(message);
+    err.status = res.status;
+    err.payload = payload;
+    throw err;
+  }
+  return payload;
+}
 
 /* ============================================================
    LIVE STATE — replaces the old hard-coded mock objects.
@@ -157,6 +194,9 @@ const STATE = {
   selectedDate: null,
   clinicDayLabel: "",
   appointments: [],
+  // Still seeded with a Free/Active default — loadDashboard() below
+  // overwrites this from d.doctor?.subscription if your backend
+  // returns one (see assumption #6 at the top of this file).
   subscription: {
     plan: "Free",
     status: "Active",
@@ -172,6 +212,10 @@ const STATE = {
     paidAppointments: 0,
     averageConsultationFee: 0,
     appointments: [],
+    loaded: false,
+  },
+  payments: {
+    list: [],
     loaded: false,
   },
 };
@@ -265,6 +309,23 @@ async function loadDashboard(dateStr) {
   DOCTOR.status = d.doctor?.status || DOCTOR.status;
   DOCTOR.isSuspended = d.doctor?.isSuspended ?? DOCTOR.isSuspended;
   DOCTOR.suspensionReason = d.doctor?.suspensionReason || "";
+
+  // Reflects whatever approvePayment() set on the Doctor document —
+  // only meaningful once your Doctor schema actually has this field
+  // (see assumption #6 above). Falls back to whatever was already in
+  // STATE.subscription (the Free/Active default) if it's absent.
+  if (d.doctor?.subscription) {
+    STATE.subscription.plan =
+      d.doctor.subscription.plan || STATE.subscription.plan;
+    STATE.subscription.status =
+      d.doctor.subscription.status || STATE.subscription.status;
+    STATE.subscription.start = d.doctor.subscription.start
+      ? formatShortDate(d.doctor.subscription.start)
+      : STATE.subscription.start;
+    STATE.subscription.end = d.doctor.subscription.end
+      ? formatShortDate(d.doctor.subscription.end)
+      : STATE.subscription.end;
+  }
 
   STATE.clinicOpen = d.clinicStatus === "open";
   STATE.nowServing = d.currentServingToken ?? STATE.nowServing;
@@ -383,6 +444,15 @@ async function loadRevenue() {
   r.loaded = true;
 }
 
+/* ---------- PAYMENTS ----------
+   Loads this doctor's payment submission history. Called lazily when
+   the Subscription view is opened — same pattern as loadRevenue(). */
+async function loadPayments() {
+  const res = await apiGet(ENDPOINTS.myPayments());
+  STATE.payments.list = res.data || [];
+  STATE.payments.loaded = true;
+}
+
 /* ---------- ROUTER ---------- */
 const TITLES = {
   overview: "Overview",
@@ -409,7 +479,7 @@ function showView(name) {
   if (name === "queue") renderQueue();
   if (name === "revenue") openRevenueView();
   if (name === "profile") renderProfile();
-  if (name === "subscription") renderSubscription();
+  if (name === "subscription") openSubscriptionView();
   window.scrollTo(0, 0);
 }
 document.addEventListener("click", (e) => {
@@ -1491,15 +1561,97 @@ function renderRevenueView() {
   }
 }
 
-/* ---------- SUBSCRIPTION (MOCK — no backend route provided) ---------- */
+/* ---------- SUBSCRIPTION ----------
+   Now wired to the real payment endpoints (POST /payments,
+   GET /payments/me). The plan cards below and the "Current Plan"
+   summary still read from STATE.subscription, which is only as real
+   as your Doctor.subscription field (see assumption #6 up top) — the
+   pending/rejected banners and payment history table are fully real
+   either way, driven off STATE.payments.list. */
+
+// Same lazy-load-on-open pattern as Revenue: render whatever's
+// cached instantly, then refetch and re-render with fresh data.
+async function openSubscriptionView() {
+  renderSubscription();
+  if (!STATE.payments.loaded) {
+    try {
+      await loadPayments();
+      renderSubscription();
+    } catch (err) {
+      toast("Couldn't load payment history", err.message, true);
+    }
+  }
+}
+
+function paymentStatusPill(status) {
+  if (status === "approved")
+    return `<span class="pill completed"><span class="d"></span> Approved</span>`;
+  if (status === "rejected")
+    return `<span class="pill cancelled"><span class="d"></span> Rejected</span>`;
+  return `<span class="pill waiting"><span class="d"></span> Pending</span>`;
+}
+function paymentMethodLabel(m) {
+  return m === "easypaisa" ? "Easypaisa" : "Bank Transfer";
+}
+
+function paymentHistoryHTML() {
+  const payments = STATE.payments.list;
+  if (!payments.length) {
+    return `<div class="empty-state"><h3>No payments yet</h3><p>Submit a payment from the Practice plan card above and it'll show up here.</p></div>`;
+  }
+  return `<table class="appt-table">
+    <thead><tr><th>Plan</th><th>Amount</th><th>Method</th><th>Submitted</th><th>Status</th><th>Receipt</th></tr></thead>
+    <tbody>
+      ${payments
+        .map(
+          (p) => `
+      <tr>
+        <td class="pt">${p.plan}</td>
+        <td>PKR ${Number(p.amount || 0).toLocaleString()}</td>
+        <td class="dt">${paymentMethodLabel(p.paymentMethod)}</td>
+        <td class="dt">${formatShortDate(p.createdAt)}</td>
+        <td>${paymentStatusPill(p.status)}</td>
+        <td class="act"><a class="view-btn" href="${p.screenshotUrl}" target="_blank" rel="noopener">View</a></td>
+      </tr>`,
+        )
+        .join("")}
+    </tbody>
+  </table>`;
+}
+
 function renderSubscription() {
   const s = STATE.subscription;
+  const pending = STATE.payments.list.find((p) => p.status === "pending");
+  const latest = STATE.payments.list[0];
+
+  const rejectedBanner =
+    latest && latest.status === "rejected" && !pending
+      ? `<div class="card" style="padding:18px 22px;margin-bottom:20px;border-color:#f3c7c7;background:var(--red-soft);">
+          <div style="font-weight:700;color:var(--red-text);margin-bottom:4px;">Your last payment was rejected</div>
+          <div style="color:var(--red-text);font-size:14px;">${latest.rejectionReason || "No reason was given."} You're welcome to submit a new payment below.</div>
+        </div>`
+      : "";
+  const pendingBanner = pending
+    ? `<div class="card" style="padding:18px 22px;margin-bottom:20px;border-color:#fde3b8;background:var(--amber-soft);">
+        <div style="font-weight:700;color:var(--amber-text);margin-bottom:4px;">Payment under review</div>
+        <div style="color:var(--amber-text);font-size:14px;">Submitted ${formatShortDate(pending.createdAt)} — PKR ${Number(pending.amount || 0).toLocaleString()} via ${paymentMethodLabel(pending.paymentMethod)}. We'll activate your Practice plan once an admin approves it.</div>
+      </div>`
+    : "";
+
+  const practiceButton =
+    s.plan === "Practice"
+      ? ""
+      : pending
+        ? `<button class="btn btn-ghost btn-lg" disabled>Payment Under Review</button>`
+        : `<button class="btn btn-primary btn-lg" id="upgradePracticeBtn">${latest && latest.status === "rejected" ? "Resubmit Payment" : "Upgrade to Practice"}</button>`;
+
   $("#subWrap").innerHTML = `
+    ${rejectedBanner}
+    ${pendingBanner}
     <div class="card sub-current">
       <div class="sc-top"><div><div class="k">Current Plan</div><div class="sc-plan">${s.plan}</div>
         <div class="sc-dates">Start Date: ${s.start} · End Date: ${s.end}</div></div>
         <span class="pill active"><span class="d"></span> ${s.status}</span></div>
-      <div class="sc-actions"><button class="btn btn-primary" id="upgradeBtn">Upgrade Plan</button><button class="btn btn-ghost" id="manageBtn">Manage Subscription</button></div>
     </div>
     <div class="plans">
       <div class="card plan ${s.plan === "Free" ? "current" : ""}">
@@ -1511,19 +1663,87 @@ function renderSubscription() {
         <div class="ph"><span class="pname">Practice</span>${s.plan === "Practice" ? '<span class="curtag">Current plan</span>' : ""}</div>
         <div class="price">PKR 4,500 <small>per month</small></div>
         <ul>${["Unlimited tokens per clinic day", "Advanced queue delay controls", "Patient notifications", "Priority support"].map((f) => `<li><span class="ck">✓</span> ${f}</li>`).join("")}</ul>
-        ${s.plan !== "Practice" ? '<button class="btn btn-primary btn-lg" id="upgradePracticeBtn">Upgrade to Practice</button>' : ""}
+        ${practiceButton}
       </div>
+    </div>
+    <div class="card appt-panel mt24">
+      <div class="aph">
+        <div><h2>Payment History</h2><div class="sub">All your submitted payment proofs.</div></div>
+        <span class="count-chip">${STATE.payments.list.length}</span>
+      </div>
+      ${paymentHistoryHTML()}
     </div>`;
-  const up = () =>
-    toast(
-      "Not available yet",
-      "Subscription upgrades need a backend endpoint — none was provided.",
-      true,
-    );
-  $("#upgradeBtn").onclick = up;
-  $("#manageBtn").onclick = up;
+
   const ub = $("#upgradePracticeBtn");
-  if (ub) ub.onclick = up;
+  if (ub) ub.onclick = openPaymentModal;
+}
+
+// Payment submission modal — uploads a screenshot via multipart
+// form-data to POST /payments. "Practice" is hardcoded as the plan
+// since it's the only paid tier right now; add a plan <select> here
+// if more paid plans get added later.
+function openPaymentModal() {
+  // ADJUST: replace with your real Easypaisa number / bank details.
+  const payInstructions = `
+    <div style="background:var(--blue-tint);border:1px solid #d9e6ff;border-radius:14px;padding:16px 18px;margin:20px 0;font-size:13.5px;color:var(--sub);line-height:1.6;">
+      <b>Easypaisa:</b> 03XX-XXXXXXX (ClinicFlow) &nbsp;·&nbsp; <b>Bank:</b> Account title / number here<br>
+      Send <b>PKR 4,500</b>, then upload a screenshot of the confirmation below.
+    </div>`;
+
+  openModal(`
+  <div class="modal-head">
+    <div><h2>Upgrade to Practice</h2><div class="sub">PKR 4,500/month — pay via Easypaisa or bank transfer, then upload your receipt.</div></div>
+    <button class="modal-close" data-close>✕</button>
+  </div>
+  ${payInstructions}
+  <form id="paymentForm">
+    <div class="field">
+      <label>Payment Method</label>
+      <select name="paymentMethod" required>
+        <option value="easypaisa">Easypaisa</option>
+        <option value="bank_transfer">Bank Transfer</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Transaction Reference (optional)</label>
+      <input name="transactionReference" placeholder="e.g. TXN123456">
+    </div>
+    <div class="field">
+      <label>Payment Screenshot</label>
+      <input type="file" name="screenshot" accept="image/jpeg,image/png,image/webp" required>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+      <button type="submit" class="btn btn-primary" id="paySubmitBtn">Submit Payment</button>
+    </div>
+  </form>`);
+
+  $("#paymentForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = $("#paySubmitBtn");
+    btn.disabled = true;
+    btn.textContent = "Submitting…";
+
+    const fd = new FormData(e.target);
+    fd.set("plan", "Practice");
+
+    try {
+      await apiUpload(ENDPOINTS.submitPayment(), fd);
+      closeModal();
+      toast(
+        "Payment submitted",
+        "Awaiting admin review — we'll notify you once it's approved.",
+      );
+      STATE.payments.loaded = false;
+      await loadPayments();
+      renderSubscription();
+    } catch (err) {
+      toast("Couldn't submit payment", err.message, true);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Submit Payment";
+    }
+  };
 }
 
 /* ---------- HELP + REPORT A PROBLEM ---------- */
