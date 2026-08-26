@@ -15,6 +15,7 @@ import forgotPasswordRoutes from "./routes/Forgotpassword.routes.js";
 import emailChangeRoutes from "./routes/emailChange.routes.js";
 import reportRoutes from "./routes/reports.routes.js";
 import revenueRoutes from "./routes/Revenue.routes.js";
+import paymentRoutes from "./routes/patient.routes.js";
 
 //admin
 import adminRouter from "./routes/admin.routes.js";
@@ -22,6 +23,7 @@ import adminDoctorRouter from "./routes/adminDoctor.routes.js";
 import adminPatientRouter from "./routes/adminPatient.routes.js";
 import adminSubscriptionRouter from "./routes/adminSubscription.routes.js";
 import adminReportRouter from "./routes/adminReport.routes.js";
+import adminPaymentRouter from "./routes/adminPayment.routes.js";
 
 const app = express();
 
@@ -56,6 +58,7 @@ app.use("/patient", patientroutes);
 app.use("/dashboard", dashboardroutes);
 app.use("/subscription", subscriptionroutes);
 app.use("/revenue", revenueRoutes);
+app.use("/payments", paymentRoutes);
 
 app.use("/support", reportRoutes);
 
@@ -65,6 +68,7 @@ app.use("/admin/doctors", adminDoctorRouter);
 app.use("/admin/patients", adminPatientRouter);
 app.use("/admin/subscriptions", adminSubscriptionRouter);
 app.use("/admin/reports", adminReportRouter);
+app.use("/admin/payments", adminPaymentRouter);
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;

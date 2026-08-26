@@ -1,10 +1,3 @@
-// Must be the very first import — this runs dotenv.config() before any
-// other module (connectDB, app, and everything THEY import) executes
-// its own top-level code. In ES modules, an import's target module
-// always fully runs before the importing file's own statements do,
-// regardless of where those statements are textually placed relative
-// to the import lines — so dotenv.config() previously ran too late to
-// matter for anything reading process.env at module load time.
 import "./loadEnv.js";
 
 import path from "path";
