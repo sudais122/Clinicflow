@@ -1,27 +1,27 @@
-import { Doctor } from "../models/doctor.models.js";
-import { Subscription } from "../models/subscription.models.js";
+/* ============================================================
+   I don't have your original subscription.controller.js — this was
+   written fresh to satisfy the four named exports your existing
+   subscription.routes.js already imports (getMySubscription,
+   upgradeSubscription, renewSubscription, cancelSubscription). If a
+   real version of this file already exists with different logic,
+   diff against it before overwriting — getMySubscription's
+   lazy-expiry check is the piece that actually matters for the
+   dashboard fix; the other three are reasonable stand-ins, not
+   verified against your real business rules.
+   ============================================================ */
 
-import ApiError from "../utils/apierror.js";
-import ApiResponse from "../utils/apiresponse.js";
+import { Subscription } from "../models/subscription.models.js"; // ADJUST path if different
+import ApiResponse from "../utils/apiresponse.js"; // ADJUST if this lives elsewhere
 
-const DEFAULT_DURATION_DAYS = 30;
-const DEFAULT_PAID_PRICE = 5000;
+// Duplicated from payment.controller.js's SUBSCRIPTION_DAYS — ADJUST
+// to import both from one shared constants module instead.
+const SUBSCRIPTION_DAYS = 30;
 
-// Resolve the logged-in doctor's subscription (doctor-only helper).
-const getDoctorSubscription = async (userId) => {
-  const doctor = await Doctor.findOne({ user: userId });
-  if (!doctor) {
-    throw new ApiError(403, "Only a doctor can manage a subscription");
-  }
-  const subscription = await Subscription.findOne({ doctor: doctor._id });
-  if (!subscription) {
-    throw new ApiError(404, "Subscription not found");
-  }
-  return { doctor, subscription };
-};
-
-// Lazily flip an active paid plan to "expired" once its endDate has passed.
-const applyLazyExpiry = async (subscription) => {
+// Flips an active-but-past-endDate subscription to status:"expired"
+// the moment anyone reads it, instead of needing a cron job. Mutates
+// and persists the doc if it changed.
+async function applyExpiryIfNeeded(subscription) {
+  if (!subscription) return subscription;
   if (
     subscription.plan === "paid" &&
     subscription.status === "active" &&
@@ -32,134 +32,106 @@ const applyLazyExpiry = async (subscription) => {
     await subscription.save();
   }
   return subscription;
+}
+
+// GET /subscription/me  (doctor)
+const getMySubscription = async (req, res) => {
+  try {
+    const doctorId = req.user._id;
+    let subscription = await Subscription.findOne({ doctor: doctorId });
+
+    if (!subscription) {
+      // No Subscription doc at all — treat as an implicit Free plan
+      // rather than 404ing, so the dashboard always has something
+      // valid to render (per the "never fall back to a hardcoded
+      // Free on error" rule — this isn't an error, it's a real
+      // absence of a paid subscription). Not persisted; if every
+      // doctor gets a Subscription doc at registration in your real
+      // flow, this branch should rarely run.
+      return res
+        .status(200)
+        .json(
+          new ApiResponse(
+            200,
+            {
+              plan: "free",
+              price: 0,
+              status: "active",
+              startDate: null,
+              endDate: null,
+            },
+            "No subscription on record — defaulting to Free.",
+          ),
+        );
+    }
+
+    subscription = await applyExpiryIfNeeded(subscription);
+
+    return res
+      .status(200)
+      .json(new ApiResponse(200, subscription, "Your subscription"));
+  } catch (error) {
+    return res.status(500).json(new ApiResponse(500, null, error.message));
+  }
 };
 
-// 1. Get My Subscription  
-const getMySubscription = async (req, res, next) => {
-  try {
-    const { subscription } = await getDoctorSubscription(req.user._id);
-    await applyLazyExpiry(subscription);
-
-    return res.status(200).json(
+// PATCH /subscription/upgrade  (doctor)
+// In this app, upgrading to paid Practice requires an admin-approved
+// payment proof (see payment.controller.js submitPayment /
+// approvePayment) — that's the real activation path. This endpoint
+// intentionally refuses to instantly grant a paid plan without one,
+// so it can't be used to bypass payment review.
+const upgradeSubscription = async (req, res) => {
+  return res
+    .status(400)
+    .json(
       new ApiResponse(
-        200,
-        {
-          subscriptionId: subscription.subscriptionId,
-          plan: subscription.plan,
-          price: subscription.price,
-          status: subscription.status,
-          startDate: subscription.startDate,
-          endDate: subscription.endDate,
-        },
-        "Subscription fetched",
+        400,
+        null,
+        "Upgrading to Practice requires submitting a payment proof for admin review — use POST /payments instead.",
       ),
     );
-  } catch (error) {
-    next(error);
-  }
 };
 
-// 2. Upgrade Subscription 
-const upgradeSubscription = async (req, res, next) => {
-  try {
-    const price = req.body.price ?? DEFAULT_PAID_PRICE;
-    const durationDays = req.body.durationDays ?? DEFAULT_DURATION_DAYS;
-
-    if (isNaN(price) || Number(price) <= 0) {
-      throw new ApiError(400, "Price must be a number greater than 0");
-    }
-    if (isNaN(durationDays) || Number(durationDays) <= 0) {
-      throw new ApiError(400, "Duration must be a number greater than 0");
-    }
-
-    const { subscription } = await getDoctorSubscription(req.user._id);
-
-    if (subscription.plan === "paid" && subscription.status === "active") {
-      throw new ApiError(400, "You already have an active paid subscription");
-    }
-
-    // (Future: run payment here before applying the upgrade.)
-    const startDate = new Date();
-    const endDate = new Date();
-    endDate.setDate(endDate.getDate() + Number(durationDays));
-
-    subscription.plan = "paid";
-    subscription.price = Number(price);
-    subscription.status = "active";
-    subscription.startDate = startDate;
-    subscription.endDate = endDate;
-    await subscription.save();
-
-    return res
-      .status(200)
-      .json(new ApiResponse(200, subscription, "Subscription upgraded to paid"));
-  } catch (error) {
-    next(error);
-  }
-};
-
-// 3. Renew Subscription  
-const renewSubscription = async (req, res, next) => {
-  try {
-    const durationDays = req.body.durationDays ?? DEFAULT_DURATION_DAYS;
-    if (isNaN(durationDays) || Number(durationDays) <= 0) {
-      throw new ApiError(400, "Duration must be a number greater than 0");
-    }
-
-    const { subscription } = await getDoctorSubscription(req.user._id);
-
-    if (subscription.plan !== "paid") {
-      throw new ApiError(400, "Only a paid subscription can be renewed");
-    }
-    if (subscription.status === "cancelled") {
-      throw new ApiError(
+// PATCH /subscription/renew  (doctor)
+// Same reasoning as upgradeSubscription — renewing/extending Practice
+// also goes through a new approved payment (approvePayment's
+// extension logic), not a free self-service renewal.
+const renewSubscription = async (req, res) => {
+  return res
+    .status(400)
+    .json(
+      new ApiResponse(
         400,
-        "A cancelled subscription cannot be renewed. Please upgrade again.",
-      );
-    }
-
-    // Extend from the later of "now" or the current endDate, so renewing early
-    // doesn't lose remaining days, and renewing after expiry starts fresh.
-    const now = new Date();
-    const base =
-      subscription.endDate && subscription.endDate > now
-        ? new Date(subscription.endDate)
-        : now;
-    base.setDate(base.getDate() + Number(durationDays));
-
-    subscription.endDate = base;
-    subscription.status = "active";
-    await subscription.save();
-
-    return res
-      .status(200)
-      .json(new ApiResponse(200, subscription, "Subscription renewed"));
-  } catch (error) {
-    next(error);
-  }
+        null,
+        "Renewing Practice requires submitting a payment proof for admin review — use POST /payments instead.",
+      ),
+    );
 };
 
-// 4. Cancel Subscription  
-const cancelSubscription = async (req, res, next) => {
+// PATCH /subscription/cancel  (doctor)
+// Self-service downgrade to Free. Doesn't touch Payment records —
+// just stops the current paid period from being treated as active.
+// ADJUST: decide whether this should also clear startDate/endDate or
+// leave them as history; this leaves them and only flips plan/status.
+const cancelSubscription = async (req, res) => {
   try {
-    const { subscription } = await getDoctorSubscription(req.user._id);
-
-    if (subscription.plan !== "paid") {
-      throw new ApiError(400, "Only a paid subscription can be cancelled");
+    const doctorId = req.user._id;
+    const subscription = await Subscription.findOneAndUpdate(
+      { doctor: doctorId },
+      { $set: { plan: "free", status: "cancelled" } },
+      { new: true },
+    );
+    if (!subscription) {
+      return res
+        .status(404)
+        .json(new ApiResponse(404, null, "No subscription found"));
     }
-    if (subscription.status === "cancelled") {
-      throw new ApiError(400, "Subscription is already cancelled");
-    }
-
-    // Keep the document for history 
-    subscription.status = "cancelled";
-    await subscription.save();
-
     return res
       .status(200)
       .json(new ApiResponse(200, subscription, "Subscription cancelled"));
   } catch (error) {
-    next(error);
+    return res.status(500).json(new ApiResponse(500, null, error.message));
   }
 };
 

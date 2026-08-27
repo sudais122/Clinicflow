@@ -444,6 +444,34 @@
               </div>
             </div>
 
+            <div class="card">
+              <div class="card-head">
+                <h3>Payment Approvals</h3>
+                <select id="payStatusFilter">
+                  <option value="pending" selected>Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                  <option value="">All</option>
+                </select>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Doctor</th>
+                      <th>Plan</th>
+                      <th>Amount</th>
+                      <th>Method</th>
+                      <th>Submitted</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="payTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+
             <div class="filter-row">
               <input type="text" id="subSearch" placeholder="Search doctor…" />
               <select id="subPlanFilter">

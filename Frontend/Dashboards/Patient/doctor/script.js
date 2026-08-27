@@ -101,6 +101,7 @@ const ENDPOINTS = {
   emailChangeVerify: () => `${API_BASE}/auth/email/verify`,
   submitPayment: () => `${API_BASE}/payments`,
   myPayments: () => `${API_BASE}/payments/me`,
+  mySubscription: () => `${API_BASE}/subscription/me`,
 };
 
 /* ---------- fetch helpers ---------- */
@@ -202,6 +203,9 @@ const STATE = {
     status: "Active",
     start: "—",
     end: "—",
+    price: 0,
+    loaded: false,
+    loadError: false,
   },
   notifications: [],
   revenue: {
@@ -309,23 +313,6 @@ async function loadDashboard(dateStr) {
   DOCTOR.status = d.doctor?.status || DOCTOR.status;
   DOCTOR.isSuspended = d.doctor?.isSuspended ?? DOCTOR.isSuspended;
   DOCTOR.suspensionReason = d.doctor?.suspensionReason || "";
-
-  // Reflects whatever approvePayment() set on the Doctor document —
-  // only meaningful once your Doctor schema actually has this field
-  // (see assumption #6 above). Falls back to whatever was already in
-  // STATE.subscription (the Free/Active default) if it's absent.
-  if (d.doctor?.subscription) {
-    STATE.subscription.plan =
-      d.doctor.subscription.plan || STATE.subscription.plan;
-    STATE.subscription.status =
-      d.doctor.subscription.status || STATE.subscription.status;
-    STATE.subscription.start = d.doctor.subscription.start
-      ? formatShortDate(d.doctor.subscription.start)
-      : STATE.subscription.start;
-    STATE.subscription.end = d.doctor.subscription.end
-      ? formatShortDate(d.doctor.subscription.end)
-      : STATE.subscription.end;
-  }
 
   STATE.clinicOpen = d.clinicStatus === "open";
   STATE.nowServing = d.currentServingToken ?? STATE.nowServing;
@@ -451,6 +438,41 @@ async function loadPayments() {
   const res = await apiGet(ENDPOINTS.myPayments());
   STATE.payments.list = res.data || [];
   STATE.payments.loaded = true;
+}
+
+/* ---------- SUBSCRIPTION ----------
+   Loads the real Subscription document (its own collection — see
+   subscription.model.js, doctor: unique ref) and maps its
+   free/paid + active/expired/cancelled shape onto the
+   Free/Practice + Active/Expired/Cancelled labels the UI shows.
+   Always refetched on Subscription-view open (cheap single-doc
+   read, and needs to reflect admin approvals that happened while
+   this tab was elsewhere) — no .loaded gate like payments/revenue. */
+async function loadSubscription() {
+  try {
+    const res = await apiGet(ENDPOINTS.mySubscription());
+    const s = res.data;
+    STATE.subscription.loaded = true;
+    STATE.subscription.loadError = false;
+    if (!s) return;
+    STATE.subscription.plan = s.plan === "paid" ? "Practice" : "Free";
+    STATE.subscription.status =
+      s.status === "active"
+        ? "Active"
+        : s.status === "expired"
+          ? "Expired"
+          : "Cancelled";
+    STATE.subscription.price = s.price ?? (s.plan === "paid" ? 4500 : 0);
+    STATE.subscription.start = s.startDate ? formatShortDate(s.startDate) : "—";
+    STATE.subscription.end =
+      s.plan === "paid" && s.endDate ? formatShortDate(s.endDate) : "—";
+  } catch (err) {
+    // Explicitly flagged rather than silently leaving whatever was
+    // there before — renderSubscription() shows a real "couldn't
+    // load, retry" state instead of ever defaulting to Free on error.
+    STATE.subscription.loadError = true;
+    throw err;
+  }
 }
 
 /* ---------- ROUTER ---------- */
@@ -1573,14 +1595,19 @@ function renderRevenueView() {
 // cached instantly, then refetch and re-render with fresh data.
 async function openSubscriptionView() {
   renderSubscription();
+  try {
+    await loadSubscription();
+  } catch (err) {
+    console.warn("Subscription load failed:", err.message);
+  }
   if (!STATE.payments.loaded) {
     try {
       await loadPayments();
-      renderSubscription();
     } catch (err) {
       toast("Couldn't load payment history", err.message, true);
     }
   }
+  renderSubscription();
 }
 
 function paymentStatusPill(status) {
@@ -1624,6 +1651,28 @@ function renderSubscription() {
   const pending = STATE.payments.list.find((p) => p.status === "pending");
   const latest = STATE.payments.list[0];
 
+  // Source of truth for plan/button state is STATE.subscription
+  // (the real GET /subscription/me response) — never payment history.
+  // A payment existing, even an approved one, doesn't by itself mean
+  // the subscription is active; only the backend's subscription
+  // record does.
+  const isActivePractice = s.plan === "Practice" && s.status === "Active";
+  const isExpiredPractice = s.plan === "Practice" && s.status === "Expired";
+
+  // If the subscription fetch itself failed, don't guess — show a
+  // real error + retry instead of ever falling back to a hardcoded
+  // Free/Active default.
+  if (s.loadError && !s.loaded) {
+    $("#subWrap").innerHTML = `
+      <div class="card" style="padding:32px;text-align:center;">
+        <div style="font-weight:700;margin-bottom:6px;">Unable to load subscription.</div>
+        <div style="color:var(--muted);font-size:14px;margin-bottom:16px;">Check your connection and try again.</div>
+        <button class="btn btn-primary" id="subRetryBtn">Retry</button>
+      </div>`;
+    $("#subRetryBtn").onclick = () => openSubscriptionView();
+    return;
+  }
+
   const rejectedBanner =
     latest && latest.status === "rejected" && !pending
       ? `<div class="card" style="padding:18px 22px;margin-bottom:20px;border-color:#f3c7c7;background:var(--red-soft);">
@@ -1633,25 +1682,48 @@ function renderSubscription() {
       : "";
   const pendingBanner = pending
     ? `<div class="card" style="padding:18px 22px;margin-bottom:20px;border-color:#fde3b8;background:var(--amber-soft);">
-        <div style="font-weight:700;color:var(--amber-text);margin-bottom:4px;">Payment under review</div>
-        <div style="color:var(--amber-text);font-size:14px;">Submitted ${formatShortDate(pending.createdAt)} — PKR ${Number(pending.amount || 0).toLocaleString()} via ${paymentMethodLabel(pending.paymentMethod)}. We'll activate your Practice plan once an admin approves it.</div>
+        <div style="font-weight:700;color:var(--amber-text);margin-bottom:4px;">${isActivePractice ? "Extension under review" : "Payment under review"}</div>
+        <div style="color:var(--amber-text);font-size:14px;">Submitted ${formatShortDate(pending.createdAt)} — PKR ${Number(pending.amount || 0).toLocaleString()} via ${paymentMethodLabel(pending.paymentMethod)}. ${isActivePractice ? "We'll extend your Practice plan once an admin approves it." : "We'll activate your Practice plan once an admin approves it."}</div>
       </div>`
     : "";
 
-  const practiceButton =
-    s.plan === "Practice"
-      ? ""
-      : pending
-        ? `<button class="btn btn-ghost btn-lg" disabled>Payment Under Review</button>`
-        : `<button class="btn btn-primary btn-lg" id="upgradePracticeBtn">${latest && latest.status === "rejected" ? "Resubmit Payment" : "Upgrade to Practice"}</button>`;
+  // Practice plan card button — the ONLY things that decide this are
+  // the real subscription state and whether a payment is currently
+  // mid-review. Never gated on "a payment exists in history".
+  let practiceButton;
+  let paymentMode = "upgrade";
+  if (isActivePractice) {
+    paymentMode = "extend";
+    practiceButton = pending
+      ? `<button class="btn btn-ghost btn-lg" disabled>Extension Under Review</button>`
+      : `<button class="btn btn-primary btn-lg" id="upgradePracticeBtn">Extend Subscription</button>`;
+  } else if (isExpiredPractice) {
+    paymentMode = "renew";
+    practiceButton = pending
+      ? `<button class="btn btn-ghost btn-lg" disabled>Payment Under Review</button>`
+      : `<button class="btn btn-primary btn-lg" id="upgradePracticeBtn">Renew Practice</button>`;
+  } else {
+    paymentMode = "upgrade";
+    practiceButton = pending
+      ? `<button class="btn btn-ghost btn-lg" disabled>Payment Under Review</button>`
+      : `<button class="btn btn-primary btn-lg" id="upgradePracticeBtn">${latest && latest.status === "rejected" ? "Resubmit Payment" : "Upgrade to Practice"}</button>`;
+  }
+
+  const statusPillClass = isExpiredPractice ? "cancelled" : "active";
 
   $("#subWrap").innerHTML = `
     ${rejectedBanner}
     ${pendingBanner}
     <div class="card sub-current">
-      <div class="sc-top"><div><div class="k">Current Plan</div><div class="sc-plan">${s.plan}</div>
-        <div class="sc-dates">Start Date: ${s.start} · End Date: ${s.end}</div></div>
-        <span class="pill active"><span class="d"></span> ${s.status}</span></div>
+      <div class="sc-top">
+        <div>
+          <div class="k">Current Plan</div>
+          <div class="sc-plan">${s.plan}</div>
+          <div class="sc-dates">PKR ${Number(s.price || 0).toLocaleString()} / month</div>
+          <div class="sc-dates">${s.plan === "Practice" ? `Start Date: ${s.start} · End Date: ${s.end}` : "Unlimited"}</div>
+        </div>
+        <span class="pill ${statusPillClass}"><span class="d"></span> ${s.status}</span>
+      </div>
     </div>
     <div class="plans">
       <div class="card plan ${s.plan === "Free" ? "current" : ""}">
@@ -1659,8 +1731,17 @@ function renderSubscription() {
         <div class="price">PKR 0 <small>per month</small></div>
         <ul>${["Up to 25 tokens per clinic day", "Live queue with real-time updates", "Basic appointment management", "Email support"].map((f) => `<li><span class="ck">✓</span> ${f}</li>`).join("")}</ul>
       </div>
-      <div class="card plan ${s.plan === "Practice" ? "current" : ""}">
-        <div class="ph"><span class="pname">Practice</span>${s.plan === "Practice" ? '<span class="curtag">Current plan</span>' : ""}</div>
+      <div class="card plan ${isActivePractice ? "current" : ""}">
+        <div class="ph">
+          <span class="pname">Practice</span>
+          ${
+            isActivePractice
+              ? '<span class="curtag">Current plan</span>'
+              : isExpiredPractice
+                ? '<span class="curtag" style="background:var(--red-soft);color:var(--red-text);">Expired</span>'
+                : ""
+          }
+        </div>
         <div class="price">PKR 4,500 <small>per month</small></div>
         <ul>${["Unlimited tokens per clinic day", "Advanced queue delay controls", "Patient notifications", "Priority support"].map((f) => `<li><span class="ck">✓</span> ${f}</li>`).join("")}</ul>
         ${practiceButton}
@@ -1668,21 +1749,30 @@ function renderSubscription() {
     </div>
     <div class="card appt-panel mt24">
       <div class="aph">
-        <div><h2>Payment History</h2><div class="sub">All your submitted payment proofs.</div></div>
+        <div><h2>Payment History</h2><div class="sub">All your submitted payment proofs — this is a record of submissions, not the source of truth for your current plan.</div></div>
         <span class="count-chip">${STATE.payments.list.length}</span>
       </div>
       ${paymentHistoryHTML()}
     </div>`;
 
   const ub = $("#upgradePracticeBtn");
-  if (ub) ub.onclick = openPaymentModal;
+  if (ub) ub.onclick = () => openPaymentModal(paymentMode);
 }
 
 // Payment submission modal — uploads a screenshot via multipart
 // form-data to POST /payments. "Practice" is hardcoded as the plan
 // since it's the only paid tier right now; add a plan <select> here
-// if more paid plans get added later.
-function openPaymentModal() {
+// if more paid plans get added later. `mode` only changes the
+// heading copy — the same endpoint handles fresh activation and
+// extension (approvePayment decides which based on the doctor's
+// current subscription state).
+function openPaymentModal(mode = "upgrade") {
+  const titles = {
+    upgrade: "Upgrade to Practice",
+    extend: "Extend Your Practice Subscription",
+    renew: "Renew Your Practice Subscription",
+  };
+
   // ADJUST: replace with your real Easypaisa number / bank details.
   const payInstructions = `
     <div style="background:var(--blue-tint);border:1px solid #d9e6ff;border-radius:14px;padding:16px 18px;margin:20px 0;font-size:13.5px;color:var(--sub);line-height:1.6;">
@@ -1692,7 +1782,7 @@ function openPaymentModal() {
 
   openModal(`
   <div class="modal-head">
-    <div><h2>Upgrade to Practice</h2><div class="sub">PKR 4,500/month — pay via Easypaisa or bank transfer, then upload your receipt.</div></div>
+    <div><h2>${titles[mode] || titles.upgrade}</h2><div class="sub">PKR 4,500/month — pay via Easypaisa or bank transfer, then upload your receipt.</div></div>
     <button class="modal-close" data-close>✕</button>
   </div>
   ${payInstructions}

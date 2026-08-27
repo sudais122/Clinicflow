@@ -53,6 +53,15 @@ const ENDPOINTS = {
   subscriptionExtend: (id) => `${API_BASE}/admin/subscriptions/${id}/extend`,
   subscriptionPlan: (id) => `${API_BASE}/admin/subscriptions/${id}/plan`,
 
+  // Payment-proof approval queue (separate from the /admin/subscriptions
+  // plan/expiry tracker above) — see payment.controller.js /
+  // adminPayment.routes.js. No per-id GET exists on the backend, so
+  // the review modal reads straight from the already-fetched list
+  // (PAY_STATE.list) instead of an extra round trip.
+  payments: (qs) => `${API_BASE}/admin/payments?${qs}`,
+  paymentApprove: (id) => `${API_BASE}/admin/payments/${id}/approve`,
+  paymentReject: (id) => `${API_BASE}/admin/payments/${id}/reject`,
+
   reports: (qs) => `${API_BASE}/admin/reports/problems?${qs}`,
   reportDetails: (id) => `${API_BASE}/admin/reports/problems/${id}`,
   reportReview: (id) => `${API_BASE}/admin/reports/problems/${id}/review`,
@@ -92,6 +101,9 @@ const DR_STATE = { page: 1, limit: 20, search: "", status: "", spec: "" };
 const PT_STATE = { page: 1, limit: 20, search: "", status: "" };
 const SUB_STATE = { page: 1, limit: 20, search: "", plan: "", status: "" };
 const REP_STATE = { page: 1, limit: 20, status: "" };
+// Payment-proof approval queue state — defaults to "pending" so the
+// panel opens showing what actually needs action.
+const PAY_STATE = { status: "pending", list: [] };
 let currentDoctorId = null;
 let currentPatientId = null;
 const CHARTS = {}; // holds live Chart.js instances so we can destroy+recreate on reload
@@ -125,7 +137,10 @@ function showView(name) {
   if (name === "overview") loadOverview();
   if (name === "doctors") loadDoctors();
   if (name === "patients") loadPatients();
-  if (name === "subscriptions") loadSubscriptions();
+  if (name === "subscriptions") {
+    loadPayments();
+    loadSubscriptions();
+  }
   if (name === "reports") loadReports();
   if (name === "profile") loadProfile();
 }
@@ -169,6 +184,18 @@ function subStatusPill(status) {
     { active: "Active", expired: "Expired", cancelled: "Cancelled" }[status] ||
     status;
   return `<span class="pill ${status}">${label}</span>`;
+}
+// Payment-proof status pill — pending/approved/rejected, mapped onto
+// the same completed/cancelled color classes used elsewhere so it
+// doesn't need any new CSS.
+function paymentStatusPill(status) {
+  const label =
+    { pending: "Pending", approved: "Approved", rejected: "Rejected" }[
+      status
+    ] || status;
+  const cls =
+    status === "approved" ? "completed" : status === "rejected" ? "cancelled" : "pending";
+  return `<span class="pill ${cls}">${label}</span>`;
 }
 function fmtDate(d) {
   if (!d) return "—";
@@ -312,8 +339,6 @@ async function loadOverview() {
     toast("Couldn't load overview", err.message, true);
   }
 
-  // Appointment status donut — reuses overview totals already fetched above,
-  // no separate endpoint needed for this one.
   if (overviewData && typeof Chart !== "undefined") {
     destroyChart("apptStatus");
     const a = overviewData.appointments;
@@ -341,7 +366,6 @@ async function loadOverview() {
     });
   }
 
-  // Trends — real, from /admin/trends (appointment trend, revenue, patient growth)
   if (typeof Chart !== "undefined") {
     try {
       const res = await apiGet(ENDPOINTS.trends());
@@ -429,7 +453,6 @@ async function loadOverview() {
     }
   }
 
-  // Recent activity — derived feed, real records
   try {
     const res = await apiGet(ENDPOINTS.activity());
     const items = res.data;
@@ -449,7 +472,6 @@ async function loadOverview() {
       `<div class="empty-row">Couldn't load activity.</div>`;
   }
 
-  // Pending doctor approvals (real data, from the doctors list filtered by status=pending)
   try {
     const res = await apiGet(ENDPOINTS.doctors("status=pending&limit=5"));
     const list = res.data.doctors;
@@ -469,7 +491,6 @@ async function loadOverview() {
       `<div class="empty-row">Couldn't load.</div>`;
   }
 
-  // Latest problem reports (real data)
   try {
     const res = await apiGet(ENDPOINTS.reports("status=pending&limit=5"));
     const list = res.data.reports;
@@ -627,7 +648,6 @@ async function openDoctorDetail(doctorId) {
           .join("")
       : `<div class="empty-row">No subscription on record.</div>`;
 
-    // Actions — only Verify/Deactivate/Activate, per spec (never "Suspend")
     let actions = "";
     if (doctor.status === "pending")
       actions = `<button class="btn btn-primary btn-sm" id="ddApprove">Verify / Accept</button>`;
@@ -826,6 +846,129 @@ async function patientAction(url, successMsg) {
     openPatientDetail(currentPatientId);
   } catch (err) {
     toast("Action failed", err.message, true);
+  }
+}
+
+/* ================= PAYMENT APPROVALS =================
+   Approval queue for payment-proof screenshots submitted by doctors
+   (POST /payments on their side). Separate from the general
+   Subscriptions plan/expiry tracker below — approving a payment here
+   is what's meant to activate a doctor's paid subscription
+   server-side (see approvePayment in payment.controller.js). */
+async function loadPayments() {
+  const qs = new URLSearchParams({
+    ...(PAY_STATE.status && { status: PAY_STATE.status }),
+  }).toString();
+  try {
+    const res = await apiGet(ENDPOINTS.payments(qs));
+    PAY_STATE.list = res.data || [];
+
+    $("#payTableBody").innerHTML = PAY_STATE.list.length
+      ? PAY_STATE.list
+          .map(
+            (p) => `
+      <tr>
+        <td>
+          <div class="cell-name">${p.doctor?.fullname || "—"}</div>
+          <div class="cell-sub">${p.doctor?.clinicName || ""}</div>
+        </td>
+        <td>${p.plan}</td>
+        <td>PKR ${Number(p.amount || 0).toLocaleString()}</td>
+        <td>${p.paymentMethod === "easypaisa" ? "Easypaisa" : "Bank Transfer"}</td>
+        <td>${fmtDate(p.createdAt)}</td>
+        <td>${paymentStatusPill(p.status)}</td>
+        <td><button class="btn btn-secondary btn-sm" data-open-payment="${p._id}">Review</button></td>
+      </tr>`,
+          )
+          .join("")
+      : `<tr><td colspan="7" class="empty-row">No payment submissions found.</td></tr>`;
+  } catch (err) {
+    toast("Couldn't load payments", err.message, true);
+  }
+}
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-open-payment]");
+  if (el) openPaymentReviewModal(el.dataset.openPayment);
+});
+$("#payStatusFilter").addEventListener("change", (e) => {
+  PAY_STATE.status = e.target.value;
+  loadPayments();
+});
+
+function openPaymentReviewModal(paymentId) {
+  const p = PAY_STATE.list.find((x) => x._id === paymentId);
+  if (!p) return toast("Payment not found", "", true);
+
+  const actionsHtml =
+    p.status === "pending"
+      ? `<button class="btn btn-danger" id="payRejectBtn">Reject</button>
+         <button class="btn btn-primary" id="payApproveBtn">Approve</button>`
+      : "";
+
+  openModal(`
+    <h2>${p.doctor?.fullname || "Payment Review"}</h2>
+    <p class="muted">${p.doctor?.clinicName || ""}${p.doctor?.doctorId ? " · " + p.doctor.doctorId : ""}</p>
+    <div class="field-grid">
+      <div><div class="fk">Plan</div><div class="fv">${p.plan}</div></div>
+      <div><div class="fk">Amount</div><div class="fv">PKR ${Number(p.amount || 0).toLocaleString()}</div></div>
+      <div><div class="fk">Method</div><div class="fv">${p.paymentMethod === "easypaisa" ? "Easypaisa" : "Bank Transfer"}</div></div>
+      <div><div class="fk">Submitted</div><div class="fv">${fmtDate(p.createdAt)}</div></div>
+      ${p.transactionReference ? `<div><div class="fk">Reference</div><div class="fv">${p.transactionReference}</div></div>` : ""}
+      <div><div class="fk">Status</div><div class="fv">${paymentStatusPill(p.status)}</div></div>
+    </div>
+    ${
+      p.status === "rejected" && p.rejectionReason
+        ? `<div style="margin-top:14px;"><div class="fk" style="margin-bottom:6px;">Rejection Reason</div><p style="line-height:1.6;">${p.rejectionReason}</p></div>`
+        : ""
+    }
+    <div style="margin-top:18px;">
+      <div class="fk" style="margin-bottom:8px;">Payment Screenshot</div>
+      <a href="${p.screenshotUrl}" target="_blank" rel="noopener">
+        <img src="${p.screenshotUrl}" alt="Payment screenshot" style="width:100%;border-radius:10px;border:1px solid var(--line);display:block;">
+      </a>
+    </div>
+    <div class="modal-foot">${actionsHtml}</div>`);
+
+  const approveBtn = $("#payApproveBtn");
+  const rejectBtn = $("#payRejectBtn");
+
+  if (approveBtn) {
+    approveBtn.onclick = async () => {
+      approveBtn.disabled = true;
+      approveBtn.textContent = "Approving…";
+      try {
+        await apiPatch(ENDPOINTS.paymentApprove(p._id));
+        toast("Payment approved", "Doctor's subscription has been activated.");
+        closeModal();
+        loadPayments();
+      } catch (err) {
+        toast("Couldn't approve", err.message, true);
+        approveBtn.disabled = false;
+        approveBtn.textContent = "Approve";
+      }
+    };
+  }
+  if (rejectBtn) {
+    rejectBtn.onclick = () => {
+      confirmModal({
+        title: "Reject this payment?",
+        body: "Let the doctor know why so they can resubmit correctly.",
+        confirmText: "Reject",
+        danger: true,
+        extraFieldHtml: `<div class="field" style="width:100%; margin-top:14px;"><label>Reason (optional)</label><textarea id="rejectReasonText" rows="3" style="width:100%; padding:10px; border:1px solid var(--line); border-radius:8px;"></textarea></div>`,
+        onConfirm: async () => {
+          const reason = $("#rejectReasonText").value.trim();
+          try {
+            await apiPatch(ENDPOINTS.paymentReject(p._id), { reason });
+            closeModal();
+            toast("Payment rejected");
+            loadPayments();
+          } catch (err) {
+            toast("Couldn't reject", err.message, true);
+          }
+        },
+      });
+    };
   }
 }
 
