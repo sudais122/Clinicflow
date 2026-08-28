@@ -3,76 +3,6 @@
    NOW WIRED TO THE REAL BACKEND. Every network call is grouped
    under ENDPOINTS / api*() below — if a path is wrong for your
    server, fix it in ONE place.
-
-   ASSUMPTIONS (please verify / adjust):
-   1. All routes are mounted under API_PREFIX = "/api/v1".
-   2. queue.routes.js  -> "/api/v1/queue"
-      doctor.routes.js -> "/api/v1/doctor"
-      doctorDashboard.routes.js -> "/api/v1/dashboard"  (matches the
-         "GET /dashboard/doctor" comment in the controller)
-      appointment routes -> "/api/v1/appointments" with:
-         GET   /appointments/doctor            (getDoctorAppointments)
-         PATCH /appointments/:id/status         (updateAppointmentStatus)
-      These two appointment paths are GUESSES — appointment.routes.js
-      wasn't provided. Update ENDPOINTS.appointments below if different.
-   3. Auth is cookie-based (JWT in an httpOnly cookie), so every fetch
-      uses `credentials: "include"`. No Authorization header is sent.
-   4. MISSING BACKEND ROUTE: there is currently no self-service
-      "get my own queue" endpoint — only `GET /queue/:doctorId`, and
-      the frontend never learns its own Mongo _id (only the human
-      readable `doctorId` code comes back from the dashboard route).
-      This file calls `GET /queue/me` for that. Please add it
-      server-side, e.g.:
-        router.get("/me", async (req, res, next) => {
-          const { queue } = await getOwnQueue(req.user._id); // reuse existing helper
-          res.json(new ApiResponse(200, queue, "Own queue fetched"));
-        });
-      If that route 404s, this file falls back to whatever the
-      dashboard endpoint already gives us (clinicStatus + nowServing)
-      and leaves lastToken / delay / estimatedTimePerPatient at
-      their last-known values.
-   5. `cancelAppointment` is patient-only (checks Patient ownership),
-      so the doctor dashboard's "Cancel Appointment" button calls
-      `updateAppointmentStatus` with `{ status: "cancelled" }` instead.
-   6. Notifications have no backend route in what was shared, so that
-      panel is still mocked. Subscription is NOW wired to the real
-      payment endpoints (see the PAYMENTS section below) — the plan
-      cards and "Current Plan" summary still read from
-      STATE.subscription, which loadDashboard() now populates from
-      d.doctor?.subscription IF your Doctor schema has that field
-      (see the approvePayment ADJUST note in payment.controller.js).
-      If it doesn't yet, that part stays showing "Free/Active" even
-      after an admin approves a payment — the payment history/status
-      below it is real either way.
-   7. Realtime: socket.io-client must be loaded on the page
-      (e.g. `<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>`
-      in doctor-dashboard.html, before this script) for the socket
-      block near the bottom to activate. If `io` isn't found, the
-      dashboard still works — it just won't get push updates and will
-      rely on refetching after each action.
-
-   QUEUE LIFECYCLE (fixed):
-   "No patients waiting" and "clinic closed" are NOT the same state.
-   Finishing the last patient marks THAT APPOINTMENT completed via
-   PATCH /appointments/:id/status — nothing more. It never touches
-   clinicStatus. Closing the clinic is a separate, explicit doctor
-   action (the "Close Clinic" button -> toggleClinic() -> PATCH
-   /queue/end), independent of how many patients were served.
-   See serveNext() / renderQueue() below.
-
-   DATE SCOPING (fixed):
-   loadAppointments() previously never received the selected date at
-   all — loadAll() called it with zero arguments, and even if it had,
-   GET /appointments/doctor never read a date query param on the
-   backend. Every appointment the doctor ever had was fetched
-   regardless of which day was selected, so navigating days (Previous
-   Day / Next Day / the date picker) never actually changed what
-   showed up in Overview's "Today's Appointments", the Queue page, or
-   the Appointments table. Both are fixed now: loadAll() resolves the
-   selected date via loadDashboard() first, then passes THAT exact
-   date into loadAppointments(), which appends it as ?date=... — and
-   the backend controller needs the matching fix (see
-   getDoctorAppointments) to actually filter by it.
    ============================================================ */
 
 const CFG = window.CLINICFLOW_CONFIG || {};
@@ -103,6 +33,8 @@ const ENDPOINTS = {
   myPayments: () => `${API_BASE}/payments/me`,
   mySubscription: () => `${API_BASE}/subscription/me`,
   cancelSubscription: () => `${API_BASE}/subscription/cancel`,
+  notifications: () => `${API_BASE}/notifications`,
+  notificationReadAll: () => `${API_BASE}/notifications/read-all`,
 };
 
 /* ---------- fetch helpers ---------- */
@@ -135,9 +67,6 @@ const apiPatch = (url, body) => apiCall(url, { method: "PATCH", body });
 const apiPost = (url, body) => apiCall(url, { method: "POST", body });
 
 // Multipart/form-data upload — used for the payment-proof screenshot.
-// Deliberately does NOT set Content-Type: when the body is a
-// FormData instance the browser sets the multipart boundary itself;
-// setting it manually breaks the upload.
 async function apiUpload(url, formData) {
   const res = await fetch(url, {
     method: "POST",
@@ -163,8 +92,7 @@ async function apiUpload(url, formData) {
 }
 
 /* ============================================================
-   LIVE STATE — replaces the old hard-coded mock objects.
-   Populated by loadAll() on init and refreshed after every action.
+   LIVE STATE
    ============================================================ */
 const DOCTOR = {
   _id: "",
@@ -179,9 +107,6 @@ const DOCTOR = {
   bio: "",
   experience: 0,
   licenseNumber: "",
-  // Account gating — from doctor.model.js. status defaults to
-  // "pending" until an admin approves it; isSuspended is a separate
-  // flag independent of status (see renderAccountBlocked below).
   status: "pending",
   isSuspended: false,
   suspensionReason: "",
@@ -196,9 +121,6 @@ const STATE = {
   selectedDate: null,
   clinicDayLabel: "",
   appointments: [],
-  // Still seeded with a Free/Active default — loadDashboard() below
-  // overwrites this from d.doctor?.subscription if your backend
-  // returns one (see assumption #6 at the top of this file).
   subscription: {
     plan: "Free",
     status: "Active",
@@ -210,8 +132,8 @@ const STATE = {
   },
   notifications: [],
   revenue: {
-    range: "28", // "7" | "28" | "custom" — which button is active
-    from: "", // only meaningful when range === "custom"
+    range: "28",
+    from: "",
     to: "",
     totalRevenue: 0,
     paidAppointments: 0,
@@ -254,16 +176,9 @@ const counts = () => {
 };
 const waitingCount = () =>
   STATE.appointments.filter((a) => a.status === "waiting").length;
-const appts = () => STATE.appointments; // kept for drop-in compatibility with render code
+const appts = () => STATE.appointments;
 
-/* LOADERS — pull real data from the backend*/
-// Explicit timeZone: "Asia/Karachi" on both formatters — without
-// this, these use the BROWSER's local timezone implicitly, which can
-// render a different calendar day than the one actually selected via
-// the PKT-based backend filter (see getDoctorDashboard /
-// getDoctorAppointments). Matches the backend's PKT_OFFSET_MS
-// assumption explicitly instead of hoping the browser happens to
-// agree.
+/* LOADERS */
 function formatLongDate(d) {
   return new Date(d).toLocaleDateString("en-US", {
     timeZone: "Asia/Karachi",
@@ -282,13 +197,6 @@ function formatShortDate(d) {
   });
 }
 
-// Adds `delta` days to a "YYYY-MM-DD" string using pure UTC
-// arithmetic — Date.UTC()/getUTCDate()/setUTCDate() never consult the
-// browser's local timezone at all, so this is correct regardless of
-// what timezone the machine running the dashboard happens to be set
-// to. This is what datePrev/dateNext use below, replacing the old
-// `new Date(str); d.setDate(...); d.toISOString()` pattern, which
-// silently depended on the browser's LOCAL timezone matching PKT.
 function addDaysToISO(iso, delta) {
   const [y, m, d] = iso.split("-").map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
@@ -308,20 +216,12 @@ async function loadDashboard(dateStr) {
   DOCTOR.name = d.doctor?.fullname || DOCTOR.name;
   DOCTOR.clinic = d.doctor?.clinicName || DOCTOR.clinic;
   DOCTOR.spec = d.doctor?.specialization || DOCTOR.spec;
-  // Plain fields on the Doctor document itself — should already be
-  // present here the same way clinicName/specialization are, since
-  // none of these require a populate/join.
   DOCTOR.status = d.doctor?.status || DOCTOR.status;
   DOCTOR.isSuspended = d.doctor?.isSuspended ?? DOCTOR.isSuspended;
   DOCTOR.suspensionReason = d.doctor?.suspensionReason || "";
 
   STATE.clinicOpen = d.clinicStatus === "open";
   STATE.nowServing = d.currentServingToken ?? STATE.nowServing;
-  // This is the single source of truth for "which day is selected"
-  // across the whole dashboard — the backend resolves it (defaults
-  // to today if dateStr was undefined) and every other loader below
-  // uses THIS value, not the raw dateStr argument, so they can never
-  // drift apart from what the stats cards are showing.
   STATE.selectedDate = d.selectedDate;
   STATE.clinicDayLabel = formatLongDate(d.selectedDate);
 }
@@ -344,7 +244,6 @@ async function loadQueueMe() {
     const q = res.data;
     applyQueueDoc(q);
   } catch (err) {
-    // Route not implemented yet on the backend — degrade gracefully.
     console.warn(
       "GET /queue/me unavailable, falling back to dashboard-only queue data:",
       err.message,
@@ -361,11 +260,6 @@ function applyQueueDoc(q) {
   STATE.delay = q.delayInMinutes ?? STATE.delay;
 }
 
-// dateStr is now REQUIRED-in-practice: loadAll() always passes
-// STATE.selectedDate (resolved by loadDashboard) so this stays in
-// sync with the stats cards. Left optional here only so this
-// function can still be called standalone (e.g. after cancelling an
-// appointment) without having to re-derive the date at each call site.
 async function loadAppointments(dateStr) {
   const url = dateStr
     ? `${ENDPOINTS.appointmentsDoctor()}?date=${encodeURIComponent(dateStr)}`
@@ -398,10 +292,6 @@ async function loadAppointments(dateStr) {
 
 async function loadAll(dateStr) {
   await loadDashboard(dateStr);
-  // Use STATE.selectedDate (the backend-resolved date), not the raw
-  // dateStr argument — this is what was silently missing before, and
-  // is why the appointments list/table never actually changed when
-  // navigating days.
   await Promise.all([
     loadQueueMe(),
     loadAppointments(STATE.selectedDate),
@@ -409,12 +299,6 @@ async function loadAll(dateStr) {
   ]);
 }
 
-// Loads STATE.revenue for whichever range is currently active.
-// Called lazily — only when the Revenue view is actually opened or a
-// range button is clicked — not as part of loadAll(), since revenue
-// isn't needed for the Overview/Queue/Appointments pages at all
-// (only a tiny summary card on Overview needs SOME numbers, and that
-// reuses this same loader on first render).
 async function loadRevenue() {
   const r = STATE.revenue;
   const params =
@@ -432,23 +316,14 @@ async function loadRevenue() {
   r.loaded = true;
 }
 
-/* ---------- PAYMENTS ----------
-   Loads this doctor's payment submission history. Called lazily when
-   the Subscription view is opened — same pattern as loadRevenue(). */
+/* ---------- PAYMENTS ---------- */
 async function loadPayments() {
   const res = await apiGet(ENDPOINTS.myPayments());
   STATE.payments.list = res.data || [];
   STATE.payments.loaded = true;
 }
 
-/* ---------- SUBSCRIPTION ----------
-   Loads the real Subscription document (its own collection — see
-   subscription.model.js, doctor: unique ref) and maps its
-   free/paid + active/expired/cancelled shape onto the
-   Free/Practice + Active/Expired/Cancelled labels the UI shows.
-   Always refetched on Subscription-view open (cheap single-doc
-   read, and needs to reflect admin approvals that happened while
-   this tab was elsewhere) — no .loaded gate like payments/revenue. */
+/* ---------- SUBSCRIPTION ---------- */
 async function loadSubscription() {
   try {
     const res = await apiGet(ENDPOINTS.mySubscription());
@@ -468,12 +343,15 @@ async function loadSubscription() {
     STATE.subscription.end =
       s.plan === "paid" && s.endDate ? formatShortDate(s.endDate) : "—";
   } catch (err) {
-    // Explicitly flagged rather than silently leaving whatever was
-    // there before — renderSubscription() shows a real "couldn't
-    // load, retry" state instead of ever defaulting to Free on error.
     STATE.subscription.loadError = true;
     throw err;
   }
+}
+
+/* ---------- NOTIFICATIONS ---------- */
+async function loadNotifications() {
+  const res = await apiGet(ENDPOINTS.notifications());
+  STATE.notifications = res.data || [];
 }
 
 /* ---------- ROUTER ---------- */
@@ -576,9 +454,6 @@ function renderOverview() {
   renderLiveQueueCard($("#liveQueueCard"), { withActions: true });
   renderSequence($("#seqList"));
 
-  // Render immediately with whatever's cached (zeros on first ever
-  // load), then re-render once the real numbers come back — same
-  // optimistic-then-refresh pattern as the rest of this dashboard.
   renderRevenueCard($("#revenueCard"));
   if (!STATE.revenue.loaded) {
     loadRevenue()
@@ -591,8 +466,6 @@ function renderOverview() {
     ${apptTableHTML(appts())}`;
 }
 
-// Small summary card — total for the currently active range, paid
-// appointment count, and a button into the full Revenue page.
 function renderRevenueCard(el) {
   if (!el) return;
   const r = STATE.revenue;
@@ -691,10 +564,7 @@ function renderSequence(el) {
   el.innerHTML = out;
 }
 
-/* ---------- CLINIC OPEN / CLOSE ----------
-   The ONLY two places clinicStatus is ever changed. Whether there
-   are patients waiting, in progress, or none at all has no bearing
-   on this — closing is always an explicit doctor action. */
+/* ---------- CLINIC OPEN / CLOSE ---------- */
 async function toggleClinic() {
   if (!STATE.clinicOpen) {
     try {
@@ -760,13 +630,6 @@ function renderQueue() {
   $("#svNext").textContent = nx ? "#" + nx : "—";
   $("#svNextName").textContent = nx ? nameFor(nx) : "—";
 
-  // ---- Serve/Complete button state -----------------------------
-  // Three independent facts decide what this button does:
-  //   1. is the clinic open at all?
-  //   2. is there a patient currently in-progress?
-  //   3. is there another patient waiting after them?
-  // None of these ever imply "close the clinic" — that stays a
-  // separate action the doctor takes with the Close Clinic button.
   const btn = $("#serveNextBtn");
   const current = apptFor(STATE.nowServing);
   const currentInProgress = current && current.status === "in-progress";
@@ -778,16 +641,12 @@ function renderQueue() {
     $("#serveNote").textContent =
       "Open the clinic to continue serving patients.";
   } else if (!nx && !currentInProgress) {
-    // Nobody in progress and nobody waiting — genuinely nothing left
-    // to serve right now. This is a normal, valid state; it does
-    // NOT mean the clinic should close.
     btn.disabled = true;
     btn.textContent = "All Patients Served";
     btn.onclick = null;
     $("#serveNote").textContent =
       "All patients have been served. The queue stays open — close the clinic whenever you're ready using the button above.";
   } else if (!nx && currentInProgress) {
-    // Last patient of the day, still in progress.
     btn.disabled = false;
     btn.textContent = "Complete Current Patient";
     btn.onclick = serveNext;
@@ -804,10 +663,6 @@ function renderQueue() {
   renderSequence($("#qcSeqList"));
 }
 
-/* Completes whichever patient is currently in-progress (if any),
-   then — only if someone is waiting — advances the queue to them.
-   Never touches clinicStatus. This is the single fix for
-   "appointment not moving from waiting/in-progress to completed". */
 async function serveNext() {
   if (!STATE.clinicOpen) return;
 
@@ -824,17 +679,12 @@ async function serveNext() {
   btn.textContent = nx ? "Serving…" : "Completing…";
 
   try {
-    // Step 1 — explicitly mark the current appointment completed.
-    // This PATCH is the piece that was missing: queue/next alone
-    // was only ever moving the "now serving" pointer, never the
-    // appointment's own status field.
     if (current && current.status === "in-progress") {
       await apiPatch(ENDPOINTS.appointmentStatus(current.id), {
         status: "completed",
       });
     }
 
-    // Step 2 — only advance the queue pointer if someone is waiting.
     if (nx) {
       await apiPatch(ENDPOINTS.queueNext());
       toast("Serving next patient", `Now serving #${nx}.`);
@@ -906,15 +756,6 @@ let apptFilter = "all",
 function renderAppointments() {
   $("#dateCur").textContent = STATE.clinicDayLabel;
   $("#apptDayLabel").textContent = STATE.clinicDayLabel;
-  // Keep the date picker's own displayed value in sync with whatever
-  // is actually loaded. Without this, Previous Day/Next Day change
-  // STATE.selectedDate and reload the data correctly, but the
-  // <input type="date"> itself is never touched — it silently drifts
-  // out of sync. A native date input only fires "change" when its
-  // value actually differs from what's currently shown, so clicking
-  // a date in the picker that happens to match its own STALE
-  // displayed value does nothing at all, leaving the doctor stuck on
-  // whatever day the buttons had navigated to.
   const dateInput = $("#apptDate");
   if (dateInput && STATE.selectedDate) dateInput.value = STATE.selectedDate;
   let list = appts();
@@ -927,11 +768,6 @@ function renderAppointments() {
         (a.appointmentId || "").toLowerCase().includes(q),
     );
   }
-  // Reflects whichever scope is active: the "All" status tab shows
-  // the total for the currently selected clinic day; switching to
-  // Waiting/Completed/etc. narrows it to that status; the date
-  // picker/Previous/Next Day buttons change which day's appointments
-  // this total is drawn from in the first place (see loadAll fix).
   $("#apptCount").textContent = list.length;
   $("#apptTableWrap").innerHTML = list.length
     ? apptTableHTML(list)
@@ -954,9 +790,6 @@ function apptTableHTML(list) {
       .join("")}
   </tbody></table>`;
 }
-// Inline "Mark Paid" clicks from any appointments table (Overview's
-// "Today's Appointments" and the full Appointments page both render
-// via apptTableHTML, so one delegated listener covers both).
 document.addEventListener("click", async (e) => {
   const btn = e.target.closest("[data-markpaid]");
   if (!btn) return;
@@ -968,7 +801,7 @@ document.addEventListener("click", async (e) => {
     await apiPatch(ENDPOINTS.appointmentPay(apptId));
     toast("Marked as paid", `Token #${tok} — payment recorded.`);
     await loadAppointments(STATE.selectedDate);
-    STATE.revenue.loaded = false; // revenue totals just changed
+    STATE.revenue.loaded = false;
     refreshAll();
   } catch (err) {
     toast("Couldn't mark as paid", err.message, true);
@@ -989,7 +822,7 @@ $("#apptSearch").addEventListener("input", (e) => {
   renderAppointments();
 });
 $("#apptDate").addEventListener("change", async (e) => {
-  const val = e.target.value; // YYYY-MM-DD
+  const val = e.target.value;
   if (!val) return;
   try {
     await loadAll(val);
@@ -1074,9 +907,6 @@ function openDetails(tok) {
         await apiPatch(ENDPOINTS.appointmentPay(markPaidBtn.dataset.apptId));
         toast("Marked as paid", `Token #${a.token} — payment recorded.`);
         await loadAppointments(STATE.selectedDate);
-        // Revenue totals just changed — force a refetch next time the
-        // Overview/Revenue view is shown rather than showing stale
-        // numbers until the doctor happens to switch ranges.
         STATE.revenue.loaded = false;
         openDetails(tok);
         refreshAll();
@@ -1107,8 +937,6 @@ document.addEventListener("click", (e) => {
     danger: true,
     onConfirm: async () => {
       try {
-        // Doctor-scoped cancellation: updateAppointmentStatus, not the
-        // patient-only cancelAppointment endpoint. See assumption #5.
         await apiPatch(ENDPOINTS.appointmentStatus(apptId), {
           status: "cancelled",
         });
@@ -1227,7 +1055,6 @@ $("#editProfileBtn").addEventListener("click", () => {
     <div class="field"><label>Bio</label>
       <textarea name="bio" maxlength="1000" style="min-height:100px">${d.bio || ""}</textarea></div>
 
-    <!-- Read-only fields -->
     <div class="field"><label>Doctor ID (read-only)</label>
       <input value="${d.doctorId}" disabled style="background:var(--line-soft);color:var(--muted)"></div>
     <div class="field"><label>License Number (read-only)</label>
@@ -1422,9 +1249,6 @@ function renderEmailChange() {
   }
 }
 /* ---------- REVENUE ---------- */
-// Called by showView("revenue"). Renders whatever's cached first
-// (instant, no flash of empty content on repeat visits), then always
-// re-fetches for the currently active range so the numbers are fresh.
 async function openRevenueView() {
   renderRevenueView();
   try {
@@ -1443,9 +1267,6 @@ function renderRevenueView() {
   const rangeBtn = (value, label) => `
     <button class="revenue-range-btn ${r.range === value ? "active" : ""}" data-revenue-range="${value}">${label}</button>`;
 
-  // Resolved from/to come back from the backend for EVERY range, not
-  // just "custom" (see loadRevenue), so this reflects the real dates
-  // behind "7 Days" / "28 Days" too, not just the button label.
   const scopeLabel =
     r.from && r.to
       ? `${formatShortDate(r.from)} – ${formatShortDate(r.to)}`
@@ -1453,9 +1274,6 @@ function renderRevenueView() {
         ? "Choose a date range"
         : `Last ${r.range} days`;
 
-  // Custom-date fields now live INSIDE the same toolbar card as the
-  // range tabs (separated by a hairline), instead of popping up as a
-  // second, visually disconnected card underneath.
   const customForm =
     r.range === "custom"
       ? `
@@ -1472,9 +1290,6 @@ function renderRevenueView() {
     </div>`
       : "";
 
-  // Same icon-tile pattern as Overview's statGrid (st-ic + tone
-  // class), so these three stats read as part of the same design
-  // system instead of the plain text-only tiles they were before.
   const statTiles = [
     [
       "Total Revenue",
@@ -1584,16 +1399,7 @@ function renderRevenueView() {
   }
 }
 
-/* ---------- SUBSCRIPTION ----------
-   Now wired to the real payment endpoints (POST /payments,
-   GET /payments/me). The plan cards below and the "Current Plan"
-   summary still read from STATE.subscription, which is only as real
-   as your Doctor.subscription field (see assumption #6 up top) — the
-   pending/rejected banners and payment history table are fully real
-   either way, driven off STATE.payments.list. */
-
-// Same lazy-load-on-open pattern as Revenue: render whatever's
-// cached instantly, then refetch and re-render with fresh data.
+/* ---------- SUBSCRIPTION ---------- */
 async function openSubscriptionView() {
   renderSubscription();
   try {
@@ -1652,17 +1458,9 @@ function renderSubscription() {
   const pending = STATE.payments.list.find((p) => p.status === "pending");
   const latest = STATE.payments.list[0];
 
-  // Source of truth for plan/button state is STATE.subscription
-  // (the real GET /subscription/me response) — never payment history.
-  // A payment existing, even an approved one, doesn't by itself mean
-  // the subscription is active; only the backend's subscription
-  // record does.
   const isActivePractice = s.plan === "Practice" && s.status === "Active";
   const isExpiredPractice = s.plan === "Practice" && s.status === "Expired";
 
-  // If the subscription fetch itself failed, don't guess — show a
-  // real error + retry instead of ever falling back to a hardcoded
-  // Free/Active default.
   if (s.loadError && !s.loaded) {
     $("#subWrap").innerHTML = `
       <div class="card" style="padding:32px;text-align:center;">
@@ -1688,9 +1486,6 @@ function renderSubscription() {
       </div>`
     : "";
 
-  // Practice plan card button — the ONLY things that decide this are
-  // the real subscription state and whether a payment is currently
-  // mid-review. Never gated on "a payment exists in history".
   let practiceButton;
   let paymentMode = "upgrade";
   if (isActivePractice) {
@@ -1768,10 +1563,6 @@ function renderSubscription() {
   if (cb) cb.onclick = cancelSubscriptionFlow;
 }
 
-// Cancelling takes effect immediately — the backend's
-// PATCH /subscription/cancel flips status straight to "cancelled",
-// it does NOT preserve access until the current endDate. Say that
-// plainly in the confirm dialog so the doctor isn't surprised.
 function cancelSubscriptionFlow() {
   confirmModal({
     tone: "danger",
@@ -1792,13 +1583,6 @@ function cancelSubscriptionFlow() {
   });
 }
 
-// Payment submission modal — uploads a screenshot via multipart
-// form-data to POST /payments. "Practice" is hardcoded as the plan
-// since it's the only paid tier right now; add a plan <select> here
-// if more paid plans get added later. `mode` only changes the
-// heading copy — the same endpoint handles fresh activation and
-// extension (approvePayment decides which based on the doctor's
-// current subscription state).
 function openPaymentModal(mode = "upgrade") {
   const titles = {
     upgrade: "Upgrade to Practice",
@@ -1806,7 +1590,6 @@ function openPaymentModal(mode = "upgrade") {
     renew: "Renew Your Practice Subscription",
   };
 
-  // ADJUST: replace with your real Easypaisa number / bank details.
   const payInstructions = `
     <div style="background:var(--blue-tint);border:1px solid #d9e6ff;border-radius:14px;padding:16px 18px;margin:20px 0;font-size:13.5px;color:var(--sub);line-height:1.6;">
       <b>Easypaisa:</b> 03XX-XXXXXXX (ClinicFlow) &nbsp;·&nbsp; <b>Bank:</b> Account title / number here<br>
@@ -1922,7 +1705,6 @@ $("#faqBtn").addEventListener("click", () => {
 $("#reportBtn").addEventListener("click", openReportModal);
 
 function openReportModal() {
-  // MOCK — no /support/report route was provided in the backend files shared.
   const MAX = 1000;
   openModal(`
     <div class="modal-head"><div><h2>Report a Problem</h2><div class="sub">Tell us about the issue you're experiencing.</div></div>
@@ -1951,8 +1733,6 @@ function openReportModal() {
     btn.disabled = true;
     btn.textContent = "Sending…";
     try {
-      // TODO: replace with a real call once /support/report exists, e.g.
-      // await apiPost(`${API_BASE}${API_PREFIX}/support/report`, { message: msg });
       await sleep(700);
       closeModal();
       toast("Report submitted", "Your report has been submitted successfully.");
@@ -2005,13 +1785,24 @@ function closeMenus() {
   $("#notifMenu").classList.remove("open");
   $("#userMenu").classList.remove("open");
 }
-$("#notifBtn").addEventListener("click", (e) => {
+$("#notifBtn").addEventListener("click", async (e) => {
   e.stopPropagation();
   $("#userMenu").classList.remove("open");
+  const opening = !$("#notifMenu").classList.contains("open");
   $("#notifMenu").classList.toggle("open");
-  STATE.notifications.forEach((n) => (n.read = true));
-  $("#notifCount").style.display = "none";
-  renderNotifs();
+  if (!opening) return; // just closing — nothing to fetch
+
+  try {
+    await loadNotifications();
+    renderNotifs(); // show real unread state first
+    if (STATE.notifications.some((n) => !n.read)) {
+      await apiPatch(ENDPOINTS.notificationReadAll());
+      STATE.notifications.forEach((n) => (n.read = true));
+      renderNotifs();
+    }
+  } catch (err) {
+    console.warn("Couldn't load notifications:", err.message);
+  }
 });
 $("#userBtn").addEventListener("click", (e) => {
   e.stopPropagation();
@@ -2022,10 +1813,27 @@ document.addEventListener("click", closeMenus);
 function renderNotifs() {
   $("#notifList").innerHTML = STATE.notifications.length
     ? STATE.notifications
-        .map(
-          (n) =>
-            `<div class="notif-item ${n.read ? "read" : ""}"><span class="nd"></span><div><div class="nt">${n.text}</div><div class="ntime">${n.time}</div></div></div>`,
-        )
+        .map((n) => {
+          // Only BOOKING_LIMIT_REACHED notifications get this button.
+          // It's a plain data-view="subscription" element, picked up
+          // automatically by the existing global [data-view] click
+          // listener near the top of this file — no new navigation
+          // code, reuses showView("subscription") exactly like the
+          // sidebar "Subscription" link does.
+          const upgradeBtn =
+            n.type === "BOOKING_LIMIT_REACHED"
+              ? `<button class="btn btn-primary" style="margin-top:8px;padding:7px 14px;font-size:12.5px;" data-view="subscription">Upgrade to Practice</button>`
+              : "";
+          return `<div class="notif-item ${n.read ? "read" : ""}">
+            <span class="nd"></span>
+            <div>
+              <div class="nt" style="font-weight:600;">${n.title}</div>
+              <div class="nt" style="color:var(--muted);margin-top:2px;">${n.message}</div>
+              <div class="ntime">${formatShortDate(n.createdAt)}</div>
+              ${upgradeBtn}
+            </div>
+          </div>`;
+        })
         .join("")
     : `<div class="notif-item read"><div><div class="nt">No notifications yet.</div></div></div>`;
   const unread = STATE.notifications.filter((n) => !n.read).length;
@@ -2099,15 +1907,8 @@ const greetWord = () => {
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Token 0 means "nobody has been called yet" — the clinic hasn't
-// started, or the queue has been reset. Token numbering starts at 1,
-// so 0 is never a real token and must never be shown as "#0".
 const tokenLabel = (n) => (n && n > 0 ? "#" + n : "—");
 
-// Same idea, but for the "who's currently being served" name/label:
-// distinguish "nobody yet because the clinic is closed" from "nobody
-// yet because the clinic just opened and hasn't called anyone" —
-// rather than falling through to a bare "—" with no context.
 function nowServingName() {
   if (STATE.nowServing && STATE.nowServing > 0) {
     return nameFor(STATE.nowServing);
@@ -2188,14 +1989,6 @@ function initSocket() {
 }
 
 /* ---------- INIT ---------- */
-/* ---------- ACCOUNT GATING ----------
-   status/isSuspended come straight off the Doctor document (see
-   doctor.model.js). A doctor can log in successfully — the account
-   exists and the password is correct — but still not be allowed to
-   USE the dashboard yet. This runs once, right after loadAll(),
-   before any view is shown, and fully replaces the page rather than
-   rendering the dashboard underneath a banner: someone who isn't
-   approved shouldn't be able to see live patient/queue data at all. */
 function renderAccountBlocked({ title, message, tone = "warn" }) {
   const iconPath =
     tone === "danger"
@@ -2265,9 +2058,6 @@ async function init() {
     }
   }
 
-  // Check suspension before pending/inactive — a suspended account
-  // should show the suspension reason even if status also happens
-  // to be something else.
   if (DOCTOR.isSuspended) {
     renderAccountBlocked({
       tone: "danger",
@@ -2296,6 +2086,11 @@ async function init() {
     return;
   }
 
+  try {
+    await loadNotifications();
+  } catch (err) {
+    console.warn("Couldn't load notifications:", err.message);
+  }
   renderNotifs();
   syncTopbarIdentity();
   const h = location.hash.replace("#", "");
