@@ -4,10 +4,12 @@ import { Appointment } from "../models/appointment.models.js";
 import { Queue } from "../models/queue.models.js";
 import { Doctor } from "../models/doctor.models.js";
 import { Patient } from "../models/patient.models.js";
+import { Subscription } from "../models/subscription.models.js";
 
 import ApiError from "../utils/apierror.js";
-import ApiResponse from "../utils/ApiResponse.js";
+import ApiResponse from "../utils/apiresponse.js";
 import { pktDayBoundsUTC } from "../utils/date.js";
+import { FREE_PLAN_DAILY_TOKEN_LIMIT, isUnlimitedPlan } from "../utils/planLimits.js";
 
 import { generateAppointmentId } from "../utils/id's/appointment.js";
 import { emitQueueLengthUpdated } from "../socket/socketEvents.js";
@@ -131,69 +133,140 @@ const bookAppointment = async (req, res, next) => {
     }
 
     const session = await mongoose.startSession();
-    session.startTransaction();
 
     let appointmentDocId;
+    // Standard MongoDB transient-transaction retry pattern: two
+    // concurrent bookings for the same doctor both touch the same
+    // Queue document (queue.save below), so MongoDB's transaction
+    // conflict detection aborts one of them with a
+    // TransientTransactionError. Retrying that one (rather than
+    // surfacing a raw Mongo error) is what makes "only one request
+    // gets token #25" resolve into a real response instead of a
+    // 500 for whichever request lost the race.
+    const MAX_RETRIES = 3;
+    let attempt = 0;
 
-    try {
-      const queue = await Queue.findOne({
-        doctor: doctorId,
-      }).session(session);
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      session.startTransaction();
 
-      if (!queue) {
-        throw new ApiError(404, "Doctor queue not found");
+      try {
+        const queue = await Queue.findOne({
+          doctor: doctorId,
+        }).session(session);
+
+        if (!queue) {
+          throw new ApiError(404, "Doctor queue not found");
+        }
+
+        // ---- Daily token-capacity check (Free plan only) ----------
+        // Queue.lastToken is a lifetime counter for this doctor (no
+        // date field on Queue at all — it only resets via the
+        // doctor's manual "Reset Queue" action), so it can NEVER
+        // safely represent "tokens issued today". The limit is
+        // therefore checked against real Appointment documents
+        // scoped to the PKT calendar day being booked — which may be
+        // today or a future date — not against lastToken, and not
+        // against "now".
+        const subscription = await Subscription.findOne({
+          doctor: doctorId,
+        }).session(session);
+
+        if (!isUnlimitedPlan(subscription)) {
+          const bookingDayPKT = date.toLocaleDateString("en-CA", {
+            timeZone: "Asia/Karachi",
+          }); // -> "YYYY-MM-DD"
+          const bounds = pktDayBoundsUTC(bookingDayPKT);
+
+          if (bounds) {
+            const { startOfDay, endOfDay } = bounds;
+            // Counts every appointment for that day regardless of
+            // status, including cancelled — consistent with how
+            // Queue.lastToken itself already behaves elsewhere
+            // (cancelling an appointment never decrements lastToken,
+            // so a token once issued stays "spent" against the daily
+            // count too). ADJUST to `status: { $ne: "cancelled" }`
+            // if you'd rather a cancellation free up a slot.
+            const todaysCount = await Appointment.countDocuments({
+              doctor: doctorId,
+              appointmentDate: { $gte: startOfDay, $lte: endOfDay },
+            }).session(session);
+
+            if (todaysCount >= FREE_PLAN_DAILY_TOKEN_LIMIT) {
+              // No token generated, no queue mutation, no
+              // appointment created — this throws before any of
+              // that happens, exactly like the other validation
+              // errors above.
+              throw new ApiError(
+                400,
+                `Today's queue is full. This doctor has reached the maximum number of appointments (${FREE_PLAN_DAILY_TOKEN_LIMIT}) for today. Please choose another date or doctor.`,
+              );
+            }
+          }
+        }
+        // ---- END capacity check -------------------------------------
+
+        const tokenNumber = Math.max(queue.lastToken + 1, 1);
+
+        queue.lastToken = tokenNumber;
+        queue.lastUpdated = new Date();
+
+        await queue.save({ session });
+
+        const appointmentId = await generateAppointmentId({
+          session,
+        });
+
+        const [appointment] = await Appointment.create(
+          [
+            {
+              appointmentId,
+              bookedBy: req.user._id,
+              patient: patient._id,
+              patientName: actualPatientName,
+              patientPhone: actualPatientPhone,
+              doctor: doctorId,
+              appointmentDate: date,
+              tokenNumber,
+              status: "waiting",
+              // Snapshotted at booking time — see the note on this
+              // field in the schema. Revenue calculations always sum
+              // THIS value, never doctor.consultationFee live, so a
+              // later fee change never rewrites past revenue.
+              consultationFee: doctor.consultationFee,
+              paymentStatus: "unpaid",
+            },
+          ],
+          { session },
+        );
+
+        appointmentDocId = appointment._id;
+
+        await session.commitTransaction();
+        break; // success — leave the retry loop
+      } catch (error) {
+        await session.abortTransaction();
+
+        const isTransient =
+          typeof error?.hasErrorLabel === "function" &&
+          error.hasErrorLabel("TransientTransactionError");
+
+        if (isTransient && attempt < MAX_RETRIES - 1) {
+          attempt++;
+          continue; // retry the whole transaction body
+        }
+
+        throw error instanceof ApiError
+          ? error
+          : new ApiError(
+              500,
+              error?.message ||
+                "Something went wrong while booking the appointment",
+            );
       }
-
-      const tokenNumber = Math.max(queue.lastToken + 1, 1);
-
-      queue.lastToken = tokenNumber;
-      queue.lastUpdated = new Date();
-
-      await queue.save({ session });
-
-      const appointmentId = await generateAppointmentId({
-        session,
-      });
-
-      const [appointment] = await Appointment.create(
-        [
-          {
-            appointmentId,
-            bookedBy: req.user._id,
-            patient: patient._id,
-            patientName: actualPatientName,
-            patientPhone: actualPatientPhone,
-            doctor: doctorId,
-            appointmentDate: date,
-            tokenNumber,
-            status: "waiting",
-            // Snapshotted at booking time — see the note on this
-            // field in the schema. Revenue calculations always sum
-            // THIS value, never doctor.consultationFee live, so a
-            // later fee change never rewrites past revenue.
-            consultationFee: doctor.consultationFee,
-            paymentStatus: "unpaid",
-          },
-        ],
-        { session },
-      );
-
-      appointmentDocId = appointment._id;
-
-      await session.commitTransaction();
-    } catch (error) {
-      await session.abortTransaction();
-
-      throw error instanceof ApiError
-        ? error
-        : new ApiError(
-            500,
-            error?.message ||
-              "Something went wrong while booking the appointment",
-          );
-    } finally {
-      await session.endSession();
     }
+
+    session.endSession();
 
     const populatedAppointment =
       await Appointment.findById(appointmentDocId)

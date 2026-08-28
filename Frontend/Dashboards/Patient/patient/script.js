@@ -1433,6 +1433,41 @@
       $("#wConfirm").onclick = confirmBooking;
     }
   }
+  function showQueueFullModal(doctorName) {
+    const wrap = document.createElement("div");
+    wrap.style.cssText =
+      "position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:999;" +
+      "display:flex;align-items:center;justify-content:center;padding:20px;";
+    wrap.innerHTML = `
+    <div style="background:#fff;border-radius:16px;max-width:420px;width:100%;padding:28px;text-align:center;font-family:inherit;box-shadow:0 20px 50px rgba(15,23,42,.2);">
+      <div style="width:48px;height:48px;border-radius:50%;background:#FEF3C7;color:#92400E;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:22px;">⏳</div>
+      <h3 style="margin:0 0 8px;font-size:19px;font-weight:700;">Today's queue is full</h3>
+      <p style="color:#64748B;font-size:14.5px;margin:0 0 22px;line-height:1.5;">
+        ${doctorName ? doctorName : "This doctor"} has reached the maximum number of appointments for today. Please choose another date or doctor.
+      </p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <button id="qfChangeDate" style="padding:11px 18px;border-radius:10px;border:1px solid #E9EDF2;background:#fff;font-weight:600;cursor:pointer;font-size:14px;">Change Date</button>
+        <button id="qfChangeDoctor" style="padding:11px 18px;border-radius:10px;border:none;background:#2563EB;color:#fff;font-weight:600;cursor:pointer;font-size:14px;">Choose Another Doctor</button>
+      </div>
+    </div>`;
+    document.body.appendChild(wrap);
+
+    const close = () => wrap.remove();
+    wrap.addEventListener("click", (e) => {
+      if (e.target === wrap) close();
+    });
+    wrap.querySelector("#qfChangeDate").onclick = () => {
+      close();
+      book.step = 3; // back to date-picking; doctor stays selected
+      renderWizard();
+    };
+    wrap.querySelector("#qfChangeDoctor").onclick = () => {
+      close();
+      book.step = 2; // back to doctor selection
+      book.doctor = null;
+      renderWizard();
+    };
+  }
 
   async function confirmBooking() {
     const d = book.doctor;

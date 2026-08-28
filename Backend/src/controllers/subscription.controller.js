@@ -2,7 +2,7 @@ import { Doctor } from "../models/doctor.models.js";
 import { Subscription } from "../models/subscription.models.js";
 
 import ApiError from "../utils/apierror.js";
-import ApiResponse from "../utils/ApiResponse.js";
+import ApiResponse from "../utils/apiresponse.js";
 
 // req.user is the User account (from the JWT), NOT the Doctor
 // document — Doctor has its own _id with a `user` ref back to it.
