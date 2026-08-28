@@ -6,7 +6,7 @@ import { Doctor } from "../models/doctor.models.js";
 import { Patient } from "../models/patient.models.js";
 
 import ApiError from "../utils/apierror.js";
-import ApiResponse from "../utils/apiresponse.js";
+import ApiResponse from "../utils/ApiResponse.js";
 import { pktDayBoundsUTC } from "../utils/date.js";
 
 import { generateAppointmentId } from "../utils/id's/appointment.js";

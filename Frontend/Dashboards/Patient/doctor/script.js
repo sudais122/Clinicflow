@@ -458,7 +458,11 @@ async function loadSubscription() {
     if (!s) return;
     STATE.subscription.plan = s.plan === "paid" ? "Practice" : "Free";
     STATE.subscription.status =
-      s.status === "active" ? "Active" : s.status === "expired" ? "Expired" : "Cancelled";
+      s.status === "active"
+        ? "Active"
+        : s.status === "expired"
+          ? "Expired"
+          : "Cancelled";
     STATE.subscription.price = s.price ?? (s.plan === "paid" ? 4500 : 0);
     STATE.subscription.start = s.startDate ? formatShortDate(s.startDate) : "—";
     STATE.subscription.end =

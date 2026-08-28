@@ -1,21 +1,3 @@
-/* ============================================================
-   I don't have your original adminSubscription.controller.js — this
-   is written fresh, matching the exact conventions already
-   established in adminDoctor.controller.js (getPagination helper,
-   ApiError + next(error), nested .populate for doctor.user). If a
-   real version of this file already exists with different logic,
-   diff against it before overwriting.
-
-   This is the fix for two of your three reported bugs:
-   - Doctor showing "-": the frontend already correctly reads
-     s.doctor?.user?.fullname — it just had nothing to populate
-     against. getSubscriptions below nested-populates doctor -> user.
-   - Multiple "active subscriptions": not actually possible with your
-     schema (Subscription.doctor has unique: true), so nothing to fix
-     there structurally — this file just returns the ONE Subscription
-     doc per doctor, correctly labeled.
-   ============================================================ */
-
 import { Subscription } from "../../models/subscription.models.js";
 import ApiError from "../../utils/apierror.js";
 import ApiResponse from "../../utils/ApiResponse.js";
@@ -27,10 +9,6 @@ const getPagination = (req) => {
   return { page, limit, skip };
 };
 
-// Same lazy-expiry-on-read derivation used in adminDoctor.controller.js's
-// getDoctorDetails (and in subscription.controller.js's
-// applyExpiryIfNeeded) — kept in sync by hand across all three.
-// ADJUST: pull into one shared helper module instead.
 function deriveStatus(subscription) {
   if (
     subscription.plan === "paid" &&
@@ -54,7 +32,7 @@ function shapeSubscription(s) {
         email: s.doctor?.user?.email || null,
       },
     },
-    plan: s.plan, // "free" | "paid" — the frontend maps "paid" -> "Practice" for display, never shows the raw word
+    plan: s.plan,
     price: s.price,
     startDate: s.startDate,
     endDate: s.endDate,
@@ -70,12 +48,10 @@ const getSubscriptions = async (req, res, next) => {
 
     const filter = {};
     if (plan) {
-      if (!["free", "paid"].includes(plan)) throw new ApiError(400, "Invalid plan filter");
+      if (!["free", "paid"].includes(plan))
+        throw new ApiError(400, "Invalid plan filter");
       filter.plan = plan;
     }
-    // status is filtered AFTER deriving live status (below), since an
-    // "active"-stored doc can actually be expired — filtering on the
-    // raw field would miss those.
     if (status && !["active", "expired", "cancelled"].includes(status)) {
       throw new ApiError(400, "Invalid status filter");
     }
@@ -128,7 +104,13 @@ const getSubscriptionDetails = async (req, res, next) => {
 
     return res
       .status(200)
-      .json(new ApiResponse(200, shapeSubscription(subscription), "Subscription fetched"));
+      .json(
+        new ApiResponse(
+          200,
+          shapeSubscription(subscription),
+          "Subscription fetched",
+        ),
+      );
   } catch (error) {
     next(error);
   }
@@ -153,16 +135,16 @@ const extendSubscription = async (req, res, next) => {
     subscription.status = "active";
     await subscription.save();
 
-    return res.status(200).json(new ApiResponse(200, subscription, "Subscription extended"));
+    return res
+      .status(200)
+      .json(new ApiResponse(200, subscription, "Subscription extended"));
   } catch (error) {
     next(error);
   }
 };
 
-// PATCH /admin/subscriptions/:subscriptionId/plan   Body: { plan: "free" | "paid" }
-// Manual admin override (e.g. comping a plan, or reverting a mistaken
-// approval) — bypasses payment review, so keep this admin-only.
-const setSubscriptionPlan = async (req, res, next) => {
+// PATCH /admin/subscriptions/:subscriptionId/plan
+const changeSubscriptionPlan = async (req, res, next) => {
   try {
     const { plan } = req.body;
     if (!["free", "paid"].includes(plan)) {
@@ -186,10 +168,17 @@ const setSubscriptionPlan = async (req, res, next) => {
     }
     await subscription.save();
 
-    return res.status(200).json(new ApiResponse(200, subscription, "Plan updated"));
+    return res
+      .status(200)
+      .json(new ApiResponse(200, subscription, "Plan updated"));
   } catch (error) {
     next(error);
   }
 };
 
-export { getSubscriptions, getSubscriptionDetails, extendSubscription, setSubscriptionPlan };
+export {
+  getSubscriptions,
+  getSubscriptionDetails,
+  extendSubscription,
+  changeSubscriptionPlan,
+};

@@ -8,12 +8,13 @@ import {
   markAppointmentPaid,
 } from "../controllers/appointment.controller.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
+import { enforceDailyTokenLimit } from "../middlewares/Tokenlimit.middleware.js";
 
 const router = Router();
 router.use(verifyJWT);
 
 // Patient-facing
-router.post("/book", bookAppointment);
+router.post("/book", enforceDailyTokenLimit, bookAppointment);
 router.get("/patient", getPatientAppointments);
 router.patch("/:appointmentId/cancel", cancelAppointment);
 
