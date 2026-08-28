@@ -16,6 +16,7 @@ import emailChangeRoutes from "./routes/emailChange.routes.js";
 import reportRoutes from "./routes/reports.routes.js";
 import revenueRoutes from "./routes/Revenue.routes.js";
 import paymentRoutes from "./routes/Payment.routes.js";
+import notification from "./routes/Notification.routes.js"
 
 //admin
 import adminRouter from "./routes/admin.routes.js";
@@ -62,6 +63,7 @@ app.use("/payments", paymentRoutes);
 
 app.use("/support", reportRoutes);
 
+app.use("/notifications",notification)
 //admin routes
 app.use("/admin", adminRouter);
 app.use("/admin/doctors", adminDoctorRouter);

@@ -1,19 +1,5 @@
 /* ============================================================
    ClinicFlow — Patient Dashboard (behavior)
-   Wired to the real backend. There is no shared network helper —
-   every call site below does its own `fetch`, sends cookies
-   (credentials: "include"), parses the ApiResponse envelope
-   ({ statusCode, data, message, success }), and throws/toasts
-   on failure.
-   Privacy rule (spec §19): other patients appear as token
-   numbers only — never names.
-
-   NOTE: everything is wrapped in an IIFE so this file's
-   top-level consts (API_BASE, etc.) can never collide with
-   another script's globals — that collision is what caused
-   the "nothing responds to clicks" bug (a redeclared
-   top-level `const API_BASE` throws a SyntaxError and stops
-   this whole file from ever running).
    ============================================================ */
 (function () {
   const CFG = window.CLINICFLOW_CONFIG || {};
@@ -43,12 +29,8 @@
     doctors: [],
     appointments: [],
     notifications: [],
-    reports: [], // patient's own "Report a Problem" submissions
+    reports: [],
   };
-  // Returns ALL active appointments (waiting/in-progress), sorted so the
-  // most urgent one is first: in-progress beats waiting; among waiting
-  // ones, whichever is closest to being served (fewest patients ahead)
-  // comes first; ties broken by earlier appointment date.
   const activeAppts = () =>
     STATE.appointments
       .filter((a) => a.status === "waiting" || a.status === "in-progress")
@@ -60,8 +42,6 @@
         return new Date(a.date) - new Date(b.date);
       });
 
-  // Kept for any code path that only wants the single most-urgent one
-  // (e.g. the Queue page, which shows one appointment's live position).
   const activeAppt = () => activeAppts()[0];
 
   function mapAppointment(a) {
@@ -70,15 +50,6 @@
     const dt = a.appointmentDate ? new Date(a.appointmentDate) : null;
     const q = a.queue;
 
-    // Local-calendar-day ISO string (YYYY-MM-DD), built from the SAME
-    // Date object used for display, using local getters (getFullYear/
-    // getMonth/getDate) — never UTC ones. This is computed once here
-    // and used directly for date-filter comparisons in
-    // renderAppointments(), instead of the old approach of re-parsing
-    // the human-readable display string and calling .toISOString()
-    // (which returns the UTC calendar day, not the local one — for
-    // any timezone ahead of UTC, like Pakistan/UTC+5, that silently
-    // shifts the date back by a day and breaks the date filter).
     const dateISO = dt
       ? `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
           dt.getDate(),
@@ -88,8 +59,6 @@
     return {
       _id: a._id,
       id: a.appointmentId || a._id,
-      // Needed to join/leave this doctor's live queue room
-      // (queue_<doctorId> on the socket server) — see SOCKET.IO section.
       doctorId: doc._id || null,
       patient: a.patientName,
       bookedBy: a.bookedBy?.fullname || "",
@@ -509,12 +478,7 @@
       list = list.filter((a) => a.status === "completed");
     else if (apptFilter === "cancelled")
       list = list.filter((a) => a.status === "cancelled");
-    if (apptDateFilter)
-      // Compare against dateISO computed once in mapAppointment() from
-      // local date parts — NOT the old toISO(a.date), which re-parsed
-      // the human-readable display string and called .toISOString(),
-      // silently shifting the date by a day in timezones ahead of UTC.
-      list = list.filter((a) => a.dateISO === apptDateFilter);
+    if (apptDateFilter) list = list.filter((a) => a.dateISO === apptDateFilter);
 
     const box = $("#apptList");
     if (!list.length) {
@@ -1433,6 +1397,12 @@
       $("#wConfirm").onclick = confirmBooking;
     }
   }
+
+  // Fully self-contained overlay — built entirely in JS rather than
+  // depending on any pre-existing HTML overlay markup. Reuses the
+  // existing booking-wizard state (`book`) and renderWizard() so
+  // "Change Date" / "Choose Another Doctor" are real actions, not
+  // just decorative buttons.
   function showQueueFullModal(doctorName) {
     const wrap = document.createElement("div");
     wrap.style.cssText =
@@ -1567,7 +1537,17 @@
       book.doctor = null;
       book.date = "";
     } catch (err) {
-      toast("Booking failed", err.message, true);
+      // Detect the queue-full business condition by message text
+      // (the backend throws a plain ApiError, no guaranteed
+      // structured data.queueFull field) — matches on the phrase
+      // the backend always includes. Real server/network errors
+      // still fall through to the generic toast unchanged.
+      if (/queue is full/i.test(err.message || "")) {
+        $("#bookOverlay").classList.remove("open");
+        showQueueFullModal(d?.name);
+      } else {
+        toast("Booking failed", err.message, true);
+      }
     } finally {
       confirmBtn.disabled = false;
       confirmBtn.textContent = "Confirm Appointment";
@@ -2108,11 +2088,6 @@
       day: "numeric",
     });
   }
-  // Today's date as YYYY-MM-DD in LOCAL time (same local-getters
-  // approach as mapAppointment's dateISO) — used to block booking an
-  // appointment in the past, both as the date input's min= attribute
-  // and as a JS-side re-check, since min= alone doesn't stop every
-  // browser from accepting a typed/pasted past date.
   function todayISO() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(

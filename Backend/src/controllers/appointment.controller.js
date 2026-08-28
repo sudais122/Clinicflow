@@ -10,6 +10,7 @@ import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 import { pktDayBoundsUTC } from "../utils/date.js";
 import { FREE_PLAN_DAILY_TOKEN_LIMIT, isUnlimitedPlan } from "../utils/planLimits.js";
+import {notifyBookingLimitReached} from "./Notification.controller.js"
 
 import { generateAppointmentId } from "../utils/id's/appointment.js";
 import { emitQueueLengthUpdated } from "../socket/socketEvents.js";
@@ -193,10 +194,13 @@ const bookAppointment = async (req, res, next) => {
             }).session(session);
 
             if (todaysCount >= FREE_PLAN_DAILY_TOKEN_LIMIT) {
-              // No token generated, no queue mutation, no
-              // appointment created — this throws before any of
-              // that happens, exactly like the other validation
-              // errors above.
+              // Written WITHOUT {session} — deliberately outside this
+              // transaction, so it survives the abortTransaction()
+              // call below. The ApiError message itself is
+              // byte-for-byte the existing patient-facing message —
+              // unchanged, as required.
+              await notifyBookingLimitReached(doctorId, patient._id, date);
+
               throw new ApiError(
                 400,
                 `Today's queue is full. This doctor has reached the maximum number of appointments (${FREE_PLAN_DAILY_TOKEN_LIMIT}) for today. Please choose another date or doctor.`,
