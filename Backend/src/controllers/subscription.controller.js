@@ -1,27 +1,25 @@
-/* ============================================================
-   I don't have your original subscription.controller.js — this was
-   written fresh to satisfy the four named exports your existing
-   subscription.routes.js already imports (getMySubscription,
-   upgradeSubscription, renewSubscription, cancelSubscription). If a
-   real version of this file already exists with different logic,
-   diff against it before overwriting — getMySubscription's
-   lazy-expiry check is the piece that actually matters for the
-   dashboard fix; the other three are reasonable stand-ins, not
-   verified against your real business rules.
-   ============================================================ */
+import { Doctor } from "../models/doctor.models.js";
+import { Subscription } from "../models/subscription.models.js";
 
-import { Subscription } from "../models/subscription.models.js"; // ADJUST path if different
-import ApiResponse from "../utils/apiresponse.js"; // ADJUST if this lives elsewhere
+import ApiError from "../utils/apierror.js";
+import ApiResponse from "../utils/ApiResponse.js";
 
-// Duplicated from payment.controller.js's SUBSCRIPTION_DAYS — ADJUST
-// to import both from one shared constants module instead.
-const SUBSCRIPTION_DAYS = 30;
+// req.user is the User account (from the JWT), NOT the Doctor
+// document — Doctor has its own _id with a `user` ref back to it.
+// Every subscription lookup below must resolve through here first.
+const getDoctorForUser = async (userId) => {
+  const doctor = await Doctor.findOne({ user: userId });
+  if (!doctor) {
+    throw new ApiError(403, "Only a doctor can manage a subscription");
+  }
+  return doctor;
+};
 
-// Flips an active-but-past-endDate subscription to status:"expired"
-// the moment anyone reads it, instead of needing a cron job. Mutates
-// and persists the doc if it changed.
-async function applyExpiryIfNeeded(subscription) {
-  if (!subscription) return subscription;
+// Lazily flip an active paid plan to "expired" once its endDate has
+// passed — same derivation used in adminDoctor.controller.js and
+// adminSubscription.controller.js, kept in sync by hand across all
+// three. ADJUST: pull into one shared helper module instead.
+const applyExpiryIfNeeded = async (subscription) => {
   if (
     subscription.plan === "paid" &&
     subscription.status === "active" &&
@@ -32,106 +30,97 @@ async function applyExpiryIfNeeded(subscription) {
     await subscription.save();
   }
   return subscription;
-}
+};
 
 // GET /subscription/me  (doctor)
-const getMySubscription = async (req, res) => {
+const getMySubscription = async (req, res, next) => {
   try {
-    const doctorId = req.user._id;
-    let subscription = await Subscription.findOne({ doctor: doctorId });
+    const doctor = await getDoctorForUser(req.user._id);
 
+    let subscription = await Subscription.findOne({ doctor: doctor._id });
     if (!subscription) {
-      // No Subscription doc at all — treat as an implicit Free plan
-      // rather than 404ing, so the dashboard always has something
-      // valid to render (per the "never fall back to a hardcoded
-      // Free on error" rule — this isn't an error, it's a real
-      // absence of a paid subscription). Not persisted; if every
-      // doctor gets a Subscription doc at registration in your real
-      // flow, this branch should rarely run.
-      return res
-        .status(200)
-        .json(
-          new ApiResponse(
-            200,
-            {
-              plan: "free",
-              price: 0,
-              status: "active",
-              startDate: null,
-              endDate: null,
-            },
-            "No subscription on record — defaulting to Free.",
-          ),
-        );
+      // First time this doctor's subscription has been read —
+      // provision a default Free record instead of 404ing, so the
+      // dashboard always has something real to render.
+      subscription = await Subscription.create({
+        subscriptionId: `SUB-${Date.now().toString(36).toUpperCase()}`,
+        doctor: doctor._id,
+        plan: "free",
+        price: 0,
+        status: "active",
+        startDate: new Date(),
+        endDate: null,
+      });
     }
 
     subscription = await applyExpiryIfNeeded(subscription);
 
-    return res
-      .status(200)
-      .json(new ApiResponse(200, subscription, "Your subscription"));
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          subscriptionId: subscription.subscriptionId,
+          plan: subscription.plan,
+          price: subscription.price,
+          status: subscription.status,
+          startDate: subscription.startDate,
+          endDate: subscription.endDate,
+        },
+        "Subscription fetched",
+      ),
+    );
   } catch (error) {
-    return res.status(500).json(new ApiResponse(500, null, error.message));
+    next(error);
   }
 };
 
 // PATCH /subscription/upgrade  (doctor)
-// In this app, upgrading to paid Practice requires an admin-approved
+// Locked down — upgrading to paid Practice requires an admin-approved
 // payment proof (see payment.controller.js submitPayment /
-// approvePayment) — that's the real activation path. This endpoint
-// intentionally refuses to instantly grant a paid plan without one,
-// so it can't be used to bypass payment review.
-const upgradeSubscription = async (req, res) => {
-  return res
-    .status(400)
-    .json(
-      new ApiResponse(
-        400,
-        null,
-        "Upgrading to Practice requires submitting a payment proof for admin review — use POST /payments instead.",
-      ),
-    );
+// approvePayment), which is the real activation path. This refuses
+// to instantly grant a paid plan without one, so it can't be used to
+// bypass payment review.
+const upgradeSubscription = async (req, res, next) => {
+  return next(
+    new ApiError(
+      400,
+      "Upgrading to a paid plan requires submitting a payment proof for admin review — use POST /payments instead.",
+    ),
+  );
 };
 
 // PATCH /subscription/renew  (doctor)
-// Same reasoning as upgradeSubscription — renewing/extending Practice
-// also goes through a new approved payment (approvePayment's
-// extension logic), not a free self-service renewal.
-const renewSubscription = async (req, res) => {
-  return res
-    .status(400)
-    .json(
-      new ApiResponse(
-        400,
-        null,
-        "Renewing Practice requires submitting a payment proof for admin review — use POST /payments instead.",
-      ),
-    );
+// Locked down for the same reason — extensions go through the same
+// POST /payments -> approvePayment path, which already extends
+// (rather than resets) an active subscription's endDate correctly.
+const renewSubscription = async (req, res, next) => {
+  return next(
+    new ApiError(
+      400,
+      "Renewing a paid plan requires submitting a payment proof for admin review — use POST /payments instead.",
+    ),
+  );
 };
 
 // PATCH /subscription/cancel  (doctor)
-// Self-service downgrade to Free. Doesn't touch Payment records —
-// just stops the current paid period from being treated as active.
-// ADJUST: decide whether this should also clear startDate/endDate or
-// leave them as history; this leaves them and only flips plan/status.
-const cancelSubscription = async (req, res) => {
+// Self-service downgrade to Free — no money or verification bypass
+// risk, so this stays open.
+const cancelSubscription = async (req, res, next) => {
   try {
-    const doctorId = req.user._id;
+    const doctor = await getDoctorForUser(req.user._id);
     const subscription = await Subscription.findOneAndUpdate(
-      { doctor: doctorId },
+      { doctor: doctor._id },
       { $set: { plan: "free", status: "cancelled" } },
       { new: true },
     );
     if (!subscription) {
-      return res
-        .status(404)
-        .json(new ApiResponse(404, null, "No subscription found"));
+      throw new ApiError(404, "No subscription found");
     }
     return res
       .status(200)
       .json(new ApiResponse(200, subscription, "Subscription cancelled"));
   } catch (error) {
-    return res.status(500).json(new ApiResponse(500, null, error.message));
+    next(error);
   }
 };
 

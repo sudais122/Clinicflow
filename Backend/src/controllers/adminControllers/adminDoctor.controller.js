@@ -6,7 +6,7 @@ import { Appointment } from "../../models/appointment.models.js";
 import { Subscription } from "../../models/subscription.models.js";   
 
 import ApiError from "../../utils/apierror.js";
-import ApiResponse from "../../utils/apiresponse.js";
+import ApiResponse from "../../utils/ApiResponse.js";
 
 const getPagination = (req) => {
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);

@@ -194,7 +194,11 @@ function paymentStatusPill(status) {
       status
     ] || status;
   const cls =
-    status === "approved" ? "completed" : status === "rejected" ? "cancelled" : "pending";
+    status === "approved"
+      ? "completed"
+      : status === "rejected"
+        ? "cancelled"
+        : "pending";
   return `<span class="pill ${cls}">${label}</span>`;
 }
 function fmtDate(d) {
@@ -865,23 +869,32 @@ async function loadPayments() {
 
     $("#payTableBody").innerHTML = PAY_STATE.list.length
       ? PAY_STATE.list
-          .map(
-            (p) => `
+          .map((p) => {
+            // Pending: Review (opens modal with Approve/Reject).
+            // Approved/Rejected: View (same modal, read-only) plus a
+            // direct Receipt link so the screenshot doesn't require
+            // opening the modal first.
+            const actionLabel = p.status === "pending" ? "Review" : "View";
+            const receiptLink =
+              p.status !== "pending"
+                ? `<a class="link-btn" href="${p.screenshotUrl}" target="_blank" rel="noopener" style="margin-left:10px;">Receipt</a>`
+                : "";
+            return `
       <tr>
         <td>
-          <div class="cell-name">${p.doctor?.fullname || "—"}</div>
-          <div class="cell-sub">${p.doctor?.clinicName || ""}</div>
+          <div class="cell-name">${p.doctor?.user?.fullname || "—"}</div>
         </td>
+        <td>${p.doctor?.clinicName || "—"}</td>
         <td>${p.plan}</td>
         <td>PKR ${Number(p.amount || 0).toLocaleString()}</td>
         <td>${p.paymentMethod === "easypaisa" ? "Easypaisa" : "Bank Transfer"}</td>
         <td>${fmtDate(p.createdAt)}</td>
         <td>${paymentStatusPill(p.status)}</td>
-        <td><button class="btn btn-secondary btn-sm" data-open-payment="${p._id}">Review</button></td>
-      </tr>`,
-          )
+        <td><button class="btn btn-secondary btn-sm" data-open-payment="${p._id}">${actionLabel}</button>${receiptLink}</td>
+      </tr>`;
+          })
           .join("")
-      : `<tr><td colspan="7" class="empty-row">No payment submissions found.</td></tr>`;
+      : `<tr><td colspan="8" class="empty-row">No payment submissions found.</td></tr>`;
   } catch (err) {
     toast("Couldn't load payments", err.message, true);
   }
@@ -906,7 +919,7 @@ function openPaymentReviewModal(paymentId) {
       : "";
 
   openModal(`
-    <h2>${p.doctor?.fullname || "Payment Review"}</h2>
+    <h2>${p.doctor?.user?.fullname || "Payment Review"}</h2>
     <p class="muted">${p.doctor?.clinicName || ""}${p.doctor?.doctorId ? " · " + p.doctor.doctorId : ""}</p>
     <div class="field-grid">
       <div><div class="fk">Plan</div><div class="fv">${p.plan}</div></div>
@@ -996,15 +1009,17 @@ async function loadSubscriptions() {
           .map(
             (s) => `
       <tr>
-        <td><div class="cell-name">${s.doctor?.user?.fullname || "—"}</div><div class="cell-sub">${s.doctor?.clinicName || ""}</div></td>
-        <td><span class="pill ${s.plan}">${s.plan === "paid" ? "Paid" : "Free"}</span></td>
-        <td>${subStatusPill(s.liveStatus || s.status)}</td>
+        <td><div class="cell-name">${s.doctor?.user?.fullname || "—"}</div></td>
+        <td>${s.doctor?.clinicName || "—"}</td>
+        <td><span class="pill ${s.plan}">${s.plan === "paid" ? "Practice" : "Free"}</span></td>
+        <td>${subStatusPill(s.status)}</td>
+        <td>${s.plan === "paid" ? fmtDate(s.startDate) : "—"}</td>
         <td>${s.plan === "paid" ? fmtDate(s.endDate) : "—"}</td>
         <td><button class="btn btn-secondary btn-sm" data-open-sub="${s.subscriptionId}">View</button></td>
       </tr>`,
           )
           .join("")
-      : `<tr><td colspan="5" class="empty-row">No subscriptions found.</td></tr>`;
+      : `<tr><td colspan="7" class="empty-row">No subscriptions found.</td></tr>`;
 
     renderPagination($("#subPagination"), pagination, (p) => {
       SUB_STATE.page = p;
@@ -1042,19 +1057,19 @@ async function openSubscriptionModal(subscriptionId) {
     const res = await apiGet(ENDPOINTS.subscriptionDetails(subscriptionId));
     const s = res.data;
     openModal(`
-      <h2>${s.doctor?.name || "Subscription"}</h2>
-      <p class="muted">${subscriptionId}</p>
+      <h2>${s.doctor?.user?.fullname || "Subscription"}</h2>
+      <p class="muted">${s.doctor?.clinicName || ""} · ${subscriptionId}</p>
       <div class="field-grid">
-        <div><div class="fk">Plan</div><div class="fv"><span class="pill ${s.plan}">${s.plan === "paid" ? "Paid" : "Free"}</span></div></div>
+        <div><div class="fk">Plan</div><div class="fv"><span class="pill ${s.plan}">${s.plan === "paid" ? "Practice" : "Free"}</span></div></div>
         <div><div class="fk">Status</div><div class="fv">${subStatusPill(s.status)}</div></div>
-        <div><div class="fk">Start Date</div><div class="fv">${fmtDate(s.startDate)}</div></div>
+        <div><div class="fk">Start Date</div><div class="fv">${s.plan === "paid" ? fmtDate(s.startDate) : "—"}</div></div>
         <div><div class="fk">Expiry</div><div class="fv">${s.plan === "paid" ? fmtDate(s.endDate) : "—"}</div></div>
       </div>
       <div class="modal-foot" style="justify-content: space-between; margin-top: 22px;">
         <button class="btn btn-secondary" id="subExtendBtn">Extend 30 days</button>
         <div style="display:flex; gap:10px;">
           <button class="btn btn-secondary" data-close>Close</button>
-          <button class="btn btn-primary" id="subTogglePlanBtn">Switch to ${s.plan === "paid" ? "Free" : "Paid"}</button>
+          <button class="btn btn-primary" id="subTogglePlanBtn">Switch to ${s.plan === "paid" ? "Free" : "Practice"}</button>
         </div>
       </div>`);
     $("#subExtendBtn").onclick = async () => {

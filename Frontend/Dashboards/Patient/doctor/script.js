@@ -102,6 +102,7 @@ const ENDPOINTS = {
   submitPayment: () => `${API_BASE}/payments`,
   myPayments: () => `${API_BASE}/payments/me`,
   mySubscription: () => `${API_BASE}/subscription/me`,
+  cancelSubscription: () => `${API_BASE}/subscription/cancel`,
 };
 
 /* ---------- fetch helpers ---------- */
@@ -457,11 +458,7 @@ async function loadSubscription() {
     if (!s) return;
     STATE.subscription.plan = s.plan === "paid" ? "Practice" : "Free";
     STATE.subscription.status =
-      s.status === "active"
-        ? "Active"
-        : s.status === "expired"
-          ? "Expired"
-          : "Cancelled";
+      s.status === "active" ? "Active" : s.status === "expired" ? "Expired" : "Cancelled";
     STATE.subscription.price = s.price ?? (s.plan === "paid" ? 4500 : 0);
     STATE.subscription.start = s.startDate ? formatShortDate(s.startDate) : "—";
     STATE.subscription.end =
@@ -1724,6 +1721,11 @@ function renderSubscription() {
         </div>
         <span class="pill ${statusPillClass}"><span class="d"></span> ${s.status}</span>
       </div>
+      ${
+        isActivePractice
+          ? `<div class="sc-actions"><button class="btn btn-danger-ghost" id="cancelSubBtn">Cancel Plan</button></div>`
+          : ""
+      }
     </div>
     <div class="plans">
       <div class="card plan ${s.plan === "Free" ? "current" : ""}">
@@ -1757,6 +1759,33 @@ function renderSubscription() {
 
   const ub = $("#upgradePracticeBtn");
   if (ub) ub.onclick = () => openPaymentModal(paymentMode);
+
+  const cb = $("#cancelSubBtn");
+  if (cb) cb.onclick = cancelSubscriptionFlow;
+}
+
+// Cancelling takes effect immediately — the backend's
+// PATCH /subscription/cancel flips status straight to "cancelled",
+// it does NOT preserve access until the current endDate. Say that
+// plainly in the confirm dialog so the doctor isn't surprised.
+function cancelSubscriptionFlow() {
+  confirmModal({
+    tone: "danger",
+    title: "Cancel your Practice plan?",
+    body: `This takes effect immediately — you'll drop to the Free plan right away, not at the end of your current period (${STATE.subscription.end}). You can resubscribe anytime.`,
+    confirmText: "Cancel Plan",
+    danger: true,
+    onConfirm: async () => {
+      try {
+        await apiPatch(ENDPOINTS.cancelSubscription());
+        toast("Subscription cancelled", "You're now on the Free plan.");
+        await loadSubscription();
+        renderSubscription();
+      } catch (err) {
+        toast("Couldn't cancel subscription", err.message, true);
+      }
+    },
+  });
 }
 
 // Payment submission modal — uploads a screenshot via multipart
