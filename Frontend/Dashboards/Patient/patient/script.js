@@ -1537,17 +1537,14 @@
       book.doctor = null;
       book.date = "";
     } catch (err) {
-      // Detect the queue-full business condition by message text
-      // (the backend throws a plain ApiError, no guaranteed
-      // structured data.queueFull field) — matches on the phrase
-      // the backend always includes. Real server/network errors
-      // still fall through to the generic toast unchanged.
-      if (/queue is full/i.test(err.message || "")) {
-        $("#bookOverlay").classList.remove("open");
-        showQueueFullModal(d?.name);
-      } else {
-        toast("Booking failed", err.message, true);
-      }
+      // The backend no longer rejects bookings for plan/limit
+      // reasons — booking always succeeds regardless of the
+      // doctor's plan (locking now happens entirely on the DOCTOR's
+      // side, after creation). This is back to a plain generic
+      // toast for real server/network errors only. showQueueFullModal
+      // above is now unreachable dead code, kept rather than deleted
+      // to avoid an unrelated risky edit — safe to remove.
+      toast("Booking failed", err.message, true);
     } finally {
       confirmBtn.disabled = false;
       confirmBtn.textContent = "Confirm Appointment";

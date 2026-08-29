@@ -9,8 +9,12 @@ import { Subscription } from "../models/subscription.models.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 import { pktDayBoundsUTC } from "../utils/date.js";
-import { FREE_PLAN_DAILY_TOKEN_LIMIT, isUnlimitedPlan } from "../utils/planLimits.js";
-import {notifyBookingLimitReached} from "./Notification.controller.js"
+import {
+  FREE_PLAN_DAILY_TOKEN_LIMIT,
+  isUnlimitedPlan,
+  isAppointmentLockedForPlan,
+} from "../utils/planLimits.js";
+import { notifyBookingLimitReached } from "./Notification.controller.js";
 
 import { generateAppointmentId } from "../utils/id's/appointment.js";
 import { emitQueueLengthUpdated } from "../socket/socketEvents.js";
@@ -136,18 +140,9 @@ const bookAppointment = async (req, res, next) => {
     const session = await mongoose.startSession();
 
     let appointmentDocId;
-    // Standard MongoDB transient-transaction retry pattern: two
-    // concurrent bookings for the same doctor both touch the same
-    // Queue document (queue.save below), so MongoDB's transaction
-    // conflict detection aborts one of them with a
-    // TransientTransactionError. Retrying that one (rather than
-    // surfacing a raw Mongo error) is what makes "only one request
-    // gets token #25" resolve into a real response instead of a
-    // 500 for whichever request lost the race.
     const MAX_RETRIES = 3;
     let attempt = 0;
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       session.startTransaction();
 
@@ -159,56 +154,6 @@ const bookAppointment = async (req, res, next) => {
         if (!queue) {
           throw new ApiError(404, "Doctor queue not found");
         }
-
-        // ---- Daily token-capacity check (Free plan only) ----------
-        // Queue.lastToken is a lifetime counter for this doctor (no
-        // date field on Queue at all — it only resets via the
-        // doctor's manual "Reset Queue" action), so it can NEVER
-        // safely represent "tokens issued today". The limit is
-        // therefore checked against real Appointment documents
-        // scoped to the PKT calendar day being booked — which may be
-        // today or a future date — not against lastToken, and not
-        // against "now".
-        const subscription = await Subscription.findOne({
-          doctor: doctorId,
-        }).session(session);
-
-        if (!isUnlimitedPlan(subscription)) {
-          const bookingDayPKT = date.toLocaleDateString("en-CA", {
-            timeZone: "Asia/Karachi",
-          }); // -> "YYYY-MM-DD"
-          const bounds = pktDayBoundsUTC(bookingDayPKT);
-
-          if (bounds) {
-            const { startOfDay, endOfDay } = bounds;
-            // Counts every appointment for that day regardless of
-            // status, including cancelled — consistent with how
-            // Queue.lastToken itself already behaves elsewhere
-            // (cancelling an appointment never decrements lastToken,
-            // so a token once issued stays "spent" against the daily
-            // count too). ADJUST to `status: { $ne: "cancelled" }`
-            // if you'd rather a cancellation free up a slot.
-            const todaysCount = await Appointment.countDocuments({
-              doctor: doctorId,
-              appointmentDate: { $gte: startOfDay, $lte: endOfDay },
-            }).session(session);
-
-            if (todaysCount >= FREE_PLAN_DAILY_TOKEN_LIMIT) {
-              // Written WITHOUT {session} — deliberately outside this
-              // transaction, so it survives the abortTransaction()
-              // call below. The ApiError message itself is
-              // byte-for-byte the existing patient-facing message —
-              // unchanged, as required.
-              await notifyBookingLimitReached(doctorId, patient._id, date);
-
-              throw new ApiError(
-                400,
-                `Today's queue is full. This doctor has reached the maximum number of appointments (${FREE_PLAN_DAILY_TOKEN_LIMIT}) for today. Please choose another date or doctor.`,
-              );
-            }
-          }
-        }
-        // ---- END capacity check -------------------------------------
 
         const tokenNumber = Math.max(queue.lastToken + 1, 1);
 
@@ -233,10 +178,6 @@ const bookAppointment = async (req, res, next) => {
               appointmentDate: date,
               tokenNumber,
               status: "waiting",
-              // Snapshotted at booking time — see the note on this
-              // field in the schema. Revenue calculations always sum
-              // THIS value, never doctor.consultationFee live, so a
-              // later fee change never rewrites past revenue.
               consultationFee: doctor.consultationFee,
               paymentStatus: "unpaid",
             },
@@ -247,7 +188,7 @@ const bookAppointment = async (req, res, next) => {
         appointmentDocId = appointment._id;
 
         await session.commitTransaction();
-        break; // success — leave the retry loop
+        break;
       } catch (error) {
         await session.abortTransaction();
 
@@ -257,7 +198,7 @@ const bookAppointment = async (req, res, next) => {
 
         if (isTransient && attempt < MAX_RETRIES - 1) {
           attempt++;
-          continue; // retry the whole transaction body
+          continue;
         }
 
         throw error instanceof ApiError
@@ -324,7 +265,6 @@ const bookAppointment = async (req, res, next) => {
       lastToken: queue?.lastToken ?? yourToken,
       nowServing,
     });
-
     const responseData = {
       appointment: populatedAppointment,
 
@@ -351,6 +291,14 @@ const bookAppointment = async (req, res, next) => {
           : "Appointment booked successfully. The clinic is currently closed. Queue information will be available when the clinic opens.",
     };
 
+    isAppointmentLockedForPlan(doctorId, populatedAppointment)
+      .then((locked) => {
+        if (locked) {
+          return notifyBookingLimitReached(doctorId, patient._id, date);
+        }
+      })
+      .catch((err) => console.error("Lock/notification check failed:", err));
+
     return res
       .status(201)
       .json(
@@ -368,9 +316,7 @@ const bookAppointment = async (req, res, next) => {
 // 2. Get Patient Appointments
 const getPatientAppointments = async (req, res, next) => {
   try {
-    // Resolve the Patient profile from the logged-in user (JWT -> req.user).
     const patient = await Patient.findOne({ user: req.user._id });
-    console.log("Logged-in patient _id:", patient?._id);
 
     if (!patient) {
       throw new ApiError(404, "Patient profile not found");
@@ -400,7 +346,6 @@ const getPatientAppointments = async (req, res, next) => {
       queueByDoctor[q.doctor.toString()] = q;
     }
 
-    // Attach live queue info only to active appointments; past ones don't need it.
     const data = appointments.map((appt) => {
       const isActive =
         appt.status === "waiting" || appt.status === "in-progress";
@@ -438,9 +383,6 @@ const getPatientAppointments = async (req, res, next) => {
 };
 
 // 3. Get Doctor Appointments  (doctor only)
-// date is REQUIRED — a query param of ?date=YYYY-MM-DD scoping the
-// result to that single Pakistan-time calendar day, using the same
-// pktDayBoundsUTC() helper defined at the top of this file.
 const getDoctorAppointments = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
@@ -468,11 +410,32 @@ const getDoctorAppointments = async (req, res, next) => {
         select: "gender bloodGroup user",
         populate: { path: "user", select: "fullname email" },
       })
-      .sort({ tokenNumber: 1 });
+      .sort({ tokenNumber: 1 })
+      .lean();
+
+    const subscription = await Subscription.findOne({ doctor: doctor._id });
+    const unlimited = isUnlimitedPlan(subscription);
+
+    const shaped = appointments.map((a, idx) => {
+      const locked = !unlimited && idx + 1 > FREE_PLAN_DAILY_TOKEN_LIMIT;
+
+      if (locked) {
+        return {
+          _id: a._id,
+          appointmentId: a.appointmentId,
+          tokenNumber: a.tokenNumber,
+          appointmentDate: a.appointmentDate,
+          status: a.status,
+          locked: true,
+        };
+      }
+
+      return { ...a, locked: false };
+    });
 
     return res
       .status(200)
-      .json(new ApiResponse(200, appointments, "Doctor appointments fetched"));
+      .json(new ApiResponse(200, shaped, "Doctor appointments fetched"));
   } catch (error) {
     next(error);
   }
@@ -493,7 +456,6 @@ const updateAppointmentStatus = async (req, res, next) => {
       throw new ApiError(400, "Invalid status value");
     }
 
-    // Only a doctor can drive the status of their own appointments.
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
       throw new ApiError(403, "Only a doctor can update appointment status");
@@ -506,6 +468,17 @@ const updateAppointmentStatus = async (req, res, next) => {
 
     if (appointment.doctor.toString() !== doctor._id.toString()) {
       throw new ApiError(403, "You are not allowed to update this appointment");
+    }
+
+
+    if (status === "in-progress") {
+      const locked = await isAppointmentLockedForPlan(doctor._id, appointment);
+      if (locked) {
+        throw new ApiError(
+          403,
+          "This appointment is beyond your Free plan's daily limit. Upgrade to Practice to serve additional patients today.",
+        );
+      }
     }
 
     const current = appointment.status;
@@ -570,7 +543,7 @@ const cancelAppointment = async (req, res, next) => {
   }
 };
 
-// 6. Mark Appointment Paid 
+// 6. Mark Appointment Paid
 const markAppointmentPaid = async (req, res, next) => {
   try {
     const { appointmentId } = req.params;

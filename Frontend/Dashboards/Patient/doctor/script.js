@@ -271,14 +271,20 @@ async function loadAppointments(dateStr) {
       id: a._id,
       appointmentId: a.appointmentId,
       token: a.tokenNumber,
-      patient: a.patientName || a.patient?.user?.fullname || "Unknown patient",
+      // Locked appointments have patientName/patient stripped
+      // server-side (see getDoctorAppointments) — patient is
+      // genuinely null here, not just hidden by CSS.
+      patient: a.locked
+        ? null
+        : a.patientName || a.patient?.user?.fullname || "Unknown patient",
       status: a.status,
       date: formatShortDate(a.appointmentDate),
       clinic: DOCTOR.clinic,
-      createdAt: formatShortDate(a.createdAt),
+      createdAt: a.createdAt ? formatShortDate(a.createdAt) : "—",
       fee: a.consultationFee ?? 0,
       paymentStatus: a.paymentStatus || "unpaid",
       paidAt: a.paidAt || null,
+      locked: !!a.locked,
     }))
     .sort((a, b) => a.token - b.token);
 
@@ -338,7 +344,11 @@ async function loadSubscription() {
         : s.status === "expired"
           ? "Expired"
           : "Cancelled";
-    STATE.subscription.price = s.price ?? (s.plan === "paid" ? 4500 : 0);
+    // Ignore s.price entirely when the plan isn't paid — otherwise a
+    // stale price left over from before a cancel (see the backend
+    // fix in subscription.controller.js's cancelSubscription) would
+    // still display. Free is always PKR 0, full stop.
+    STATE.subscription.price = s.plan === "paid" ? (s.price ?? 4500) : 0;
     STATE.subscription.start = s.startDate ? formatShortDate(s.startDate) : "—";
     STATE.subscription.end =
       s.plan === "paid" && s.endDate ? formatShortDate(s.endDate) : "—";
@@ -633,6 +643,7 @@ function renderQueue() {
   const btn = $("#serveNextBtn");
   const current = apptFor(STATE.nowServing);
   const currentInProgress = current && current.status === "in-progress";
+  const nextAppt = nx ? apptFor(nx) : null;
 
   if (!open) {
     btn.disabled = true;
@@ -640,6 +651,16 @@ function renderQueue() {
     btn.onclick = serveNext;
     $("#serveNote").textContent =
       "Open the clinic to continue serving patients.";
+  } else if (nextAppt && nextAppt.locked) {
+    // Proactive — shown before the doctor even clicks, matching the
+    // spec's mockup. The backend (PATCH /queue/next) still re-checks
+    // this itself before any mutation, so this is UX only; the real
+    // guard lives server-side.
+    btn.disabled = false;
+    btn.textContent = "Upgrade to Practice";
+    btn.onclick = () => showServeLockedModal();
+    $("#serveNote").textContent =
+      "The next patient is beyond your Free plan's daily limit.";
   } else if (!nx && !currentInProgress) {
     btn.disabled = true;
     btn.textContent = "All Patients Served";
@@ -695,10 +716,29 @@ async function serveNext() {
     await loadAll(STATE.selectedDate);
     refreshAll();
   } catch (err) {
-    toast("Couldn't update the queue", err.message, true);
+    if (/beyond your Free plan/i.test(err.message || "")) {
+      showServeLockedModal();
+    } else {
+      toast("Couldn't update the queue", err.message, true);
+    }
     btn.disabled = false;
     btn.textContent = prevLabel;
   }
+}
+
+// Reuses the existing generic modal host (#modalOverlay/#modalBox)
+// and the same data-pro-upgrade delegated listener already wired up
+// for the Custom Revenue gate — clicking Upgrade here opens the
+// SAME payment modal, no parallel upgrade flow.
+function showServeLockedModal() {
+  openModal(`
+    <div style="text-align:center;padding:8px 0;">
+      <div style="width:26px;height:26px;color:var(--blue);margin:0 auto 12px;">${proLockIcon()}</div>
+      <div class="pf-gate-badge">Practice Feature</div>
+      <h2 style="font-size:20px;font-weight:800;margin:10px 0 8px;">This appointment needs Practice</h2>
+      <p style="color:var(--muted);font-size:14.5px;margin-bottom:22px;">This patient is beyond your Free plan's daily limit. Upgrade to Practice to serve them.</p>
+      <button class="btn btn-primary btn-lg" data-pro-upgrade="serveLocked">Upgrade to Practice</button>
+    </div>`);
 }
 
 function resetQueue() {
@@ -777,6 +817,16 @@ function apptTableHTML(list) {
   return `<table class="appt-table"><thead><tr><th>Token</th><th>Patient</th><th>Appointment Date</th><th>Status</th><th>Payment</th><th>Action</th></tr></thead><tbody>
     ${list
       .map((a) => {
+        if (a.locked) {
+          return `<tr>
+        <td class="tk">#${a.token}</td>
+        <td class="pt" style="filter:blur(4px);user-select:none;" aria-hidden="true">•••• ••••••</td>
+        <td class="dt">${a.date}</td>
+        <td><span class="pill" style="background:var(--blue-soft);color:var(--blue);"><span class="d"></span> Locked</span></td>
+        <td>—</td>
+        <td class="act"><button class="btn btn-primary" style="padding:6px 12px;font-size:12.5px;" data-pro-upgrade="lockedAppointment" aria-label="Upgrade to Practice to view and serve this appointment">Upgrade to Practice</button></td>
+      </tr>`;
+        }
         const paid = a.paymentStatus === "paid";
         const paymentCell = paid
           ? `<span class="pill completed"><span class="d"></span> Paid</span>`
@@ -1250,6 +1300,15 @@ function renderEmailChange() {
 }
 /* ---------- REVENUE ---------- */
 async function openRevenueView() {
+  // Refresh subscription state first — otherwise an admin-approved
+  // upgrade wouldn't unlock the custom-range gate until the doctor
+  // happened to visit the Subscription tab (canAccessFeature reads
+  // STATE.subscription, which only loadSubscription() populates).
+  try {
+    await loadSubscription();
+  } catch (err) {
+    console.warn("Subscription refresh failed:", err.message);
+  }
   renderRevenueView();
   try {
     await loadRevenue();
@@ -1266,6 +1325,47 @@ function renderRevenueView() {
 
   const rangeBtn = (value, label) => `
     <button class="revenue-range-btn ${r.range === value ? "active" : ""}" data-revenue-range="${value}">${label}</button>`;
+
+  // Custom date range is the Practice-only "advanced analytics"
+  // capability — 7/28-day revenue stays fully available on Free
+  // (core functionality a doctor needs regardless of plan); picking
+  // an arbitrary historical range is what's gated. See
+  // canAccessFeature("customRevenueRange") near the helpers section.
+  if (r.range === "custom" && !canAccessFeature("customRevenueRange")) {
+    wrap.innerHTML = `
+      <div class="card revenue-toolbar">
+        <div class="revenue-toolbar-row">
+          <div class="revenue-range" role="tablist" aria-label="Revenue date range">
+            ${rangeBtn("7", "7 Days")}
+            ${rangeBtn("28", "28 Days")}
+            ${rangeBtn("custom", "Custom")}
+          </div>
+        </div>
+      </div>
+      <div class="mt24">
+        ${proFeatureGate("customRevenueRange", {
+          title: "Custom Date Range Analytics",
+          description:
+            "Pick any date range to analyze revenue trends, seasonal patterns, and long-term clinic performance — not just the last 7 or 28 days.",
+          previewHTML: customRevenuePreviewHTML(),
+        })}
+      </div>`;
+    $$("[data-revenue-range]", wrap).forEach((btn) => {
+      btn.onclick = async () => {
+        const value = btn.dataset.revenueRange;
+        STATE.revenue.range = value;
+        if (value !== "custom") {
+          try {
+            await loadRevenue();
+          } catch (err) {
+            toast("Couldn't load revenue", err.message, true);
+          }
+        }
+        renderRevenueView();
+      };
+    });
+    return;
+  }
 
   const scopeLabel =
     r.from && r.to
@@ -1906,6 +2006,111 @@ const greetWord = () => {
   return h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
 };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/* ============================================================
+   PRO FEATURE ACCESS — centralized check, reused by every gated
+   feature instead of each call site re-deriving
+   plan === "Practice" && status === "Active" on its own. Reads
+   STATE.subscription, the same source of truth renderSubscription()
+   already uses (populated by loadSubscription()).
+   ============================================================ */
+function hasProAccess() {
+  return (
+    STATE.subscription.plan === "Practice" &&
+    STATE.subscription.status === "Active"
+  );
+}
+
+// Registry of feature keys that require Practice. Add a key here to
+// gate a new feature; canAccessFeature() is the only thing call
+// sites need to check. Anything not listed is treated as a normal
+// Free-plan feature (always allowed) — this only tightens access,
+// it never needs to be consulted to loosen it.
+const PRO_FEATURES = new Set(["customRevenueRange"]);
+
+function canAccessFeature(featureKey) {
+  if (!PRO_FEATURES.has(featureKey)) return true;
+  return hasProAccess();
+}
+
+// Reusable "Pro Feature" upgrade gate. This codebase has no
+// component/JSX layer to plug a <ProFeatureGate> into — this is the
+// vanilla-JS equivalent, matching the existing render*() → HTML
+// string pattern used everywhere else in this file.
+//
+// featureKey  — checked via canAccessFeature()
+// title       — feature name, e.g. "Custom Date Range Analytics"
+// description — one or two sentences on the value
+// previewHTML — the feature's real markup. ALWAYS rendered (blurred
+//               via CSS + aria-hidden when locked, so it's a genuine
+//               preview of the real thing, not a placeholder graphic)
+// icon        — optional inline SVG string; falls back to a lock icon
+//
+// Enforcement note: this is a UX layer only — it stops the doctor
+// from seeing/reaching the locked control, and openRevenueView()
+// above already avoids calling loadRevenue() with custom params when
+// this gate is showing. It does NOT stop a request crafted directly
+// against the API. That needs a server-side check in whatever
+// controller handles GET /revenue?from=&to= — not implemented here,
+// since that controller wasn't shared in this conversation.
+function proFeatureGate(featureKey, { title, description, previewHTML, icon }) {
+  if (canAccessFeature(featureKey)) {
+    return `<div class="pf-unlocked">${previewHTML}</div>`;
+  }
+  return `
+    <div class="pf-gate" role="group" aria-label="${title} — Practice feature, locked">
+      <div class="pf-gate-preview" aria-hidden="true">${previewHTML}</div>
+      <div class="pf-gate-overlay">
+        <div class="pf-gate-card">
+          ${icon || proLockIcon()}
+          <div class="pf-gate-badge">Practice Feature</div>
+          <h3 class="pf-gate-title">${title}</h3>
+          <p class="pf-gate-desc">${description}</p>
+          <button class="btn btn-primary" data-pro-upgrade="${featureKey}">Upgrade to Practice</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function proLockIcon() {
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2.5"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>`;
+}
+
+// Sample preview content for the locked custom-range revenue gate —
+// reuses the exact same markup/classes as the real revenue view
+// (stat-grid, appt-panel, appt-table, pill.completed) so it blurs
+// into something that genuinely looks like the real feature, not a
+// generic placeholder.
+function customRevenuePreviewHTML() {
+  return `
+    <div class="stat-grid">
+      <div class="stat"><div class="st-top"><span class="st-ic blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2.5"/><circle cx="12" cy="12" r="3"/></svg></span>Total Revenue</div><div class="st-val">PKR 128,400</div></div>
+      <div class="stat"><div class="st-top"><span class="st-ic green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/></svg></span>Paid Appointments</div><div class="st-val">214</div></div>
+      <div class="stat"><div class="st-top"><span class="st-ic amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20V13"/></svg></span>Average Consultation</div><div class="st-val">PKR 600</div></div>
+    </div>
+    <div class="card appt-panel mt24">
+      <div class="aph"><div><h2>Paid Appointments</h2><div class="sub">Custom range</div></div></div>
+      <table class="appt-table">
+        <thead><tr><th>Patient</th><th>Date</th><th>Fee</th><th>Payment</th></tr></thead>
+        <tbody>
+          <tr><td class="pt">Sample Patient</td><td class="dt">—</td><td>PKR 600</td><td><span class="pill completed"><span class="d"></span> Paid</span></td></tr>
+          <tr><td class="pt">Sample Patient</td><td class="dt">—</td><td>PKR 600</td><td><span class="pill completed"><span class="d"></span> Paid</span></td></tr>
+        </tbody>
+      </table>
+    </div>`;
+}
+
+// Delegated — covers every current and future data-pro-upgrade
+// button without needing a new listener per feature. Reuses the
+// EXISTING payment modal (the same one the Subscription page's own
+// Upgrade button opens) — no second/parallel upgrade system.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-pro-upgrade]");
+  if (btn) {
+    e.preventDefault();
+    openPaymentModal("upgrade");
+  }
+});
 
 const tokenLabel = (n) => (n && n > 0 ? "#" + n : "—");
 

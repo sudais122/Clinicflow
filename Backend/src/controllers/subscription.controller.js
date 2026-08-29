@@ -4,9 +4,6 @@ import { Subscription } from "../models/subscription.models.js";
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
 
-// req.user is the User account (from the JWT), NOT the Doctor
-// document — Doctor has its own _id with a `user` ref back to it.
-// Every subscription lookup below must resolve through here first.
 const getDoctorForUser = async (userId) => {
   const doctor = await Doctor.findOne({ user: userId });
   if (!doctor) {
@@ -15,10 +12,6 @@ const getDoctorForUser = async (userId) => {
   return doctor;
 };
 
-// Lazily flip an active paid plan to "expired" once its endDate has
-// passed — same derivation used in adminDoctor.controller.js and
-// adminSubscription.controller.js, kept in sync by hand across all
-// three. ADJUST: pull into one shared helper module instead.
 const applyExpiryIfNeeded = async (subscription) => {
   if (
     subscription.plan === "paid" &&
@@ -32,16 +25,12 @@ const applyExpiryIfNeeded = async (subscription) => {
   return subscription;
 };
 
-// GET /subscription/me  (doctor)
 const getMySubscription = async (req, res, next) => {
   try {
     const doctor = await getDoctorForUser(req.user._id);
 
     let subscription = await Subscription.findOne({ doctor: doctor._id });
     if (!subscription) {
-      // First time this doctor's subscription has been read —
-      // provision a default Free record instead of 404ing, so the
-      // dashboard always has something real to render.
       subscription = await Subscription.create({
         subscriptionId: `SUB-${Date.now().toString(36).toUpperCase()}`,
         doctor: doctor._id,
@@ -74,12 +63,6 @@ const getMySubscription = async (req, res, next) => {
   }
 };
 
-// PATCH /subscription/upgrade  (doctor)
-// Locked down — upgrading to paid Practice requires an admin-approved
-// payment proof (see payment.controller.js submitPayment /
-// approvePayment), which is the real activation path. This refuses
-// to instantly grant a paid plan without one, so it can't be used to
-// bypass payment review.
 const upgradeSubscription = async (req, res, next) => {
   return next(
     new ApiError(
@@ -89,10 +72,6 @@ const upgradeSubscription = async (req, res, next) => {
   );
 };
 
-// PATCH /subscription/renew  (doctor)
-// Locked down for the same reason — extensions go through the same
-// POST /payments -> approvePayment path, which already extends
-// (rather than resets) an active subscription's endDate correctly.
 const renewSubscription = async (req, res, next) => {
   return next(
     new ApiError(
@@ -103,14 +82,16 @@ const renewSubscription = async (req, res, next) => {
 };
 
 // PATCH /subscription/cancel  (doctor)
-// Self-service downgrade to Free — no money or verification bypass
-// risk, so this stays open.
+// FIX: now resets price to 0 alongside plan/status. Previously only
+// plan and status were reset, leaving the old paid price (e.g. 4500)
+// sitting in the document forever — that stale value is exactly what
+// was still showing on the frontend after a cancel.
 const cancelSubscription = async (req, res, next) => {
   try {
     const doctor = await getDoctorForUser(req.user._id);
     const subscription = await Subscription.findOneAndUpdate(
       { doctor: doctor._id },
-      { $set: { plan: "free", status: "cancelled" } },
+      { $set: { plan: "free", status: "cancelled", price: 0 } },
       { new: true },
     );
     if (!subscription) {

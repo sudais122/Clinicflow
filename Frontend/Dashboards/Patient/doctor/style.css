@@ -2306,3 +2306,84 @@ h3 {
         .revenue-range-btn { flex: 1; text-align: center; }
         .revenue-scope { display: none; }
       }
+      /* ---------- PRO FEATURE UPGRADE GATE ---------- */
+
+.pf-gate {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  min-height: 240px;
+}
+
+.pf-gate-preview {
+  filter: blur(6px);
+  opacity: .55;
+  pointer-events: none;
+  user-select: none;
+}
+
+.pf-gate-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: linear-gradient(180deg, rgba(246, 248, 251, .35), rgba(246, 248, 251, .88));
+}
+
+.pf-gate-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--sh-md);
+  padding: 28px 30px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+}
+
+.pf-gate-card svg {
+  width: 26px;
+  height: 26px;
+  color: var(--blue);
+  margin: 0 auto 12px;
+  display: block;
+}
+
+.pf-gate-badge {
+  display: inline-block;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 12px;
+}
+
+.pf-gate-title {
+  font-family: var(--fd);
+  font-size: 19px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.pf-gate-desc {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.55;
+  margin-bottom: 20px;
+}
+
+
+@media (max-width: 640px) {
+  .pf-gate-overlay {
+    padding: 16px;
+  }
+  .pf-gate-card {
+    padding: 22px 20px;
+  }
+}

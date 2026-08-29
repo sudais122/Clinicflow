@@ -1,1 +1,1 @@
-r
+import "./loadEnv.js";

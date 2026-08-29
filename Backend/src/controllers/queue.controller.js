@@ -6,6 +6,7 @@ import { Appointment } from "../models/appointment.models.js";
 
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
+import { isAppointmentLockedForPlan } from "../utils/planLimits.js";
 
 import {
   emitClinicStarted,
@@ -14,7 +15,6 @@ import {
   emitDelayUpdated,
 } from "../socket/socketEvents.js";
 
-// Helper: resolve the logged-in doctor and their queue (mutations only).
 const getOwnQueue = async (userId) => {
   const doctor = await Doctor.findOne({ user: userId });
   if (!doctor) {
@@ -67,7 +67,6 @@ const startClinic = async (req, res, next) => {
     queue.lastUpdated = new Date();
     await queue.save();
 
-    // Real-time: tell everyone in this doctor's room the clinic is open.
     emitClinicStarted(doctor._id, { clinicStatus: "open" });
 
     return res
@@ -78,12 +77,30 @@ const startClinic = async (req, res, next) => {
   }
 };
 
-// 3. Next Patient
+// 3. Next Patient  
 const nextPatient = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
       throw new ApiError(403, "Only a doctor can manage the queue");
+    }
+
+    const currentQueueDoc = await Queue.findOne({ doctor: doctor._id });
+    if (!currentQueueDoc) {
+      throw new ApiError(404, "Queue not found for this doctor");
+    }
+
+    const nextTokenNumber = currentQueueDoc.nowServing + 1;
+    const nextAppt = await Appointment.findOne({
+      doctor: doctor._id,
+      tokenNumber: nextTokenNumber,
+    });
+
+    if (nextAppt && (await isAppointmentLockedForPlan(doctor._id, nextAppt))) {
+      throw new ApiError(
+        403,
+        "This appointment is beyond your Free plan's daily limit. Upgrade to Practice to serve additional patients today.",
+      );
     }
 
     const session = await mongoose.startSession();
@@ -103,7 +120,6 @@ const nextPatient = async (req, res, next) => {
         throw new ApiError(400, "No more patients in the queue");
       }
 
-      // Complete the patient currently being served (if any).
       if (queue.nowServing >= 1) {
         await Appointment.findOneAndUpdate(
           {
@@ -116,12 +132,10 @@ const nextPatient = async (req, res, next) => {
         );
       }
 
-      // Advance to the next token.
       queue.nowServing += 1;
       queue.lastUpdated = new Date();
       await queue.save({ session });
 
-      // Mark the newly-current patient as in-progress.
       await Appointment.findOneAndUpdate(
         {
           doctor: doctor._id,
@@ -144,8 +158,6 @@ const nextPatient = async (req, res, next) => {
       session.endSession();
     }
 
-    // Real-time: broadcast the shared queue state; each patient computes
-    // their own "patients ahead" and wait time from their own token.
     emitQueueUpdated(doctor._id, {
       nowServing: updatedQueue.nowServing,
       lastToken: updatedQueue.lastToken,
@@ -183,7 +195,6 @@ const updateDelay = async (req, res, next) => {
     queue.lastUpdated = new Date();
     await queue.save();
 
-    // Real-time: tell patients about the new delay.
     emitDelayUpdated(doctor._id, {
       delayInMinutes: queue.delayInMinutes,
       nowServing: queue.nowServing,
@@ -220,7 +231,6 @@ const updateTime = async (req, res, next) => {
     queue.lastUpdated = new Date();
     await queue.save();
 
-    // Real-time: estimated time affects everyone's wait, so broadcast it too.
     emitQueueUpdated(doctor._id, {
       nowServing: queue.nowServing,
       lastToken: queue.lastToken,
@@ -236,7 +246,7 @@ const updateTime = async (req, res, next) => {
   }
 };
 
-// 6. End Clinic
+// 6. End Clinic — unchanged, plan limits never touch clinic open/close
 const endClinic = async (req, res, next) => {
   try {
     const { doctor, queue } = await getOwnQueue(req.user._id);
@@ -245,7 +255,6 @@ const endClinic = async (req, res, next) => {
     queue.lastUpdated = new Date();
     await queue.save();
 
-    // Real-time: tell everyone the clinic is closed.
     emitClinicClosed(doctor._id, { clinicStatus: "closed" });
 
     return res
@@ -256,7 +265,7 @@ const endClinic = async (req, res, next) => {
   }
 };
 
-// 7. Reset Queue
+// 7. Reset Queue — unchanged
 const resetQueue = async (req, res, next) => {
   try {
     const { doctor, queue } = await getOwnQueue(req.user._id);
@@ -268,7 +277,6 @@ const resetQueue = async (req, res, next) => {
     queue.lastUpdated = new Date();
     await queue.save();
 
-    // Real-time: reset means closed + counters zeroed.
     emitClinicClosed(doctor._id, { clinicStatus: "closed" });
 
     return res
