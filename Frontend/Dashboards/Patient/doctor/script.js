@@ -35,6 +35,8 @@ const ENDPOINTS = {
   cancelSubscription: () => `${API_BASE}/subscription/cancel`,
   notifications: () => `${API_BASE}/notifications`,
   notificationReadAll: () => `${API_BASE}/notifications/read-all`,
+  appointmentAnalytics: (range) => `${API_BASE}/appointments/analytics?range=${encodeURIComponent(range)}`,
+  revenueAnalytics: (range) => `${API_BASE}/revenue/analytics?range=${encodeURIComponent(range)}`,
 };
 
 /* ---------- fetch helpers ---------- */
@@ -121,6 +123,24 @@ const STATE = {
   selectedDate: null,
   clinicDayLabel: "",
   appointments: [],
+  appointmentsPageItems: [],
+  // New — server-side pagination + loading/error/offline states for
+  // the Appointments list specifically. Separate from `appointments`
+  // above (which still holds the CURRENT PAGE's items, unchanged
+  // shape/consumers elsewhere — Overview stats, Live Queue, Serve
+  // flow, etc. all still read STATE.appointments as before).
+  appointmentsList: {
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+    search: "",
+    status: "all",
+    loading: false,
+    error: false,
+    errorMessage: "",
+    offline: !navigator.onLine,
+  },
   subscription: {
     plan: "Free",
     status: "Active",
@@ -131,6 +151,8 @@ const STATE = {
     loadError: false,
   },
   notifications: [],
+  appointmentTrends: { range: "7d", data: [], loading: false, error: false, loaded: false },
+  revenueTrends: { range: "7d", data: [], loading: false, error: false, loaded: false },
   revenue: {
     range: "28",
     from: "",
@@ -140,6 +162,14 @@ const STATE = {
     averageConsultationFee: 0,
     appointments: [],
     loaded: false,
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+    search: "",
+    loading: false,
+    error: false,
+    offline: !navigator.onLine,
   },
   payments: {
     list: [],
@@ -260,12 +290,35 @@ function applyQueueDoc(q) {
   STATE.delay = q.delayInMinutes ?? STATE.delay;
 }
 
+// Used by queue/overview logic — Live Queue, Serve, token lookups,
+// counts() — all of which need the FULL day's list. Requests
+// all=true so pagination on the backend never truncates this. Kept
+// completely separate from the new paginated Appointments-list UI
+// (loadAppointmentsPage below) so neither breaks the other.
 async function loadAppointments(dateStr) {
   const url = dateStr
-    ? `${ENDPOINTS.appointmentsDoctor()}?date=${encodeURIComponent(dateStr)}`
-    : ENDPOINTS.appointmentsDoctor();
+    ? `${ENDPOINTS.appointmentsDoctor()}?date=${encodeURIComponent(dateStr)}&all=true`
+    : `${ENDPOINTS.appointmentsDoctor()}?all=true`;
   const res = await apiGet(url);
-  const list = res.data || [];
+
+  // Defensive against either response shape — the new
+  // { appointments, pagination } object OR the old bare array —
+  // whichever the backend actually returns right now. Logs the raw
+  // shape once if it's neither, instead of throwing, so this is
+  // diagnosable from the console rather than crashing the dashboard.
+  let list;
+  if (Array.isArray(res.data)) {
+    list = res.data; // old shape
+  } else if (Array.isArray(res.data?.appointments)) {
+    list = res.data.appointments; // new shape
+  } else {
+    console.error(
+      "GET /appointments/doctor returned an unexpected shape:",
+      res.data,
+    );
+    list = [];
+  }
+
   STATE.appointments = list
     .map((a) => ({
       id: a._id,
@@ -274,9 +327,7 @@ async function loadAppointments(dateStr) {
       // Locked appointments have patientName/patient stripped
       // server-side (see getDoctorAppointments) — patient is
       // genuinely null here, not just hidden by CSS.
-      patient: a.locked
-        ? null
-        : a.patientName || a.patient?.user?.fullname || "Unknown patient",
+      patient: a.locked ? null : (a.patientName || a.patient?.user?.fullname || "Unknown patient"),
       status: a.status,
       date: formatShortDate(a.appointmentDate),
       clinic: DOCTOR.clinic,
@@ -296,6 +347,78 @@ async function loadAppointments(dateStr) {
   }
 }
 
+// Powers the paginated Appointments-list UI specifically — real
+// server-side pagination, search, and status filter, all sent as
+// query params. Separate STATE (appointmentsList) from the
+// queue-purposes STATE.appointments above.
+async function loadAppointmentsPage() {
+  const al = STATE.appointmentsList;
+  al.loading = true;
+  al.error = false;
+  al.offline = !navigator.onLine;
+  renderAppointments();
+
+  if (al.offline) {
+    al.loading = false;
+    renderAppointments();
+    return;
+  }
+
+  const params = new URLSearchParams({
+    date: STATE.selectedDate || "",
+    page: String(al.page),
+    limit: String(al.limit),
+  });
+  if (al.search) params.set("search", al.search);
+  if (al.status !== "all") params.set("status", al.status);
+
+  try {
+    const res = await apiGet(`${ENDPOINTS.appointmentsDoctor()}?${params.toString()}`);
+    const data = res.data || {};
+    const rawList = Array.isArray(data)
+      ? data // old shape — a bare array, no pagination metadata available
+      : Array.isArray(data.appointments)
+        ? data.appointments
+        : (console.error("GET /appointments/doctor returned an unexpected shape:", data), []);
+    STATE.appointmentsPageItems = rawList.map((a) => ({
+      id: a._id,
+      appointmentId: a.appointmentId,
+      token: a.tokenNumber,
+      patient: a.locked ? null : (a.patientName || a.patient?.user?.fullname || "Unknown patient"),
+      status: a.status,
+      date: formatShortDate(a.appointmentDate),
+      fee: a.consultationFee ?? 0,
+      paymentStatus: a.paymentStatus || "unpaid",
+      paidAt: a.paidAt || null,
+      locked: !!a.locked,
+    }));
+    const pg = Array.isArray(data)
+      ? { page: 1, limit: data.length, total: data.length, totalPages: 1 } // old shape has no real pagination
+      : data.pagination || { page: 1, limit: al.limit, total: 0, totalPages: 1 };
+    al.page = pg.page;
+    al.limit = pg.limit;
+    al.total = pg.total;
+    al.totalPages = pg.totalPages;
+  } catch (err) {
+    al.error = true;
+    al.errorMessage = err.message || "Something went wrong.";
+  } finally {
+    al.loading = false;
+    renderAppointments();
+  }
+}
+
+window.addEventListener("online", () => {
+  if (STATE.appointmentsList.offline) {
+    STATE.appointmentsList.offline = false;
+    if (!$("#view-appointments").hidden) loadAppointmentsPage();
+  }
+});
+window.addEventListener("offline", () => {
+  STATE.appointmentsList.offline = true;
+  if (!$("#view-appointments").hidden) renderAppointments();
+});
+
 async function loadAll(dateStr) {
   await loadDashboard(dateStr);
   await Promise.all([
@@ -307,20 +430,55 @@ async function loadAll(dateStr) {
 
 async function loadRevenue() {
   const r = STATE.revenue;
+  r.loading = true;
+  r.error = false;
+  r.offline = !navigator.onLine;
+
+  if (r.offline) {
+    r.loading = false;
+    return;
+  }
+
   const params =
     r.range === "custom" ? { from: r.from, to: r.to } : { range: r.range };
+  params.page = String(r.page);
+  params.limit = String(r.limit);
+  if (r.search) params.search = r.search;
 
-  const res = await apiGet(ENDPOINTS.revenue(params));
-  const d = res.data;
+  try {
+    const res = await apiGet(ENDPOINTS.revenue(params));
+    const d = res.data;
 
-  r.totalRevenue = d.totalRevenue ?? 0;
-  r.paidAppointments = d.paidAppointments ?? 0;
-  r.averageConsultationFee = d.averageConsultationFee ?? 0;
-  r.from = d.from || r.from;
-  r.to = d.to || r.to;
-  r.appointments = d.appointments || [];
-  r.loaded = true;
+    r.totalRevenue = d.totalRevenue ?? 0;
+    r.paidAppointments = d.paidAppointments ?? 0;
+    r.averageConsultationFee = d.averageConsultationFee ?? 0;
+    r.from = d.from || r.from;
+    r.to = d.to || r.to;
+    r.appointments = Array.isArray(d.appointments) ? d.appointments : [];
+    const pg = d.pagination || { page: 1, limit: r.limit, total: r.appointments.length, totalPages: 1 };
+    r.page = pg.page;
+    r.limit = pg.limit;
+    r.total = pg.total;
+    r.totalPages = pg.totalPages;
+    r.loaded = true;
+  } catch (err) {
+    r.error = true;
+    throw err;
+  } finally {
+    r.loading = false;
+  }
 }
+
+window.addEventListener("online", () => {
+  if (STATE.revenue.offline) {
+    STATE.revenue.offline = false;
+    if (!$("#view-revenue").hidden) openRevenueView();
+  }
+});
+window.addEventListener("offline", () => {
+  STATE.revenue.offline = true;
+  if (!$("#view-revenue").hidden) renderRevenueView();
+});
 
 /* ---------- PAYMENTS ---------- */
 async function loadPayments() {
@@ -368,8 +526,10 @@ async function loadNotifications() {
 const TITLES = {
   overview: "Overview",
   appointments: "Appointments",
+  "appointments-analytics": "Appointment Analytics",
   queue: "Queue",
   revenue: "Revenue",
+  "revenue-analytics": "Revenue Analytics",
   profile: "Profile",
   subscription: "Subscription",
   help: "Help & Support",
@@ -386,9 +546,11 @@ function showView(name) {
   closeSidebar();
   history.replaceState(null, "", "#" + name);
   if (name === "overview") renderOverview();
-  if (name === "appointments") renderAppointments();
+  if (name === "appointments") openAppointmentsView();
+  if (name === "appointments-analytics") openAppointmentAnalyticsView();
   if (name === "queue") renderQueue();
   if (name === "revenue") openRevenueView();
+  if (name === "revenue-analytics") openRevenueAnalyticsView();
   if (name === "profile") renderProfile();
   if (name === "subscription") openSubscriptionView();
   window.scrollTo(0, 0);
@@ -464,16 +626,28 @@ function renderOverview() {
   renderLiveQueueCard($("#liveQueueCard"), { withActions: true });
   renderSequence($("#seqList"));
 
-  renderRevenueCard($("#revenueCard"));
+  // Replaces the old single-column revenue card + full appointments
+  // table with the new Appointments|Trends and Revenue|Trends card
+  // pairs. Renders whatever's cached immediately, then lazily loads
+  // anything not yet loaded and re-renders just these four cards —
+  // clinic status / stat grid / live queue / token sequence above are
+  // untouched by this redesign.
+  renderOverviewSummaryCards();
   if (!STATE.revenue.loaded) {
     loadRevenue()
-      .then(() => renderRevenueCard($("#revenueCard")))
+      .then(renderOverviewSummaryCards)
       .catch((err) => console.warn("Revenue load failed:", err.message));
   }
-
-  $("#overviewAppts").innerHTML = `
-    <div class="aph"><div><h2>Today's Appointments</h2><div class="sub">${STATE.clinicDayLabel}</div></div><span class="count-chip">${c.total}</span></div>
-    ${apptTableHTML(appts())}`;
+  if (canAccessFeature("appointmentTrends") && !STATE.appointmentTrends.loaded) {
+    loadAppointmentTrends()
+      .then(renderOverviewSummaryCards)
+      .catch((err) => console.warn("Appointment trends load failed:", err.message));
+  }
+  if (canAccessFeature("revenueTrends") && !STATE.revenueTrends.loaded) {
+    loadRevenueTrends()
+      .then(renderOverviewSummaryCards)
+      .catch((err) => console.warn("Revenue trends load failed:", err.message));
+  }
 }
 
 function renderRevenueCard(el) {
@@ -499,6 +673,137 @@ function renderRevenueCard(el) {
       <button class="btn btn-primary" id="viewRevenueBtn">View Revenue</button>
     </div>`;
   $("#viewRevenueBtn").onclick = () => showView("revenue");
+}
+
+/* ============================================================
+   OVERVIEW SUMMARY CARDS — the new Appointments|Trends and
+   Revenue|Trends card pairs. Deliberately compact: a handful of
+   numbers plus a CTA, never a full list/table (that's what the
+   detail pages are for). renderRevenueCard() above is now unused,
+   left in place rather than removed to minimize risk.
+   ============================================================ */
+// Reusable — same card, different container + click target. Used on
+// Overview (click -> navigate to the full page) AND on the
+// Appointments/Revenue pages themselves (click -> scroll down to the
+// list/table already on that same page, since navigating "to itself"
+// wouldn't do anything).
+function renderApptSummaryCardInto(containerId, onViewDetail) {
+  const el = $("#" + containerId);
+  if (!el) return;
+  const c = counts();
+  el.innerHTML = `
+    <div class="card summary-card" id="${containerId}Card">
+      <div>
+        <div class="sc-title">Appointments</div>
+        <div class="sc-sub">${STATE.clinicDayLabel}</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);font-size:14px;">Today's Appointments</span><span style="font-weight:700;font-size:17px;">${c.total}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);font-size:14px;">Waiting</span><span style="font-weight:700;font-size:17px;">${c.waiting}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);font-size:14px;">In Progress</span><span style="font-weight:700;font-size:17px;">${c["in-progress"]}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);font-size:14px;">Completed</span><span style="font-weight:700;font-size:17px;">${c.completed}</span></div>
+        </div>
+      </div>
+      <div class="sc-cta">View Detail →</div>
+    </div>`;
+  $(`#${containerId}Card`).onclick = onViewDetail;
+}
+
+function renderRevenueSummaryCardInto(containerId, onViewDetail) {
+  const el = $("#" + containerId);
+  if (!el) return;
+  const r = STATE.revenue;
+  const revScope = r.from && r.to ? `${formatShortDate(r.from)} – ${formatShortDate(r.to)}` : `Last ${r.range} days`;
+  el.innerHTML = `
+    <div class="card summary-card" id="${containerId}Card">
+      <div>
+        <div class="sc-title">Revenue</div>
+        <div class="sc-sub">${revScope}</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:16px;">
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);font-size:14px;">Total Revenue</span><span style="font-weight:700;font-size:17px;">PKR ${r.totalRevenue.toLocaleString()}</span></div>
+          <div style="display:flex;justify-content:space-between;"><span style="color:var(--muted);font-size:14px;">Paid Appointments</span><span style="font-weight:700;font-size:17px;">${r.paidAppointments}</span></div>
+        </div>
+      </div>
+      <div class="sc-cta">View Detail →</div>
+    </div>`;
+  $(`#${containerId}Card`).onclick = onViewDetail;
+}
+
+function renderOverviewSummaryCards() {
+  renderApptSummaryCardInto("ovApptSummary", () => showView("appointments"));
+  renderRevenueSummaryCardInto("ovRevenueSummary", () => showView("revenue"));
+
+  renderTrendPreviewCard(
+    "ovApptTrendsPreview",
+    "appointmentTrends",
+    "Appointment Trends",
+    "Track appointment trends with the Practice plan.",
+    STATE.appointmentTrends,
+    "count",
+    (v) => v,
+    () => showView("appointments-analytics"),
+  );
+  renderTrendPreviewCard(
+    "ovRevenueTrendsPreview",
+    "revenueTrends",
+    "Revenue Trends",
+    "Unlock revenue trends and insights with the Practice plan.",
+    STATE.revenueTrends,
+    "revenue",
+    (v) => `PKR ${Number(v).toLocaleString()}`,
+    () => showView("revenue-analytics"),
+  );
+}
+
+// Compact chart preview card shared by both Overview trend cards —
+// same gate, same lineChartSVG, same empty/loading handling as the
+// full-size versions on the dedicated Analytics pages, just smaller.
+function renderTrendPreviewCard(containerId, featureKey, title, gateDescription, state, valueKey, formatValue, onOpen) {
+  const el = $("#" + containerId);
+  if (!el) return;
+
+  if (!canAccessFeature(featureKey)) {
+    el.innerHTML = proFeatureGate(featureKey, {
+      title,
+      description: gateDescription,
+      previewHTML: trendChartPreviewHTML(),
+    });
+    return; // the gate's own [data-pro-upgrade] button already opens the payment modal
+  }
+
+  const hasData = state.loaded && state.data.some((d) => (d[valueKey] || 0) > 0);
+  const chart = hasData
+    ? lineChartSVG(
+        state.data.map((d) => ({ label: d.date, value: d[valueKey] || 0, dateISO: d.dateISO })),
+        { formatValue },
+      )
+    : `<div class="empty-state" style="padding:30px 10px;"><p>${state.loading ? "Loading chart…" : "No data yet."}</p></div>`;
+
+  const rangeLabel = { "7d": "7 days", "30d": "30 days", "90d": "3 months" }[state.range] || "7 days";
+
+  el.innerHTML = `
+    <div class="card summary-card" id="${containerId}Card">
+      <div>
+        <div class="sc-title">${title}</div>
+        <div class="sc-sub">Last ${rangeLabel}</div>
+        <div style="margin-top:12px;">${chart}</div>
+      </div>
+      <div class="sc-cta">View Detail →</div>
+    </div>`;
+  $(`#${containerId}Card`).onclick = onOpen;
+
+  // This card is itself clickable (navigates to the full Analytics
+  // page) — wireChartTooltip's stopPropagation on the data points is
+  // what stops tapping a specific point from ALSO triggering that
+  // navigation, so the doctor can actually see the tooltip on touch.
+  if (hasData) {
+    const valueLabel = valueKey === "revenue" ? "Revenue" : "Appointments";
+    wireChartTooltip(
+      el.querySelector(".chart-tooltip-host"),
+      state.data.map((d) => ({ value: d[valueKey] || 0, dateISO: d.dateISO })),
+      valueLabel,
+      formatValue,
+    );
+  }
 }
 
 function renderLiveQueueCard(el, { withActions }) {
@@ -791,27 +1096,161 @@ function openDelayModal() {
 }
 
 /* ---------- APPOINTMENTS PAGE ---------- */
-let apptFilter = "all",
-  apptSearch = "";
+/* ============================================================
+   PAGINATION — reusable, used by the Appointments list (and
+   intended for Revenue's transaction list once its backend supports
+   the matching page/limit/pagination contract). Ellipsis-aware page
+   numbers, Previous/Next, page-size selector, "Showing X–Y of Z".
+   ============================================================ */
+function paginationHTML(pagination, prefix, { showPageSize = true } = {}) {
+  const { page, limit, total, totalPages } = pagination;
+  if (total === 0) return "";
+
+  const startItem = (page - 1) * limit + 1;
+  const endItem = Math.min(page * limit, total);
+
+  const pages = [];
+  for (let p = 1; p <= totalPages; p++) {
+    if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
+      pages.push(p);
+    } else if (pages[pages.length - 1] !== "…") {
+      pages.push("…");
+    }
+  }
+
+  const pageButtons = pages
+    .map((p) =>
+      p === "…"
+        ? `<span style="padding:0 6px;color:var(--faint);">…</span>`
+        : `<button class="pg-btn ${p === page ? "active" : ""}" data-pg="${prefix}:${p}" ${p === page ? 'aria-current="page"' : ""}>${p}</button>`,
+    )
+    .join("");
+
+  const pageSizeSelect = showPageSize
+    ? `<select class="pg-size" data-pg-size="${prefix}">
+        ${[10, 20, 50].map((n) => `<option value="${n}" ${n === limit ? "selected" : ""}>${n} / page</option>`).join("")}
+      </select>`
+    : "";
+
+  return `
+    <div class="pg-wrap">
+      <div class="pg-count">Showing ${startItem}–${endItem} of ${total}</div>
+      <div class="pg-controls">
+        <button class="pg-btn" data-pg="${prefix}:prev" ${page <= 1 ? "disabled" : ""}>← Previous</button>
+        <span class="pg-mobile">Page ${page} of ${totalPages}</span>
+        <span class="pg-desktop">${pageButtons}</span>
+        <button class="pg-btn" data-pg="${prefix}:next" ${page >= totalPages ? "disabled" : ""}>Next →</button>
+      </div>
+      ${pageSizeSelect}
+    </div>`;
+}
+
+// onChange receives "prev" | "next" | a page-number string | "size:N"
+function wirePagination(prefix, onChange) {
+  $$(`[data-pg^="${prefix}:"]`).forEach((btn) => {
+    btn.onclick = () => onChange(btn.dataset.pg.split(":")[1]);
+  });
+  const sizeSel = $(`[data-pg-size="${prefix}"]`);
+  if (sizeSel) sizeSel.onchange = () => onChange("size:" + sizeSel.value);
+}
+
+function apptSkeletonHTML(rows = 5) {
+  return `<table class="appt-table"><tbody>
+    ${Array.from({ length: rows })
+      .map(
+        () => `<tr>
+      <td colspan="6" style="padding:14px 26px;">
+        <div style="height:16px;border-radius:6px;background:var(--line-soft);animation:apptSkeletonPulse 1.4s ease-in-out infinite;"></div>
+      </td>
+    </tr>`,
+      )
+      .join("")}
+  </tbody></table>
+  <style>@keyframes apptSkeletonPulse{0%,100%{opacity:.6}50%{opacity:1}}</style>`;
+}
+
+/* ---------- APPOINTMENTS PAGE ---------- */
 function renderAppointments() {
   $("#dateCur").textContent = STATE.clinicDayLabel;
   $("#apptDayLabel").textContent = STATE.clinicDayLabel;
   const dateInput = $("#apptDate");
   if (dateInput && STATE.selectedDate) dateInput.value = STATE.selectedDate;
-  let list = appts();
-  if (apptFilter !== "all") list = list.filter((a) => a.status === apptFilter);
-  if (apptSearch) {
-    const q = apptSearch.toLowerCase();
-    list = list.filter(
-      (a) =>
-        a.patient.toLowerCase().includes(q) ||
-        (a.appointmentId || "").toLowerCase().includes(q),
-    );
+
+  const al = STATE.appointmentsList;
+  const list = STATE.appointmentsPageItems;
+
+  $("#apptCount").textContent = al.total;
+
+  // State priority, per spec: offline > loading > error > empty/no-results > normal.
+  // (Session-expired / permission-denied are already handled upstream —
+  // apiCall throws on 401/403 and existing callers redirect to login;
+  // nothing appointment-specific needed here.)
+  if (al.offline) {
+    $("#apptTableWrap").innerHTML = `
+      <div class="empty-state">
+        <h3>You're offline</h3>
+        <p>Please check your internet connection and try again.</p>
+        <button class="btn btn-primary" id="apptOfflineRetry">Retry</button>
+      </div>`;
+    $("#apptOfflineRetry").onclick = () => loadAppointmentsPage();
+    return;
   }
-  $("#apptCount").textContent = list.length;
-  $("#apptTableWrap").innerHTML = list.length
-    ? apptTableHTML(list)
-    : `<div class="empty-state"><h3>No appointments for this date.</h3><p>Try a different date or filter.</p></div>`;
+
+  if (al.loading) {
+    $("#apptTableWrap").innerHTML = apptSkeletonHTML();
+    return;
+  }
+
+  if (al.error) {
+    $("#apptTableWrap").innerHTML = `
+      <div class="empty-state">
+        <h3>Something went wrong</h3>
+        <p>We couldn't load your appointments.</p>
+        <button class="btn btn-primary" id="apptErrorRetry">Try Again</button>
+      </div>`;
+    $("#apptErrorRetry").onclick = () => loadAppointmentsPage();
+    return;
+  }
+
+  if (al.total === 0) {
+    const filtered = al.search || al.status !== "all";
+    $("#apptTableWrap").innerHTML = filtered
+      ? `<div class="empty-state">
+          <h3>No appointments found</h3>
+          <p>We couldn't find any appointments matching your search or filters.</p>
+          <button class="btn btn-ghost" id="apptClearFilters">Clear Filters</button>
+        </div>`
+      : `<div class="empty-state"><h3>No appointments yet.</h3><p>Try a different date.</p></div>`;
+    const clearBtn = $("#apptClearFilters");
+    if (clearBtn) {
+      clearBtn.onclick = () => {
+        al.search = "";
+        al.status = "all";
+        al.page = 1;
+        $("#apptSearch").value = "";
+        $$("#apptTabs .tab").forEach((x) => x.classList.toggle("active", x.dataset.filter === "all"));
+        loadAppointmentsPage();
+      };
+    }
+    return;
+  }
+
+  $("#apptTableWrap").innerHTML = apptTableHTML(list) + paginationHTML(
+    { page: al.page, limit: al.limit, total: al.total, totalPages: al.totalPages },
+    "apptList",
+  );
+
+  wirePagination("apptList", (action) => {
+    if (action === "prev") al.page = Math.max(1, al.page - 1);
+    else if (action === "next") al.page = Math.min(al.totalPages, al.page + 1);
+    else if (action.startsWith("size:")) {
+      al.limit = parseInt(action.split(":")[1], 10);
+      al.page = 1; // page size change resets to page 1
+    } else {
+      al.page = parseInt(action, 10);
+    }
+    loadAppointmentsPage();
+  });
 }
 function apptTableHTML(list) {
   return `<table class="appt-table"><thead><tr><th>Token</th><th>Patient</th><th>Appointment Date</th><th>Status</th><th>Payment</th><th>Action</th></tr></thead><tbody>
@@ -822,7 +1261,7 @@ function apptTableHTML(list) {
         <td class="tk">#${a.token}</td>
         <td class="pt" style="filter:blur(4px);user-select:none;" aria-hidden="true">•••• ••••••</td>
         <td class="dt">${a.date}</td>
-        <td><span class="pill" style="background:var(--blue-soft);color:var(--blue);"><span class="d"></span> Locked</span></td>
+        <td><span class="pill" style="background:var(--blue-soft);color:var(--blue);"><span style="width:12px;height:12px;display:inline-flex;">${proLockIcon()}</span> Locked</span></td>
         <td>—</td>
         <td class="act"><button class="btn btn-primary" style="padding:6px 12px;font-size:12.5px;" data-pro-upgrade="lockedAppointment" aria-label="Upgrade to Practice to view and serve this appointment">Upgrade to Practice</button></td>
       </tr>`;
@@ -864,18 +1303,26 @@ $("#apptTabs").addEventListener("click", (e) => {
   if (!t) return;
   $$("#apptTabs .tab").forEach((x) => x.classList.remove("active"));
   t.classList.add("active");
-  apptFilter = t.dataset.filter;
-  renderAppointments();
+  STATE.appointmentsList.status = t.dataset.filter;
+  STATE.appointmentsList.page = 1; // filter change always resets to page 1
+  loadAppointmentsPage();
 });
+let apptSearchDebounce = null;
 $("#apptSearch").addEventListener("input", (e) => {
-  apptSearch = e.target.value.trim();
-  renderAppointments();
+  clearTimeout(apptSearchDebounce);
+  const val = e.target.value.trim();
+  apptSearchDebounce = setTimeout(() => {
+    STATE.appointmentsList.search = val;
+    STATE.appointmentsList.page = 1; // search change always resets to page 1
+    loadAppointmentsPage();
+  }, 300);
 });
 $("#apptDate").addEventListener("change", async (e) => {
   const val = e.target.value;
   if (!val) return;
   try {
     await loadAll(val);
+    STATE.appointmentsList.page = 1; // new date — start from page 1
     refreshAll();
     toast("Date changed", "Showing appointments for the selected clinic day.");
   } catch (err) {
@@ -885,12 +1332,14 @@ $("#apptDate").addEventListener("change", async (e) => {
 $("#datePrev").addEventListener("click", async () => {
   const base = STATE.selectedDate || new Date().toISOString().slice(0, 10);
   await loadAll(addDaysToISO(base, -1));
+  STATE.appointmentsList.page = 1;
   refreshAll();
   toast("Previous day", "Loaded previous clinic day.");
 });
 $("#dateNext").addEventListener("click", async () => {
   const base = STATE.selectedDate || new Date().toISOString().slice(0, 10);
   await loadAll(addDaysToISO(base, 1));
+  STATE.appointmentsList.page = 1;
   refreshAll();
   toast("Next day", "Loaded next clinic day.");
 });
@@ -1316,6 +1765,63 @@ async function openRevenueView() {
   } catch (err) {
     toast("Couldn't load revenue", err.message, true);
   }
+
+  renderRevenueSummaryCardInto("revenuePageSummary", () => {
+    $("#revenueWrap")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  const renderRevPreview = () =>
+    renderTrendPreviewCard(
+      "revenuePageTrendsPreview",
+      "revenueTrends",
+      "Revenue Trends",
+      "Unlock revenue trends and insights with the Practice plan.",
+      STATE.revenueTrends,
+      "revenue",
+      (v) => `PKR ${Number(v).toLocaleString()}`,
+      () => showView("revenue-analytics"),
+    );
+  renderRevPreview();
+  if (canAccessFeature("revenueTrends") && !STATE.revenueTrends.loaded) {
+    await loadRevenueTrends();
+    renderRevPreview();
+  }
+}
+
+// Dedicated Revenue Analytics page — reuses the SAME
+// renderRevenueTrendsCard()/loadRevenueTrends() logic that used to
+// render inline at the bottom of the Revenue page; only the page it
+// renders into moved.
+async function openRevenueAnalyticsView() {
+  try {
+    await loadSubscription();
+  } catch (err) {
+    console.warn("Subscription refresh failed:", err.message);
+  }
+  renderRevenueTrendsCard();
+  renderRevenueAnalyticsSummary();
+  if (canAccessFeature("revenueTrends") && !STATE.revenueTrends.loaded) {
+    await loadRevenueTrends();
+    renderRevenueAnalyticsSummary();
+  }
+}
+
+function renderRevenueAnalyticsSummary() {
+  const el = $("#revenueAnalyticsSummary");
+  if (!el) return;
+  const t = STATE.revenueTrends;
+  if (!canAccessFeature("revenueTrends") || !t.loaded || !t.data.length) {
+    el.innerHTML = "";
+    return;
+  }
+  const total = t.data.reduce((sum, d) => sum + (d.revenue || 0), 0);
+  const avg = t.data.length ? total / t.data.length : 0;
+  const peak = t.data.reduce((max, d) => (d.revenue > max.revenue ? d : max), t.data[0]);
+  el.innerHTML = `
+    <div class="stat-grid mt24">
+      <div class="stat"><div class="st-top">Total Revenue</div><div class="st-val" style="font-size:26px;">PKR ${total.toLocaleString()}</div></div>
+      <div class="stat"><div class="st-top">Average per Day</div><div class="st-val" style="font-size:26px;">PKR ${Math.round(avg).toLocaleString()}</div></div>
+      <div class="stat"><div class="st-top">Peak Day</div><div class="st-val" style="font-size:19px;">${peak.date} (PKR ${peak.revenue.toLocaleString()})</div></div>
+    </div>`;
 }
 
 function renderRevenueView() {
@@ -1416,19 +1922,38 @@ function renderRevenueView() {
     )
     .join("");
 
-  const rows = r.appointments.length
-    ? r.appointments
-        .map(
-          (a) => `
+  // State priority: offline > loading > error > empty/no-results > normal.
+  let tableBody;
+  if (r.offline) {
+    tableBody = `<tr><td colspan="4"><div class="empty-state"><h3>You're offline</h3><p>Please check your internet connection and try again.</p><button class="btn btn-primary" id="revenueOfflineRetry">Retry</button></div></td></tr>`;
+  } else if (r.loading) {
+    tableBody = Array.from({ length: 5 })
+      .map(
+        () =>
+          `<tr><td colspan="4" style="padding:14px 26px;"><div style="height:16px;border-radius:6px;background:var(--line-soft);animation:apptSkeletonPulse 1.4s ease-in-out infinite;"></div></td></tr>`,
+      )
+      .join("");
+  } else if (r.error) {
+    tableBody = `<tr><td colspan="4"><div class="empty-state"><h3>Something went wrong</h3><p>We couldn't load your revenue records.</p><button class="btn btn-primary" id="revenueErrorRetry">Try Again</button></div></td></tr>`;
+  } else if (r.total === 0) {
+    tableBody = r.search
+      ? `<tr><td colspan="4"><div class="empty-state"><h3>No revenue records found</h3><p>Try changing your search or filters.</p><button class="btn btn-ghost" id="revenueClearFilters">Clear Filters</button></div></td></tr>`
+      : `<tr><td colspan="4"><div class="empty-state"><h3>No revenue records yet.</h3></div></td></tr>`;
+  } else {
+    tableBody = r.appointments
+      .map(
+        (a) => `
     <tr>
       <td class="pt">${a.patientName}</td>
       <td class="dt">${formatShortDate(a.appointmentDate)}</td>
       <td>PKR ${Number(a.consultationFee || 0).toLocaleString()}</td>
       <td><span class="pill completed"><span class="d"></span> Paid</span></td>
     </tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="4"><div class="empty-state"><h3>No paid appointments in this range.</h3></div></td></tr>`;
+      )
+      .join("");
+  }
+
+  const showPagination = !r.offline && !r.loading && !r.error && r.total > 0;
 
   wrap.innerHTML = `
     <div class="card revenue-toolbar">
@@ -1444,23 +1969,39 @@ function renderRevenueView() {
         </div>
       </div>
       ${customForm}
+      <div class="fb-field search" style="margin-top:14px;">
+        <label class="fl">Search patient</label>
+        <div class="search-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3" stroke-linecap="round"/></svg>
+          <input class="search-input" id="revenueSearch" placeholder="Search by patient name" value="${r.search}">
+        </div>
+      </div>
     </div>
     <div class="stat-grid" style="margin-top:20px;">${statTiles}</div>
     <div class="card appt-panel mt24">
       <div class="aph">
         <div><h2>Paid Appointments</h2><div class="sub">${scopeLabel}</div></div>
-        <span class="count-chip">${r.paidAppointments}</span>
+        <span class="count-chip">${r.total}</span>
       </div>
       <table class="appt-table">
         <thead><tr><th>Patient</th><th>Date</th><th>Fee</th><th>Payment</th></tr></thead>
-        <tbody>${rows}</tbody>
+        <tbody>${tableBody}</tbody>
       </table>
+      ${
+        showPagination
+          ? paginationHTML(
+              { page: r.page, limit: r.limit, total: r.total, totalPages: r.totalPages },
+              "revenueList",
+            )
+          : ""
+      }
     </div>`;
 
   $$("[data-revenue-range]", wrap).forEach((btn) => {
     btn.onclick = async () => {
       const value = btn.dataset.revenueRange;
       STATE.revenue.range = value;
+      STATE.revenue.page = 1; // range change resets to page 1
       if (value !== "custom") {
         try {
           await loadRevenue();
@@ -1485,6 +2026,7 @@ function renderRevenueView() {
       }
       STATE.revenue.from = from;
       STATE.revenue.to = to;
+      STATE.revenue.page = 1; // custom range change resets to page 1
       applyBtn.disabled = true;
       applyBtn.textContent = "Loading…";
       try {
@@ -1496,6 +2038,81 @@ function renderRevenueView() {
         applyBtn.textContent = "Apply";
       }
     };
+  }
+
+  let revenueSearchDebounce = null;
+  const searchInput = $("#revenueSearch");
+  if (searchInput) {
+    searchInput.addEventListener("input", (e) => {
+      clearTimeout(revenueSearchDebounce);
+      const val = e.target.value.trim();
+      revenueSearchDebounce = setTimeout(async () => {
+        STATE.revenue.search = val;
+        STATE.revenue.page = 1; // search change resets to page 1
+        try {
+          await loadRevenue();
+        } catch (err) {
+          toast("Couldn't load revenue", err.message, true);
+        }
+        renderRevenueView();
+      }, 300);
+    });
+  }
+
+  const clearBtn = $("#revenueClearFilters");
+  if (clearBtn) {
+    clearBtn.onclick = async () => {
+      STATE.revenue.search = "";
+      STATE.revenue.page = 1;
+      try {
+        await loadRevenue();
+      } catch (err) {
+        toast("Couldn't load revenue", err.message, true);
+      }
+      renderRevenueView();
+    };
+  }
+
+  const offlineRetry = $("#revenueOfflineRetry");
+  if (offlineRetry) {
+    offlineRetry.onclick = async () => {
+      try {
+        await loadRevenue();
+      } catch (err) {
+        toast("Couldn't load revenue", err.message, true);
+      }
+      renderRevenueView();
+    };
+  }
+  const errorRetry = $("#revenueErrorRetry");
+  if (errorRetry) {
+    errorRetry.onclick = async () => {
+      try {
+        await loadRevenue();
+      } catch (err) {
+        toast("Couldn't load revenue", err.message, true);
+      }
+      renderRevenueView();
+    };
+  }
+
+  if (showPagination) {
+    wirePagination("revenueList", async (action) => {
+      if (action === "prev") STATE.revenue.page = Math.max(1, STATE.revenue.page - 1);
+      else if (action === "next") STATE.revenue.page = Math.min(STATE.revenue.totalPages, STATE.revenue.page + 1);
+      else if (action.startsWith("size:")) {
+        STATE.revenue.limit = parseInt(action.split(":")[1], 10);
+        STATE.revenue.page = 1;
+      } else {
+        STATE.revenue.page = parseInt(action, 10);
+      }
+      try {
+        await loadRevenue();
+      } catch (err) {
+        toast("Couldn't load revenue", err.message, true);
+      }
+      renderRevenueView();
+    });
   }
 }
 
@@ -1978,7 +2595,10 @@ function closeSidebar() {
 function refreshAll() {
   if (!$("#view-overview").hidden) renderOverview();
   if (!$("#view-queue").hidden) renderQueue();
-  if (!$("#view-appointments").hidden) renderAppointments();
+  // Fetches fresh data (not just a re-render of possibly-stale
+  // STATE.appointmentsPageItems) — matters after actions like Mark
+  // Paid or Cancel that change what this page's list should show.
+  if (!$("#view-appointments").hidden) loadAppointmentsPage();
   renderNotifs();
   syncTopbarIdentity();
 }
@@ -2015,10 +2635,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
    already uses (populated by loadSubscription()).
    ============================================================ */
 function hasProAccess() {
-  return (
-    STATE.subscription.plan === "Practice" &&
-    STATE.subscription.status === "Active"
-  );
+  return STATE.subscription.plan === "Practice" && STATE.subscription.status === "Active";
 }
 
 // Registry of feature keys that require Practice. Add a key here to
@@ -2026,7 +2643,7 @@ function hasProAccess() {
 // sites need to check. Anything not listed is treated as a normal
 // Free-plan feature (always allowed) — this only tightens access,
 // it never needs to be consulted to loosen it.
-const PRO_FEATURES = new Set(["customRevenueRange"]);
+const PRO_FEATURES = new Set(["customRevenueRange", "appointmentTrends", "revenueTrends"]);
 
 function canAccessFeature(featureKey) {
   if (!PRO_FEATURES.has(featureKey)) return true;
@@ -2100,6 +2717,416 @@ function customRevenuePreviewHTML() {
     </div>`;
 }
 
+/* ============================================================
+   TREND CHARTS — Appointment Trends & Revenue Trends. Both are
+   Practice-only, gated through the same PRO_FEATURES/canAccessFeature
+   used everywhere else. No charting library is loaded anywhere in
+   this app, so this is a minimal hand-rolled inline-SVG line chart —
+   matching how every icon in this file is already inline SVG,
+   instead of adding a new CDN dependency for two charts.
+   ============================================================ */
+
+// points: [{ label, value }]. Always starts the Y axis at zero — no
+// truncated/misleading axis. A native <title> on each dot gives a
+// basic accessible tooltip without needing hover-tracking JS.
+// points: [{ label, value, dateISO }]. Always starts the Y axis at
+// zero — no truncated/misleading axis. Native <title> tooltips were
+// removed in favor of wireChartTooltip() below — call that right
+// after inserting this HTML into the DOM to get a real, styled,
+// date-specific hover/tap tooltip (same "render then wire" pattern
+// used everywhere else in this file, e.g. wireTrendRangeButtons).
+function lineChartSVG(points, { formatValue = (v) => v } = {}) {
+  const W = 640,
+    H = 220,
+    PAD = 32;
+  if (!points.length) return "";
+
+  const values = points.map((p) => p.value);
+  const maxV = Math.max(...values, 1);
+  const stepX = points.length > 1 ? (W - PAD * 2) / (points.length - 1) : 0;
+  const scaleY = (v) => H - PAD - (v / maxV) * (H - PAD * 2);
+
+  const coords = points.map((p, i) => [PAD + i * stepX, scaleY(p.value)]);
+  const linePath = coords
+    .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`)
+    .join(" ");
+  const areaPath = `${linePath} L${coords[coords.length - 1][0].toFixed(1)},${H - PAD} L${coords[0][0].toFixed(1)},${H - PAD} Z`;
+
+  const dots = coords
+    .map(([x, y]) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="3.5" fill="var(--blue)"/>`)
+    .join("");
+
+  // Thin out labels on longer ranges (30/90 days) so they don't overlap.
+  const labelEvery = Math.max(1, Math.ceil(points.length / 7));
+  const labels = coords
+    .map(([x], i) =>
+      i % labelEvery === 0
+        ? `<text x="${x.toFixed(1)}" y="${H - 8}" font-size="10" fill="var(--faint)" text-anchor="middle">${points[i].label}</text>`
+        : "",
+    )
+    .join("");
+
+  // Invisible, generously-sized hit targets (r=14, well beyond the
+  // visible r=3.5 dot) so hover/tap near a point registers reliably —
+  // matters especially for touch, where fingertip accuracy is coarse.
+  const hitTargets = coords
+    .map(
+      ([x, y], i) =>
+        `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="14" fill="transparent" data-chart-point="${i}" style="cursor:pointer;"/>`,
+    )
+    .join("");
+
+  return `<div class="chart-tooltip-host" style="position:relative;">
+    <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;" role="img" aria-label="Line chart" class="chart-svg">
+      <path d="${areaPath}" fill="var(--blue-soft)" opacity="0.5"/>
+      <path d="${linePath}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+      ${labels}
+      ${hitTargets}
+    </svg>
+    <div class="chart-tooltip" style="display:none;position:absolute;pointer-events:none;background:var(--ink);color:#fff;font-size:12.5px;line-height:1.4;padding:7px 11px;border-radius:8px;white-space:nowrap;box-shadow:var(--sh-lg, var(--sh-md));z-index:20;transform:translate(-50%,calc(-100% - 10px));"></div>
+  </div>`;
+}
+
+// Full, unambiguous date ("Aug 28, 2026") for tooltips specifically —
+// never a raw ISO timestamp. The chart's own axis labels stay short
+// ("Aug 28", already formatted server-side) to avoid crowding; the
+// tooltip is where the full date belongs. Respects the same
+// date-string-only arithmetic used throughout (no timezone shift —
+// dateISO is a plain YYYY-MM-DD calendar day, already resolved
+// against PKT on the backend).
+function fullDateLabel(dateISO) {
+  if (!dateISO) return "";
+  return new Date(dateISO + "T00:00:00").toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+// Attaches hover (mouse) and tap (touch) tooltip behavior to a chart
+// just inserted via lineChartSVG()'s output. Pointer Events unify
+// mouse and touch, so this one code path covers both — no separate
+// touch-only branch. Call this right after setting .innerHTML to
+// whatever contained the lineChartSVG() output.
+//
+// points here mirrors what was passed to lineChartSVG (same index
+// order) — valueLabel is "Appointments" or "Revenue", formatValue is
+// the same formatter already used for the chart/card (PKR formatting
+// for revenue, plain number for appointment counts) so the tooltip
+// never invents its own currency formatting.
+function wireChartTooltip(hostEl, points, valueLabel, formatValue) {
+  if (!hostEl) return;
+  const tooltip = hostEl.querySelector(".chart-tooltip");
+  if (!tooltip) return;
+  const hitEls = hostEl.querySelectorAll("[data-chart-point]");
+  if (!hitEls.length) return;
+
+  const showFor = (target) => {
+    const idx = Number(target.dataset.chartPoint);
+    const p = points[idx];
+    if (!p) return;
+    tooltip.innerHTML = `<div style="font-weight:700;margin-bottom:2px;">${fullDateLabel(p.dateISO)}</div><div>${valueLabel}: ${formatValue(p.value)}</div>`;
+    tooltip.style.display = "block";
+
+    const hostRect = hostEl.getBoundingClientRect();
+    const ptRect = target.getBoundingClientRect();
+    let left = ptRect.left + ptRect.width / 2 - hostRect.left;
+    const top = ptRect.top - hostRect.top;
+
+    // Keep the tooltip from overflowing the card horizontally.
+    const tooltipWidth = tooltip.offsetWidth || 130;
+    left = Math.max(tooltipWidth / 2 + 4, Math.min(left, hostRect.width - tooltipWidth / 2 - 4));
+
+    tooltip.style.left = `${left}px`;
+    tooltip.style.top = `${top}px`;
+  };
+
+  hitEls.forEach((el) => {
+    el.addEventListener("pointerenter", () => showFor(el));
+    el.addEventListener("pointerdown", (e) => {
+      // stopPropagation matters here: the compact Overview/list-page
+      // preview cards have their OWN click handler that navigates to
+      // the Analytics page — without this, tapping a data point on
+      // touch would show the tooltip AND immediately navigate away.
+      e.preventDefault();
+      e.stopPropagation();
+      showFor(el);
+    });
+  });
+
+  hostEl.addEventListener("pointerleave", () => {
+    tooltip.style.display = "none";
+  });
+}
+
+// Single, module-level listener — NOT re-attached on every chart
+// render, which would leak a new document listener per re-render.
+// Dismisses any visible chart tooltip when tapping/clicking anywhere
+// outside a chart (mouse already has pointerleave for this; touch
+// devices don't have an equivalent "leave", so this covers tapping
+// elsewhere on the page instead).
+document.addEventListener("pointerdown", (e) => {
+  if (e.target.closest(".chart-tooltip-host")) return;
+  $$(".chart-tooltip").forEach((t) => (t.style.display = "none"));
+});
+
+// Plausible fake wave for the BLURRED preview only — never real data,
+// never fetched from the backend while locked.
+function trendChartPreviewHTML() {
+  // More points and a clearer upward trend than before — the blur
+  // and overlay already obscure the exact values, so this can afford
+  // to look like a genuinely healthy, growing chart underneath.
+  const fake = [3, 5, 4, 7, 6, 9, 8, 11, 9, 13, 12, 15].map((v) => ({ label: "", value: v }));
+  return lineChartSVG(fake);
+}
+
+function trendCardShell(title, desc, bodyHTML, rangeSelectorHTML) {
+  return `<div class="card" style="padding:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+      <div>
+        <h2 style="font-size:20px;font-weight:700;">${title}</h2>
+        <div class="sub" style="color:var(--muted);font-size:13.5px;margin-top:2px;">${desc}</div>
+      </div>
+      ${rangeSelectorHTML || ""}
+    </div>
+    ${bodyHTML}
+  </div>`;
+}
+
+function trendRangeSelector(prefix, activeRange) {
+  const btn = (value, label) =>
+    `<button class="revenue-range-btn ${activeRange === value ? "active" : ""}" data-trend-btn="${prefix}:${value}">${label}</button>`;
+  return `<div class="revenue-range" role="tablist" aria-label="Date range">
+    ${btn("7d", "7 Days")}${btn("30d", "30 Days")}${btn("90d", "3 Months")}
+  </div>`;
+}
+
+function wireTrendRangeButtons(prefix, onChange) {
+  $$(`[data-trend-btn^="${prefix}:"]`).forEach((btn) => {
+    btn.onclick = () => onChange(btn.dataset.trendBtn.split(":")[1]);
+  });
+}
+
+function trendBody(state, valueKey, formatValue, emptyMsg, retryId) {
+  if (state.loading) return `<div class="empty-state"><p>Loading chart…</p></div>`;
+  if (state.error) {
+    return `<div class="empty-state"><h3>We couldn't load your analytics.</h3><button class="btn btn-ghost" id="${retryId}">Retry</button></div>`;
+  }
+  const hasData = state.data.some((d) => (d[valueKey] || 0) > 0);
+  if (!state.loaded || !hasData) return `<div class="empty-state"><p>${emptyMsg}</p></div>`;
+  return lineChartSVG(
+    state.data.map((d) => ({ label: d.date, value: d[valueKey] || 0, dateISO: d.dateISO })),
+    { formatValue },
+  );
+}
+
+/* ---------- Appointment Trends (in the Appointments view) ---------- */
+async function loadAppointmentTrends() {
+  const t = STATE.appointmentTrends;
+  t.loading = true;
+  t.error = false;
+  renderAppointmentTrendsCard();
+  try {
+    const res = await apiGet(ENDPOINTS.appointmentAnalytics(t.range));
+    t.data = res.data?.data || [];
+    t.loaded = true;
+  } catch (err) {
+    t.error = true;
+    console.warn("Appointment analytics failed:", err.message);
+  } finally {
+    t.loading = false;
+    renderAppointmentTrendsCard();
+  }
+}
+
+function renderAppointmentTrendsCard() {
+  const el = $("#apptTrendsWrap");
+  if (!el) return;
+  const t = STATE.appointmentTrends;
+
+  if (!canAccessFeature("appointmentTrends")) {
+    el.innerHTML = `<div class="mt24">${proFeatureGate("appointmentTrends", {
+      title: "Appointment Trends",
+      description:
+        "Track how your appointment volume changes over time — see daily patterns, busy days, and growth.",
+      previewHTML: trendChartPreviewHTML(),
+    })}</div>`;
+    return;
+  }
+
+  const body = trendBody(t, "count", (v) => v, "No appointments during this period.", "apptTrendsRetry");
+  el.innerHTML = `<div class="mt24">${trendCardShell(
+    "Appointment Trends",
+    "Track how your appointment volume changes over time.",
+    body,
+    trendRangeSelector("apptTrends", t.range),
+  )}</div>`;
+
+  wireTrendRangeButtons("apptTrends", (range) => {
+    t.range = range;
+    loadAppointmentTrends();
+  });
+  const retryBtn = $("#apptTrendsRetry");
+  if (retryBtn) retryBtn.onclick = loadAppointmentTrends;
+
+  // Only a real chart has hit targets to wire — loading/error/empty
+  // states rendered no lineChartSVG() output at all.
+  if (t.loaded && t.data.some((d) => (d.count || 0) > 0)) {
+    wireChartTooltip(
+      el.querySelector(".chart-tooltip-host"),
+      t.data.map((d) => ({ value: d.count || 0, dateISO: d.dateISO })),
+      "Appointments",
+      (v) => v,
+    );
+  }
+}
+
+// Wraps the existing renderAppointments() with a subscription refresh
+// (so an upgrade unlocks the chart immediately, matching how
+// openRevenueView already does this for the Custom Range gate) and a
+// one-time lazy load of the trends chart.
+async function openAppointmentsView() {
+  try {
+    await loadSubscription();
+  } catch (err) {
+    console.warn("Subscription refresh failed:", err.message);
+  }
+  loadAppointmentsPage(); // fetches + renders the paginated table itself
+
+  renderApptSummaryCardInto("apptPageSummary", () => {
+    $("#apptTableWrap")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  renderTrendPreviewCard(
+    "apptPageTrendsPreview",
+    "appointmentTrends",
+    "Appointment Trends",
+    "Track appointment trends with the Practice plan.",
+    STATE.appointmentTrends,
+    "count",
+    (v) => v,
+    () => showView("appointments-analytics"),
+  );
+  if (canAccessFeature("appointmentTrends") && !STATE.appointmentTrends.loaded) {
+    await loadAppointmentTrends();
+    renderTrendPreviewCard(
+      "apptPageTrendsPreview",
+      "appointmentTrends",
+      "Appointment Trends",
+      "Track appointment trends with the Practice plan.",
+      STATE.appointmentTrends,
+      "count",
+      (v) => v,
+      () => showView("appointments-analytics"),
+    );
+  }
+}
+
+// Dedicated Appointment Analytics page — reuses the SAME
+// renderAppointmentTrendsCard()/loadAppointmentTrends() logic that
+// used to render inline at the bottom of the Appointments list page;
+// only the page it renders into moved.
+async function openAppointmentAnalyticsView() {
+  try {
+    await loadSubscription();
+  } catch (err) {
+    console.warn("Subscription refresh failed:", err.message);
+  }
+  renderAppointmentTrendsCard();
+  renderAppointmentAnalyticsSummary();
+  if (canAccessFeature("appointmentTrends") && !STATE.appointmentTrends.loaded) {
+    await loadAppointmentTrends();
+    renderAppointmentAnalyticsSummary();
+  }
+}
+
+// Total / average-per-day / peak-day — pure derivation from the
+// SAME data loadAppointmentTrends() already fetched, no new backend
+// call and no duplicated chart data logic.
+function renderAppointmentAnalyticsSummary() {
+  const el = $("#apptAnalyticsSummary");
+  if (!el) return;
+  const t = STATE.appointmentTrends;
+  if (!canAccessFeature("appointmentTrends") || !t.loaded || !t.data.length) {
+    el.innerHTML = "";
+    return;
+  }
+  const total = t.data.reduce((sum, d) => sum + (d.count || 0), 0);
+  const avg = t.data.length ? total / t.data.length : 0;
+  const peak = t.data.reduce((max, d) => (d.count > max.count ? d : max), t.data[0]);
+  el.innerHTML = `
+    <div class="stat-grid mt24">
+      <div class="stat"><div class="st-top">Total Appointments</div><div class="st-val">${total}</div></div>
+      <div class="stat"><div class="st-top">Average per Day</div><div class="st-val">${avg.toFixed(1)}</div></div>
+      <div class="stat"><div class="st-top">Peak Day</div><div class="st-val" style="font-size:19px;">${peak.date} (${peak.count})</div></div>
+    </div>`;
+}
+
+/* ---------- Revenue Trends (in the Revenue view) ---------- */
+async function loadRevenueTrends() {
+  const t = STATE.revenueTrends;
+  t.loading = true;
+  t.error = false;
+  renderRevenueTrendsCard();
+  try {
+    const res = await apiGet(ENDPOINTS.revenueAnalytics(t.range));
+    t.data = res.data?.data || [];
+    t.loaded = true;
+  } catch (err) {
+    t.error = true;
+    console.warn("Revenue analytics failed:", err.message);
+  } finally {
+    t.loading = false;
+    renderRevenueTrendsCard();
+  }
+}
+
+function renderRevenueTrendsCard() {
+  const el = $("#revenueTrendsWrap");
+  if (!el) return;
+  const t = STATE.revenueTrends;
+
+  if (!canAccessFeature("revenueTrends")) {
+    el.innerHTML = proFeatureGate("revenueTrends", {
+      title: "Revenue Trends",
+      description:
+        "Track how your clinic revenue changes over time — spot growth, seasonal dips, and your best days.",
+      previewHTML: trendChartPreviewHTML(),
+    });
+    return;
+  }
+
+  const body = trendBody(
+    t,
+    "revenue",
+    (v) => `PKR ${Number(v).toLocaleString()}`,
+    "No revenue recorded during this period.",
+    "revenueTrendsRetry",
+  );
+  el.innerHTML = trendCardShell(
+    "Revenue Trends",
+    "Track how your clinic revenue changes over time.",
+    body,
+    trendRangeSelector("revenueTrends", t.range),
+  );
+
+  wireTrendRangeButtons("revenueTrends", (range) => {
+    t.range = range;
+    loadRevenueTrends();
+  });
+  const retryBtn = $("#revenueTrendsRetry");
+  if (retryBtn) retryBtn.onclick = loadRevenueTrends;
+
+  if (t.loaded && t.data.some((d) => (d.revenue || 0) > 0)) {
+    wireChartTooltip(
+      el.querySelector(".chart-tooltip-host"),
+      t.data.map((d) => ({ value: d.revenue || 0, dateISO: d.dateISO })),
+      "Revenue",
+      (v) => `PKR ${Number(v).toLocaleString()}`,
+    );
+  }
+}
+
 // Delegated — covers every current and future data-pro-upgrade
 // button without needing a new listener per feature. Reuses the
 // EXISTING payment modal (the same one the Subscription page's own
@@ -2115,6 +3142,7 @@ document.addEventListener("click", (e) => {
 const tokenLabel = (n) => (n && n > 0 ? "#" + n : "—");
 
 function nowServingName() {
+
   if (STATE.nowServing && STATE.nowServing > 0) {
     return nameFor(STATE.nowServing);
   }

@@ -153,6 +153,47 @@
           display: none;
         }
       }
+
+      /* Overview's Appointments/Revenue + Trends card pairs */
+      .summary-pair-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      .summary-card {
+        padding: 24px;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        min-height: 270px;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+      .summary-card:hover {
+        border-color: #cbd5e1;
+        box-shadow: var(--sh-md);
+      }
+      .summary-card .sc-title {
+        font-family: var(--fd);
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .summary-card .sc-sub {
+        color: var(--muted);
+        font-size: 13.5px;
+        margin-top: 2px;
+      }
+      .summary-card .sc-cta {
+        color: var(--blue);
+        font-weight: 600;
+        font-size: 14px;
+        margin-top: 16px;
+      }
+      @media (max-width: 1050px) {
+        .summary-pair-grid {
+          grid-template-columns: 1fr;
+        }
+      }
     </style>
   </head>
   <body>
@@ -381,8 +422,14 @@
               <div id="seqList"></div>
             </div>
           </div>
-          <div id="revenueCard" class="mt24"></div>
-          <div class="card appt-panel mt24" id="overviewAppts"></div>
+          <div class="summary-pair-grid mt24">
+            <div id="ovApptSummary"></div>
+            <div id="ovApptTrendsPreview"></div>
+          </div>
+          <div class="summary-pair-grid mt24">
+            <div id="ovRevenueSummary"></div>
+            <div id="ovRevenueTrendsPreview"></div>
+          </div>
         </section>
 
         <!-- APPOINTMENTS -->
@@ -395,6 +442,10 @@
                 order.
               </p>
             </div>
+          </div>
+          <div class="summary-pair-grid" style="margin-bottom: 24px">
+            <div id="apptPageSummary"></div>
+            <div id="apptPageTrendsPreview"></div>
           </div>
           <div class="card filter-bar">
             <div class="fb-top">
@@ -474,6 +525,18 @@
             </div>
             <div id="apptTableWrap"></div>
           </div>
+        </section>
+
+        <!-- APPOINTMENT ANALYTICS (dedicated page) -->
+        <section class="view" id="view-appointments-analytics" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Appointment Analytics</h1>
+              <p class="lead">A closer look at your appointment volume over time.</p>
+            </div>
+          </div>
+          <div id="apptTrendsWrap"></div>
+          <div id="apptAnalyticsSummary"></div>
         </section>
 
         <!-- QUEUE CONTROL -->
@@ -586,7 +649,23 @@
               </p>
             </div>
           </div>
+          <div class="summary-pair-grid" style="margin-bottom: 24px">
+            <div id="revenuePageSummary"></div>
+            <div id="revenuePageTrendsPreview"></div>
+          </div>
           <div id="revenueWrap"></div>
+        </section>
+
+        <!-- REVENUE ANALYTICS (dedicated page) -->
+        <section class="view" id="view-revenue-analytics" hidden>
+          <div class="page-head">
+            <div>
+              <h1>Revenue Analytics</h1>
+              <p class="lead">A closer look at how your clinic revenue changes over time.</p>
+            </div>
+          </div>
+          <div id="revenueTrendsWrap"></div>
+          <div id="revenueAnalyticsSummary"></div>
         </section>
 
         <!-- SUBSCRIPTION -->

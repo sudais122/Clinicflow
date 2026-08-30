@@ -2387,3 +2387,173 @@ h3 {
     padding: 22px 20px;
   }
 }
+/* ---------- PAGINATION (append to style.css) ---------- */
+.pg-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px 26px;
+  border-top: 1px solid var(--line);
+}
+.pg-count {
+  font-size: 13.5px;
+  color: var(--muted);
+}
+.pg-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pg-btn {
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--sub);
+}
+.pg-btn:hover:not(:disabled) {
+  border-color: #cbd5e1;
+}
+.pg-btn.active {
+  background: var(--blue);
+  border-color: var(--blue);
+  color: #fff;
+}
+.pg-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.pg-size {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--sub);
+  background: #fff;
+}
+.pg-mobile {
+  display: none;
+  font-size: 13.5px;
+  color: var(--muted);
+  padding: 0 6px;
+}
+.pg-desktop{
+    display: flex;
+    gap: 5px;
+}
+@media (max-width: 640px) {
+  .pg-desktop {
+    display: none;
+  }
+  .pg-mobile {
+    display: inline;
+  }
+  .pg-wrap {
+    padding: 14px 16px;
+  }
+}
+/* ---------- PRO FEATURE UPGRADE GATE — v2 fix ---------- */
+/* Replace the existing .pf-gate / .pf-gate-overlay rules in
+   style.css with these. Root cause of the "empty white card" bug:
+   .pf-gate had no background/border/shadow of its own — it only
+   looked right when a caller happened to also wrap it in a
+   pre-existing .card. Making it self-contained here means every
+   current AND future use of proFeatureGate() looks correct
+   automatically, without each call site needing to remember to add
+   its own wrapper. */
+
+.pf-gate {
+  position: relative;
+  border-radius: 18px;
+  overflow: hidden;
+  min-height: 270px;        /* was 240px — now matches .summary-card exactly */
+  background: var(--card);  /* NEW — was missing entirely */
+  border: 1px solid var(--line);  /* NEW */
+  box-shadow: var(--sh-sm); /* NEW */
+}
+
+.pf-gate-preview {
+  filter: blur(4px);   /* was 6px — a touch more of the real preview shows through */
+  opacity: .7;          /* was .55 — less washed out */
+  pointer-events: none;
+  user-select: none;
+}
+
+.pf-gate-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* was rgba(...,.35) -> rgba(...,.88) — the .88 bottom stop was
+     nearly opaque, which is what was hiding the chart. Capped lower
+     here so the preview reads as "there but obscured", not "gone". */
+  background: linear-gradient(180deg, rgba(246, 248, 251, .25), rgba(246, 248, 251, .62));
+}
+
+.pf-gate-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--sh-md);
+  padding: 24px 26px;
+  max-width: 340px;
+  width: 100%;
+  text-align: center;
+}
+
+.pf-gate-card svg {
+  width: 24px;
+  height: 24px;
+  color: var(--blue);
+  margin: 0 auto 10px;
+  display: block;
+}
+
+.pf-gate-badge {
+  display: inline-block;
+  background: var(--blue-soft);
+  color: var(--blue);
+  font-weight: 700;
+  font-size: 11.5px;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 4px 11px;
+  border-radius: 999px;
+  margin-bottom: 10px;
+}
+
+.pf-gate-title {
+  font-family: var(--fd);
+  font-size: 18px;
+  font-weight: 800;
+  margin-bottom: 6px;
+}
+
+.pf-gate-desc {
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.pf-unlocked {
+  /* Real feature branch — unchanged, no visual treatment. */
+}
+
+@media (max-width: 640px) {
+  .pf-gate-overlay {
+    padding: 16px;
+  }
+  .pf-gate-card {
+    padding: 20px 18px;
+  }
+}

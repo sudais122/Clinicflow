@@ -28,6 +28,19 @@
     },
     doctors: [],
     appointments: [],
+    appointmentsListItems: [],
+    appointmentsList: {
+      page: 1,
+      limit: 10,
+      total: 0,
+      totalPages: 1,
+      search: "",
+      status: "all",
+      loading: false,
+      error: false,
+      errorMessage: "",
+      offline: !navigator.onLine,
+    },
     notifications: [],
     reports: [],
   };
@@ -157,10 +170,15 @@
     if (patient.user?.phone) STATE.user.phone = patient.user.phone;
   }
 
+  // Full, unpaginated list — used by Overview (current appointment
+  // card, recent history), Queue page, and socket room joining by
+  // doctorId. Requests all=true so backend pagination never
+  // truncates this. Separate from loadAppointmentsPage below, which
+  // powers the paginated My Appointments list specifically.
   async function loadAppointments() {
     let res;
     try {
-      res = await fetch(API_BASE + "/appointments/patient", {
+      res = await fetch(API_BASE + "/appointments/patient?all=true", {
         method: "GET",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -185,8 +203,104 @@
       throw new Error(json?.message || `Request failed (${res.status})`);
     }
 
-    STATE.appointments = (json?.data || []).map(mapAppointment);
+    // Defensive against either response shape (old bare array, or
+    // new { appointments, pagination }) — never throws on a shape
+    // mismatch, just logs it.
+    const data = json?.data;
+    let list;
+    if (Array.isArray(data)) {
+      list = data;
+    } else if (Array.isArray(data?.appointments)) {
+      list = data.appointments;
+    } else {
+      console.error("GET /appointments/patient returned an unexpected shape:", data);
+      list = [];
+    }
+
+    STATE.appointments = list.map(mapAppointment);
   }
+
+  // Powers the paginated My Appointments list specifically — real
+  // server-side pagination, search, and status filter. Separate
+  // STATE (appointmentsList) from the full-list STATE.appointments
+  // above.
+  async function loadAppointmentsPage() {
+    const al = STATE.appointmentsList;
+    al.loading = true;
+    al.error = false;
+    al.offline = !navigator.onLine;
+    renderAppointments();
+
+    if (al.offline) {
+      al.loading = false;
+      renderAppointments();
+      return;
+    }
+
+    const params = new URLSearchParams({
+      page: String(al.page),
+      limit: String(al.limit),
+    });
+    if (al.search) params.set("search", al.search);
+    if (al.status !== "all") params.set("status", al.status);
+
+    try {
+      let res;
+      try {
+        res = await fetch(`${API_BASE}/appointments/patient?${params.toString()}`, {
+          method: "GET",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (networkErr) {
+        throw new Error("Could not reach the server. Check your connection.");
+      }
+
+      if (res.status === 401) {
+        window.location.href = "../../../Auth/login/login.html";
+        throw new Error("Session expired. Please log in again.");
+      }
+
+      let json = null;
+      try {
+        json = await res.json();
+      } catch {
+        /* empty body */
+      }
+
+      if (!res.ok) {
+        throw new Error(json?.message || `Request failed (${res.status})`);
+      }
+
+      const data = json?.data || {};
+      const rawList = Array.isArray(data) ? data : Array.isArray(data.appointments) ? data.appointments : [];
+      STATE.appointmentsListItems = rawList.map(mapAppointment);
+      const pg = Array.isArray(data)
+        ? { page: 1, limit: rawList.length, total: rawList.length, totalPages: 1 }
+        : data.pagination || { page: 1, limit: al.limit, total: 0, totalPages: 1 };
+      al.page = pg.page;
+      al.limit = pg.limit;
+      al.total = pg.total;
+      al.totalPages = pg.totalPages;
+    } catch (err) {
+      al.error = true;
+      al.errorMessage = err.message || "Something went wrong.";
+    } finally {
+      al.loading = false;
+      renderAppointments();
+    }
+  }
+
+  window.addEventListener("online", () => {
+    if (STATE.appointmentsList.offline) {
+      STATE.appointmentsList.offline = false;
+      if (!$("#view-appointments").hidden) loadAppointmentsPage();
+    }
+  });
+  window.addEventListener("offline", () => {
+    STATE.appointmentsList.offline = true;
+    if (!$("#view-appointments").hidden) renderAppointments();
+  });
 
   async function loadDoctors() {
     try {
@@ -281,6 +395,7 @@
     if (location.hash !== "#" + name)
       history.replaceState(null, "", "#" + name);
     if (name === "queue") renderQueue();
+    if (name === "appointments") loadAppointmentsPage();
     if (name === "profile") renderProfile();
     if (name === "help") {
       renderMyReports();
@@ -468,25 +583,112 @@
   }
 
   /* ---------------- MY APPOINTMENTS ---------------- */
-  let apptFilter = "all",
-    apptDateFilter = "";
-  function renderAppointments() {
-    let list = STATE.appointments.slice();
-    if (apptFilter === "upcoming")
-      list = list.filter((a) => ["waiting", "in-progress"].includes(a.status));
-    else if (apptFilter === "completed")
-      list = list.filter((a) => a.status === "completed");
-    else if (apptFilter === "cancelled")
-      list = list.filter((a) => a.status === "cancelled");
-    if (apptDateFilter) list = list.filter((a) => a.dateISO === apptDateFilter);
+  /* Reusable pagination component — duplicated from the doctor
+     dashboard's version since this is a separate file/IIFE with no
+     module sharing in this codebase. Same ellipsis-aware page
+     numbers, Previous/Next, page-size selector, "Showing X–Y of Z". */
+  function paginationHTML(pagination, prefix, { showPageSize = true } = {}) {
+    const { page, limit, total, totalPages } = pagination;
+    if (total === 0) return "";
 
+    const startItem = (page - 1) * limit + 1;
+    const endItem = Math.min(page * limit, total);
+
+    const pages = [];
+    for (let p = 1; p <= totalPages; p++) {
+      if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
+        pages.push(p);
+      } else if (pages[pages.length - 1] !== "…") {
+        pages.push("…");
+      }
+    }
+
+    const pageButtons = pages
+      .map((p) =>
+        p === "…"
+          ? `<span style="padding:0 6px;color:var(--faint);">…</span>`
+          : `<button class="pg-btn ${p === page ? "active" : ""}" data-pg="${prefix}:${p}" ${p === page ? 'aria-current="page"' : ""}>${p}</button>`,
+      )
+      .join("");
+
+    const pageSizeSelect = showPageSize
+      ? `<select class="pg-size" data-pg-size="${prefix}">
+          ${[10, 20, 50].map((n) => `<option value="${n}" ${n === limit ? "selected" : ""}>${n} / page</option>`).join("")}
+        </select>`
+      : "";
+
+    return `
+      <div class="pg-wrap">
+        <div class="pg-count">Showing ${startItem}–${endItem} of ${total}</div>
+        <div class="pg-controls">
+          <button class="pg-btn" data-pg="${prefix}:prev" ${page <= 1 ? "disabled" : ""}>← Previous</button>
+          <span class="pg-mobile">Page ${page} of ${totalPages}</span>
+          <span class="pg-desktop">${pageButtons}</span>
+          <button class="pg-btn" data-pg="${prefix}:next" ${page >= totalPages ? "disabled" : ""}>Next →</button>
+        </div>
+        ${pageSizeSelect}
+      </div>`;
+  }
+
+  function wirePagination(prefix, onChange) {
+    $$(`[data-pg^="${prefix}:"]`).forEach((btn) => {
+      btn.onclick = () => onChange(btn.dataset.pg.split(":")[1]);
+    });
+    const sizeSel = $(`[data-pg-size="${prefix}"]`);
+    if (sizeSel) sizeSel.onchange = () => onChange("size:" + sizeSel.value);
+  }
+
+  function apptCardsSkeletonHTML(n = 4) {
+    return Array.from({ length: n })
+      .map(
+        () =>
+          `<div class="card" style="padding:20px;"><div style="height:16px;width:60%;border-radius:6px;background:var(--line-soft,#eee);animation:apptSkeletonPulse 1.4s ease-in-out infinite;margin-bottom:10px;"></div><div style="height:14px;width:40%;border-radius:6px;background:var(--line-soft,#eee);animation:apptSkeletonPulse 1.4s ease-in-out infinite;"></div></div>`,
+      )
+      .join("") + `<style>@keyframes apptSkeletonPulse{0%,100%{opacity:.6}50%{opacity:1}}</style>`;
+  }
+
+  function renderAppointments() {
+    const al = STATE.appointmentsList;
+    const list = STATE.appointmentsListItems;
     const box = $("#apptList");
-    if (!list.length) {
-      box.innerHTML = `<div class="card empty-state"><h3>No appointments</h3><p>Nothing matches this filter yet.</p></div>`;
+    if (!box) return;
+
+    // State priority: offline > loading > error > empty/no-results > normal.
+    if (al.offline) {
+      box.innerHTML = `<div class="card empty-state"><h3>You're offline</h3><p>Please check your internet connection and try again.</p><button class="btn btn-primary" id="apptOfflineRetry">Retry</button></div>`;
+      $("#apptOfflineRetry").onclick = () => loadAppointmentsPage();
+      return;
+    }
+    if (al.loading) {
+      box.innerHTML = apptCardsSkeletonHTML();
+      return;
+    }
+    if (al.error) {
+      box.innerHTML = `<div class="card empty-state"><h3>Something went wrong</h3><p>We couldn't load your appointments.</p><button class="btn btn-primary" id="apptErrorRetry">Try Again</button></div>`;
+      $("#apptErrorRetry").onclick = () => loadAppointmentsPage();
+      return;
+    }
+    if (al.total === 0) {
+      const filtered = al.search || al.status !== "all";
+      box.innerHTML = filtered
+        ? `<div class="card empty-state"><h3>No appointments found</h3><p>We couldn't find any appointments matching your search or filters.</p><button class="btn btn-ghost" id="apptClearFilters">Clear Filters</button></div>`
+        : `<div class="card empty-state"><h3>No appointments</h3><p>Nothing here yet.</p></div>`;
+      const clearBtn = $("#apptClearFilters");
+      if (clearBtn) {
+        clearBtn.onclick = () => {
+          al.search = "";
+          al.status = "all";
+          al.page = 1;
+          const searchInput = $("#apptSearch");
+          if (searchInput) searchInput.value = "";
+          $$("#apptTabs .tab").forEach((x) => x.classList.toggle("active", x.dataset.filter === "all"));
+          loadAppointmentsPage();
+        };
+      }
       return;
     }
 
-    box.innerHTML = list
+    const cardsHTML = list
       .map((a) => {
         const active = ["waiting", "in-progress"].includes(a.status);
         const metrics = active
@@ -513,19 +715,60 @@
     </div>`;
       })
       .join("");
+
+    box.innerHTML =
+      cardsHTML +
+      paginationHTML({ page: al.page, limit: al.limit, total: al.total, totalPages: al.totalPages }, "apptList");
+
+    wirePagination("apptList", (action) => {
+      if (action === "prev") al.page = Math.max(1, al.page - 1);
+      else if (action === "next") al.page = Math.min(al.totalPages, al.page + 1);
+      else if (action.startsWith("size:")) {
+        al.limit = parseInt(action.split(":")[1], 10);
+        al.page = 1; // page size change resets to page 1
+      } else {
+        al.page = parseInt(action, 10);
+      }
+      loadAppointmentsPage();
+    });
   }
+
   $("#apptTabs").addEventListener("click", (e) => {
     const t = e.target.closest(".tab");
     if (!t) return;
     $$("#apptTabs .tab").forEach((x) => x.classList.remove("active"));
     t.classList.add("active");
-    apptFilter = t.dataset.filter;
-    renderAppointments();
+    // Filter tab values map directly to the backend's status query —
+    // "all" | "upcoming" | "completed" | "cancelled".
+    STATE.appointmentsList.status = t.dataset.filter;
+    STATE.appointmentsList.page = 1; // filter change always resets to page 1
+    loadAppointmentsPage();
   });
-  $("#apptDate").addEventListener("change", (e) => {
-    apptDateFilter = e.target.value;
-    renderAppointments();
-  });
+  // NOTE: the previous client-side date filter (#apptDate) has been
+  // removed here — it doesn't compose with server-side pagination
+  // (filtering only the current page's items would silently hide
+  // matches on other pages). If date filtering on this list is still
+  // wanted, it needs a matching `date` query param added to
+  // GET /appointments/patient on the backend first.
+
+  // Guarded — I don't have your patient-dashboard HTML in this
+  // conversation, so I can't add the #apptSearch input element
+  // myself. Add <input id="apptSearch" placeholder="Search..."> near
+  // #apptTabs in the Appointments view and this wires up
+  // automatically; until then this silently does nothing.
+  let apptSearchDebounce = null;
+  const apptSearchInput = $("#apptSearch");
+  if (apptSearchInput) {
+    apptSearchInput.addEventListener("input", (e) => {
+      clearTimeout(apptSearchDebounce);
+      const val = e.target.value.trim();
+      apptSearchDebounce = setTimeout(() => {
+        STATE.appointmentsList.search = val;
+        STATE.appointmentsList.page = 1; // search change always resets to page 1
+        loadAppointmentsPage();
+      }, 300);
+    });
+  }
 
   /* ---------------- QUEUE ---------------- */
   function renderQueue() {
@@ -1529,7 +1772,7 @@
       syncQueueRooms();
 
       renderOverview();
-      renderAppointments();
+      if (!$("#view-appointments").hidden) loadAppointmentsPage();
 
       book.step = 1;
       book.forWhom = "self";
@@ -1645,7 +1888,7 @@
         syncQueueRooms();
         closeDetails();
         renderOverview();
-        renderAppointments();
+        if (!$("#view-appointments").hidden) loadAppointmentsPage();
         toast("Appointment cancelled", "Your appointment has been cancelled.");
       } catch (err) {
         toast("Couldn't cancel", err.message, true);
@@ -2138,7 +2381,7 @@
     }
     syncQueueRooms();
     renderOverview();
-    renderAppointments();
+    if (!$("#view-appointments").hidden) loadAppointmentsPage();
     if (!$("#view-queue").hidden) renderQueue();
   }
 
@@ -2203,7 +2446,6 @@
 
     renderNotifs();
     renderOverview();
-    renderAppointments();
     renderFAQ();
     renderMyReports();
 

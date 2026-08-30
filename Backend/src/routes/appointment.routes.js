@@ -7,6 +7,7 @@ import {
   cancelAppointment,
   markAppointmentPaid,
 } from "../controllers/appointment.controller.js";
+import { getAppointmentAnalytics } from "../controllers/Analytics.controller.js";
 import { verifyJWT } from "../middlewares/auth.middlewares.js";
 
 const router = Router();
@@ -19,6 +20,7 @@ router.patch("/:appointmentId/cancel", cancelAppointment);
 
 // Doctor-facing
 router.get("/doctor", getDoctorAppointments);
+router.get("/analytics", getAppointmentAnalytics);
 router.patch("/:appointmentId/status", updateAppointmentStatus);
 router.patch("/:appointmentId/pay", markAppointmentPaid);
 

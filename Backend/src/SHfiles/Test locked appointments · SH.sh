@@ -4,7 +4,7 @@ PATIENT_PASSWORD="Patient@123"                       # ADJUST
 DOCTOR_EMAIL="test1@gmail.com"                     # ADJUST
 DOCTOR_PASSWORD="Doctor@123"                        # ADJUST
 DOCTOR_ID="6a927024329273fb37f41c01"      # ADJUST
-APPOINTMENT_DATE="2026-08-29"                         # ADJUST
+APPOINTMENT_DATE="2026-08-14"                         # ADJUST
 PATIENT_COOKIES="./patient_cookies.txt"
 DOCTOR_COOKIES="./doctor_cookies.txt"
 LIMIT=25
@@ -26,7 +26,7 @@ for i in $(seq 1 $TOTAL); do
       \"doctorId\": \"$DOCTOR_ID\",
       \"appointmentDate\": \"${APPOINTMENT_DATE}T00:00:00.000Z\",
       \"bookFor\": \"other\",
-      \"patientName\": \"Sample Patient $i\",
+      \"patientName\": \"My Patient $i\",
       \"patientPhone\": \"$PHONE\"
     }")
   STATUS=$(echo "$RESPONSE" | grep "HTTP_STATUS" | cut -d: -f2)

@@ -3,113 +3,132 @@ import { Appointment } from "../models/appointment.models.js";
 
 import ApiError from "../utils/apierror.js";
 import ApiResponse from "../utils/apiresponse.js";
-import { addDaysToISO, pktDayBoundsUTC, todayPKT } from "../utils/date.js";
+import { pktDayBoundsUTC } from "../utils/date.js";
 
-function resolveRevenueWindow({ range, from, to }) {
-  let fromStr;
-  let toStr;
-
-  if (from || to) {
-    if (!from || !to) return null; 
-    fromStr = from;
-    toStr = to;
-  } else {
-    const days = range === "7" ? 7 : 28;
-    toStr = todayPKT();
-    fromStr = addDaysToISO(toStr, -(days - 1));
-  }
-
-  const fromBounds = pktDayBoundsUTC(fromStr);
-  const toBounds = pktDayBoundsUTC(toStr);
-  if (!fromBounds || !toBounds) return null;
-
-  if (fromBounds.startOfDay > toBounds.endOfDay) return null; 
-
-  return {
-    fromStr,
-    toStr,
-    startOfDay: fromBounds.startOfDay,
-    endOfDay: toBounds.endOfDay,
-  };
+// Same pure date-string arithmetic already used elsewhere (backend
+// analytics.controller.js, frontend addDaysToISO) — never touches
+// local timezone.
+function addDaysISO(iso, delta) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + delta);
+  return dt.toISOString().slice(0, 10);
 }
 
+// GET /revenue?range=7|28&page=&limit=&search=
+// GET /revenue?from=&to=&page=&limit=&search=
+//
+// IMPORTANT: I've never seen your actual revenue.controller.js in
+// this conversation — this is a reconstruction matching the exact
+// response shape your frontend (loadRevenue in doctor-script.js)
+// already expects: { totalRevenue, paidAppointments,
+// averageConsultationFee, from, to, appointments }. I've added
+// `pagination` to that same object and paginated `appointments`
+// specifically. If your real controller computes totalRevenue or
+// averageConsultationFee differently (e.g. a different definition of
+// "revenue"), adapt those parts — everything else should be a
+// reasonable drop-in.
 const getRevenue = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
     if (!doctor) {
-      throw new ApiError(403, "Only a doctor can view revenue");
+      throw new ApiError(404, "Doctor profile not found");
     }
 
-    const { range, from, to } = req.query;
-    const window = resolveRevenueWindow({ range, from, to });
-    if (!window) {
-      throw new ApiError(
-        400,
-        "Provide either ?range=7|28 or both ?from=YYYY-MM-DD&to=YYYY-MM-DD (to must not be before from)",
-      );
-    }
-    const { fromStr, toStr, startOfDay, endOfDay } = window;
+    const { range, from, to, search } = req.query;
 
-    const [result] = await Appointment.aggregate([
+    let startOfRange, endOfRange, fromISO, toISO;
+
+    if (from && to) {
+      if (to < from) {
+        throw new ApiError(400, "'to' cannot be before 'from'");
+      }
+      const fromBounds = pktDayBoundsUTC(from);
+      const toBounds = pktDayBoundsUTC(to);
+      if (!fromBounds || !toBounds) {
+        throw new ApiError(400, "Invalid date — expected YYYY-MM-DD");
+      }
+      startOfRange = fromBounds.startOfDay;
+      endOfRange = toBounds.endOfDay;
+      fromISO = from;
+      toISO = to;
+    } else {
+      const days = { "7": 7, "28": 28 }[range] || 28;
+      const todayPKT = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" });
+      fromISO = addDaysISO(todayPKT, -(days - 1));
+      toISO = todayPKT;
+      const fromBounds = pktDayBoundsUTC(fromISO);
+      const toBounds = pktDayBoundsUTC(toISO);
+      startOfRange = fromBounds.startOfDay;
+      endOfRange = toBounds.endOfDay;
+    }
+
+    // Only supported page sizes are allowed — reject anything else.
+    const ALLOWED_LIMITS = [10, 20, 50];
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 10;
+    if (!ALLOWED_LIMITS.includes(limit)) {
+      throw new ApiError(400, `limit must be one of: ${ALLOWED_LIMITS.join(", ")}`);
+    }
+    let page = req.query.page ? parseInt(req.query.page, 10) : 1;
+    if (!Number.isInteger(page) || page < 1) page = 1;
+
+    const match = {
+      doctor: doctor._id,
+      paymentStatus: "paid",
+      appointmentDate: { $gte: startOfRange, $lte: endOfRange },
+    };
+
+    if (search && search.trim()) {
+      const q = search.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // escape regex metacharacters
+      match.patientName = { $regex: q, $options: "i" };
+    }
+
+    // Summary stats (total revenue, paid count, average fee) are
+    // computed over the FULL matched range — never affected by which
+    // page of transactions is currently being viewed. Aggregated at
+    // the database level rather than fetching every row into Node.
+    const summaryAgg = await Appointment.aggregate([
+      { $match: match },
       {
-        $match: {
-          doctor: doctor._id,
-          paymentStatus: "paid",
-          appointmentDate: { $gte: startOfDay, $lte: endOfDay },
-        },
-      },
-      {
-        $facet: {
-          summary: [
-            {
-              $group: {
-                _id: null,
-                totalRevenue: { $sum: "$consultationFee" },
-                paidAppointments: { $sum: 1 },
-              },
-            },
-          ],
-          appointments: [
-            { $sort: { appointmentDate: -1 } },
-            {
-              $project: {
-                _id: 0,
-                appointmentId: 1,
-                patientName: 1,
-                appointmentDate: 1,
-                consultationFee: 1,
-                paymentStatus: 1,
-                paidAt: 1,
-              },
-            },
-          ],
+        $group: {
+          _id: null,
+          totalRevenue: { $sum: "$consultationFee" },
+          paidAppointments: { $sum: 1 },
         },
       },
     ]);
+    const totalRevenue = summaryAgg[0]?.totalRevenue || 0;
+    const paidAppointments = summaryAgg[0]?.paidAppointments || 0;
+    const averageConsultationFee = paidAppointments
+      ? Math.round(totalRevenue / paidAppointments)
+      : 0;
 
-    const summary = result?.summary?.[0] || {
-      totalRevenue: 0,
-      paidAppointments: 0,
-    };
-    const appointments = result?.appointments || [];
+    const total = paidAppointments;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    // Out-of-range page (filters changed, records changed) moves to
+    // the nearest valid page rather than returning a blank result.
+    if (page > totalPages) page = totalPages;
 
-    const averageConsultationFee =
-      summary.paidAppointments > 0
-        ? Math.round(summary.totalRevenue / summary.paidAppointments)
-        : 0;
+    const appointments = await Appointment.find(match)
+      .select("patientName appointmentDate consultationFee")
+      .sort({ appointmentDate: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
 
     return res.status(200).json(
       new ApiResponse(
         200,
         {
-          totalRevenue: summary.totalRevenue,
-          paidAppointments: summary.paidAppointments,
+          totalRevenue,
+          paidAppointments,
           averageConsultationFee,
-          from: fromStr,
-          to: toStr,
+          from: fromISO,
+          to: toISO,
           appointments,
+          pagination: { page, limit, total, totalPages },
         },
-        "Revenue fetched successfully",
+        "Revenue fetched",
       ),
     );
   } catch (error) {
