@@ -404,11 +404,11 @@
         <section class="view" id="view-overview">
           <div class="page-head">
             <div>
-              <h1 id="greeting">Good morning, Dr. Hassan</h1>
-              <p class="lead">Here's your clinic activity for today.</p>
+              <h1 id="greeting"></h1>
+              <p class="lead"></p>
               <p class="sub2">
-                <b id="clinicName">Care Point Clinic</b> ·
-                <span id="todayDate">Monday, August 10, 2026</span>
+                <b id="clinicName"></b> ·
+                <span id="todayDate"></span>
               </p>
             </div>
           </div>
@@ -466,7 +466,7 @@
                     />
                   </svg>
                 </button>
-                <span class="cur" id="dateCur">Monday, August 10, 2026</span>
+                <span class="cur" id="dateCur"></span>
                 <button class="nav-arrow" id="dateNext">
                   <svg
                     width="18"
@@ -519,9 +519,9 @@
             <div class="aph">
               <div>
                 <h2>Today's Appointments</h2>
-                <div class="sub" id="apptDayLabel">Monday, August 10, 2026</div>
+                <div class="sub" id="apptDayLabel"></div>
               </div>
-              <span class="count-chip" id="apptCount">20</span>
+              <span class="count-chip" id="apptCount"></span>
             </div>
             <div id="apptTableWrap"></div>
           </div>
@@ -544,10 +544,7 @@
           <div class="page-head">
             <div>
               <h1>Queue Control</h1>
-              <p class="lead" id="queueSub">
-                Monday, August 10, 2026 · patients are served strictly by token
-                number.
-              </p>
+              <p class="lead" id="queueSub"></p>
             </div>
           </div>
           <div class="card qc-card">
@@ -558,21 +555,19 @@
                   Real-time token flow for today's clinic session.
                 </div>
               </div>
-              <span class="pill closed" id="qcStatusBadge"
-                ><span class="d"></span> Queue Closed</span
-              >
+              <span class="pill" id="qcStatusBadge"></span>
             </div>
             <div class="qc-live">
               <div class="qc-now">
                 <div class="k">Now serving</div>
-                <div class="big" id="qcNow">#8</div>
-                <div class="pname" id="qcNowName">Rabia</div>
+                <div class="big" id="qcNow"></div>
+                <div class="pname" id="qcNowName"></div>
                 <div class="next-box">
                   <div>
                     <div class="k">Next patient</div>
-                    <div class="nm" id="qcNextName">Kashif</div>
+                    <div class="nm" id="qcNextName"></div>
                   </div>
-                  <div class="tk" id="qcNextTok">#9</div>
+                  <div class="tk" id="qcNextTok"></div>
                 </div>
               </div>
               <div class="qc-metrics" id="qcMetrics"></div>
@@ -588,22 +583,20 @@
               <div class="serve-flow">
                 <div class="serve-box">
                   <div class="k">Currently serving</div>
-                  <div class="big" id="svCur">#8</div>
-                  <div class="nm" id="svCurName">Rabia</div>
+                  <div class="big" id="svCur"></div>
+                  <div class="nm" id="svCurName"></div>
                 </div>
                 <span class="serve-arrow">→</span>
                 <div class="serve-box next">
                   <div class="k">Next patient</div>
-                  <div class="big" id="svNext">#9</div>
-                  <div class="nm" id="svNextName">Kashif</div>
+                  <div class="big" id="svNext"></div>
+                  <div class="nm" id="svNextName"></div>
                 </div>
               </div>
               <button class="btn btn-primary btn-lg" id="serveNextBtn">
                 Serve Next Patient →
               </button>
-              <div class="serve-note" id="serveNote">
-                Open the clinic to continue serving patients.
-              </div>
+              <div class="serve-note" id="serveNote"></div>
             </div>
             <div class="card serve-card">
               <h2>Token Sequence</h2>

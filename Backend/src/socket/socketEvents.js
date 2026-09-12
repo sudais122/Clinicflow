@@ -26,3 +26,15 @@ export const emitDelayUpdated = (doctorId, payload) =>
 
 export const emitQueueLengthUpdated = (doctorId, payload) =>
   safeEmit(doctorId, "queueLengthUpdated", payload);
+
+// Queue just became empty — no active appointments remain. Payload
+export const emitQueueEmpty = (doctorId, payload) =>
+  safeEmit(doctorId, "queueEmpty", payload);
+
+// A new active appointment arrived during the grace period — cancels
+export const emitQueueActiveAgain = (doctorId, payload) =>
+  safeEmit(doctorId, "queueActiveAgain", payload);
+
+// The scheduler actually performed the automatic idle-queue reset.
+export const emitQueueAutoReset = (doctorId, payload) =>
+  safeEmit(doctorId, "queueAutoReset", payload);

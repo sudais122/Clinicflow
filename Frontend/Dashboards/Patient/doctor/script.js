@@ -120,6 +120,12 @@ const STATE = {
   perPatient: 10,
   delay: 0,
   lastToken: 0,
+  // autoResetAt is the server's own timestamp for when a pending
+  // idle-queue reset will fire — the countdown UI is always computed
+  // FROM this, never from a local elapsed-time timer alone, so a
+  // page refresh mid-countdown resumes correctly instead of
+  // restarting (see wireAutoResetCountdown below).
+  autoResetAt: null,
   selectedDate: null,
   clinicDayLabel: "",
   appointments: [],
@@ -288,6 +294,13 @@ function applyQueueDoc(q) {
   STATE.lastToken = q.lastToken ?? STATE.lastToken;
   STATE.perPatient = q.estimatedTimePerPatient ?? STATE.perPatient;
   STATE.delay = q.delayInMinutes ?? STATE.delay;
+  // autoResetAt (if the backend's /queue/me response includes it —
+  // see app-wiring-INSTRUCTIONS.txt) restores an in-progress
+  // countdown after a page refresh instead of losing it.
+  if ("autoResetAt" in q) {
+    STATE.autoResetAt = q.autoResetAt ? new Date(q.autoResetAt) : null;
+  }
+  renderAutoResetBanner();
 }
 
 // Used by queue/overview logic — Live Queue, Serve, token lookups,
@@ -3141,6 +3154,58 @@ document.addEventListener("click", (e) => {
 
 const tokenLabel = (n) => (n && n > 0 ? "#" + n : "—");
 
+/* ============================================================
+   AUTO-RESET COUNTDOWN — "Queue is empty, resets in MM:SS" banner.
+   The countdown is ALWAYS computed from STATE.autoResetAt (the
+   server's own timestamp), never from a local elapsed-time counter —
+   that's what makes it correct across page refreshes and immune to
+   the browser's clock drifting from the server's. The backend
+   remains the source of truth for whether the reset actually
+   happened; reaching 00:00 here just means "waiting for the backend
+   to confirm", not "reset is done".
+   ============================================================ */
+let autoResetTickInterval = null;
+
+function renderAutoResetBanner() {
+  const containers = [$("#ovAutoResetBanner"), $("#qcAutoResetBanner")].filter(Boolean);
+  if (!containers.length) return;
+
+  if (!STATE.autoResetAt) {
+    containers.forEach((el) => (el.innerHTML = ""));
+    clearInterval(autoResetTickInterval);
+    autoResetTickInterval = null;
+    return;
+  }
+
+  const html = `
+    <div class="card" style="padding:16px 20px;margin-bottom:20px;border-color:#fde3b8;background:var(--amber-soft);display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:700;color:var(--amber-text);margin-bottom:2px;">Queue is empty</div>
+        <div style="color:var(--amber-text);font-size:13.5px;">The queue will automatically reset in <span id="autoResetCountdown" style="font-weight:700;font-variant-numeric:tabular-nums;">--:--</span></div>
+      </div>
+    </div>`;
+  containers.forEach((el) => (el.innerHTML = html));
+
+  const tick = () => {
+    const remainingMs = STATE.autoResetAt.getTime() - Date.now();
+    if (remainingMs <= 0) {
+      // Reached zero — wait for the backend's own queueAutoReset
+      // socket event (or the next queue refresh) to confirm, rather
+      // than assuming the reset happened and clearing this locally.
+      $$("#autoResetCountdown").forEach((el) => (el.textContent = "00:00"));
+      return;
+    }
+    const totalSeconds = Math.ceil(remainingMs / 1000);
+    const mm = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+    const ss = String(totalSeconds % 60).padStart(2, "0");
+    $$("#autoResetCountdown").forEach((el) => (el.textContent = `${mm}:${ss}`));
+  };
+
+  tick();
+  clearInterval(autoResetTickInterval);
+  autoResetTickInterval = setInterval(tick, 1000);
+}
+
 function nowServingName() {
 
   if (STATE.nowServing && STATE.nowServing > 0) {
@@ -3203,6 +3268,21 @@ function initSocket() {
       );
     }
   });
+  socket.on("queueEmpty", (d) => {
+    STATE.autoResetAt = d.autoResetAt ? new Date(d.autoResetAt) : null;
+    renderAutoResetBanner();
+  });
+  socket.on("queueActiveAgain", () => {
+    STATE.autoResetAt = null;
+    renderAutoResetBanner();
+  });
+  socket.on("queueAutoReset", (d) => {
+    STATE.autoResetAt = null;
+    STATE.lastToken = d.lastToken ?? 0;
+    STATE.nowServing = d.nowServing ?? 0;
+    toast("Queue reset", "The empty queue was automatically reset after 15 minutes of inactivity.");
+    refreshAll();
+  });
   socket.on("connect_error", (err) => {
     console.warn("Socket connection error:", err.message);
   });
@@ -3216,6 +3296,9 @@ function initSocket() {
     socket.off("clinicClosed");
     socket.off("delayUpdated");
     socket.off("queueLengthUpdated");
+    socket.off("queueEmpty");
+    socket.off("queueActiveAgain");
+    socket.off("queueAutoReset");
     socket.off("connect_error");
     socket.disconnect();
   });
@@ -3323,6 +3406,17 @@ async function init() {
     await loadNotifications();
   } catch (err) {
     console.warn("Couldn't load notifications:", err.message);
+  }
+  // Load subscription BEFORE the first render — canAccessFeature()
+  // reads STATE.subscription, which otherwise still holds its
+  // hardcoded default { plan: "Free", ... } at this point. Without
+  // this, a real Practice-plan doctor sees every locked gate on
+  // first load, and it only self-corrects after visiting the
+  // Subscription page (the only other place that calls this).
+  try {
+    await loadSubscription();
+  } catch (err) {
+    console.warn("Couldn't load subscription:", err.message);
   }
   renderNotifs();
   syncTopbarIdentity();

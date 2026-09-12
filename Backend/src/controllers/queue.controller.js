@@ -14,6 +14,8 @@ import {
   emitQueueUpdated,
   emitDelayUpdated,
 } from "../socket/socketEvents.js";
+import { syncQueueEmptyState } from "../utils/queueEmptyState.js";
+import { QUEUE_AUTO_RESET_DELAY_MS } from "../config/queueResetConfig.js";
 
 const getOwnQueue = async (userId) => {
   const doctor = await Doctor.findOne({ user: userId });
@@ -40,6 +42,14 @@ const getQueueStatus = async (req, res, next) => {
       throw new ApiError(404, "Queue not found for this doctor");
     }
 
+    // autoResetAt is derived, never stored — always computed fresh
+    // from queueEmptyAt + the current config constant, so changing
+    // the delay in config never leaves a stale precomputed value
+    // lying around in the database.
+    const autoResetAt = queue.queueEmptyAt
+      ? new Date(queue.queueEmptyAt.getTime() + QUEUE_AUTO_RESET_DELAY_MS)
+      : null;
+
     return res.status(200).json(
       new ApiResponse(
         200,
@@ -49,6 +59,8 @@ const getQueueStatus = async (req, res, next) => {
           lastToken: queue.lastToken,
           estimatedTimePerPatient: queue.estimatedTimePerPatient,
           delayInMinutes: queue.delayInMinutes,
+          queueEmptyAt: queue.queueEmptyAt ?? null,
+          autoResetAt,
         },
         "Queue status fetched",
       ),
@@ -64,6 +76,11 @@ const startClinic = async (req, res, next) => {
     const { doctor, queue } = await getOwnQueue(req.user._id);
 
     queue.clinicStatus = "open";
+    // A previous session's empty-queue timestamp must never survive
+    // into a freshly opened one — otherwise the scheduler could
+    // reset a brand-new session based on a stale pre-existing
+    // timestamp with no relation to this session's actual state.
+    queue.queueEmptyAt = null;
     queue.lastUpdated = new Date();
     await queue.save();
 
@@ -77,7 +94,15 @@ const startClinic = async (req, res, next) => {
   }
 };
 
-// 3. Next Patient  
+// 3. Next Patient  —  PATCH /queue/next  (doctor)  — this is "Serve"
+//
+// PROTECTED: before any mutation, checks whether the token about to
+// become current is locked for the doctor's plan. If so, refuses the
+// entire operation up front — no status change, no queue advance, no
+// clinic-status change, nothing partial. This is the real security
+// boundary the spec requires; the frontend's disabled/upgrade-prompt
+// button is UX only and could be bypassed by calling this endpoint
+// directly, which is exactly the case this guard exists for.
 const nextPatient = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
@@ -164,6 +189,15 @@ const nextPatient = async (req, res, next) => {
       estimatedTimePerPatient: updatedQueue.estimatedTimePerPatient,
       delayInMinutes: updatedQueue.delayInMinutes,
     });
+
+    // Post-commit, non-transactional side effect — Serving the next
+    // patient just completed the previous one, which may have been
+    // the doctor's last active appointment. Re-derives from a live
+    // count rather than assuming; see syncQueueEmptyState's own
+    // comments for why.
+    syncQueueEmptyState(doctor._id).catch((err) =>
+      console.error("syncQueueEmptyState failed after nextPatient:", err),
+    );
 
     return res.status(200).json(
       new ApiResponse(
@@ -252,6 +286,11 @@ const endClinic = async (req, res, next) => {
     const { doctor, queue } = await getOwnQueue(req.user._id);
 
     queue.clinicStatus = "closed";
+    // Doctor's explicit Close Clinic is the authoritative action —
+    // any pending automatic-reset countdown is now moot regardless
+    // of outcome, so clear it rather than leave it to fire later
+    // against a closed clinic for no purpose.
+    queue.queueEmptyAt = null;
     queue.lastUpdated = new Date();
     await queue.save();
 
@@ -274,6 +313,7 @@ const resetQueue = async (req, res, next) => {
     queue.nowServing = 0;
     queue.delayInMinutes = 0;
     queue.clinicStatus = "closed";
+    queue.queueEmptyAt = null;
     queue.lastUpdated = new Date();
     await queue.save();
 

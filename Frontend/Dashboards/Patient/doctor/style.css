@@ -618,6 +618,7 @@ h3 {
 }
 
 .card {
+    padding: 1rem;
     background: var(--card);
     border: 1px solid var(--line);
     border-radius: 18px;
@@ -2543,10 +2544,6 @@ h3 {
   font-size: 13.5px;
   line-height: 1.5;
   margin-bottom: 16px;
-}
-
-.pf-unlocked {
-  /* Real feature branch — unchanged, no visual treatment. */
 }
 
 @media (max-width: 640px) {
