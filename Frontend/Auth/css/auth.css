@@ -1,25 +1,3 @@
-/* =========================================================
-   ClinicFlow — Shared auth stylesheet
-   Used by BOTH login.html and register.html.
-
-   Structure:
-     1. SHARED tokens + base reset — truly common to every auth
-        screen (success/error colors, ink, body font).
-     2. LOGIN SYSTEM (.af-*) — login.html's own tokens + rules.
-     3. REGISTER SYSTEM (plain classes) — register.html's own
-        tokens + rules, prefixed --reg-* to avoid colliding with
-        the login system's tokens of the same name.
-
-   The two systems intentionally look different (navy/Bricolage
-   Grotesque on login vs brighter blue/Lora on register) — that
-   wasn't unified, only the genuinely shared values were. The one
-   real collision between the two source files was .alert, which
-   is now defined once, under the shared tokens.
-   ========================================================= */
-
-/* ---------------------------------------------------------
-   1. SHARED — tokens + base reset
-   --------------------------------------------------------- */
 
 :root {
   --ink: #1c2333;
@@ -141,7 +119,7 @@ h2 {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 72px;
+  margin-bottom: 60px;
   font-family: var(--font-display);
   font-weight: 800;
   font-size: 20px;
@@ -153,8 +131,8 @@ h2 {
 }
 
 .af-brand img {
-  width: 34px;
-  height: 34px;
+  width: 55px;
+  height: auto;
   border-radius: 9px;
   display: block;
 }
@@ -776,14 +754,10 @@ h2 {
   margin-bottom: 64px;
 }
 
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: linear-gradient(135deg, var(--reg-blue), var(--green));
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.brand-mark  img {
+width: 55px;
+    height: auto;
+    display: block;
 }
 
 .brand-mark svg {
@@ -802,7 +776,7 @@ h2 {
 }
 
 .hero {
-  font-family: "Lora", serif;
+  font-family: sans-serif;
   font-weight: 600;
   font-size: 44px;
   line-height: 1.14;
