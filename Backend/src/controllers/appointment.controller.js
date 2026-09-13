@@ -29,6 +29,14 @@ const allowedTransitions = {
 
 
 // 1. Book Appointment
+//
+// REVERSED FROM THE PREVIOUS VERSION: booking now ALWAYS succeeds
+// regardless of the doctor's plan or how many appointments they
+// already have that day. There is no capacity check, no rejection,
+// no "queue is full" response — the patient never learns anything
+// about the doctor's subscription. Whether this appointment ends up
+// "locked" for the DOCTOR is determined AFTER creation and never
+// affects the patient's booking outcome or response in any way.
 const bookAppointment = async (req, res, next) => {
   try {
     const {
@@ -141,6 +149,10 @@ const bookAppointment = async (req, res, next) => {
     const session = await mongoose.startSession();
 
     let appointmentDocId;
+    // Retry loop is still here purely for transaction-conflict
+    // safety on the Queue document (two concurrent bookings for the
+    // same doctor both touch it) — unrelated to plan limits now,
+    // which no longer participate in this transaction at all.
     const MAX_RETRIES = 3;
     let attempt = 0;
 
@@ -268,10 +280,20 @@ const bookAppointment = async (req, res, next) => {
       nowServing,
     });
 
+    // Post-commit, non-transactional side effect — a fresh "waiting"
+    // appointment just got created, which is exactly the case that
+    // must cancel a pending empty-queue auto-reset countdown if one
+    // was running. syncQueueEmptyState re-derives from a live count,
+    // so this correctly clears queueEmptyAt without needing to know
+    // whether one was actually pending.
     syncQueueEmptyState(doctorId).catch((err) =>
       console.error("syncQueueEmptyState failed after booking:", err),
     );
 
+    // Plain, unconditional success response — identical regardless of
+    // whether this appointment turns out locked for the doctor. The
+    // patient never sees any plan/limit/upgrade information anywhere
+    // in this response.
     const responseData = {
       appointment: populatedAppointment,
 
@@ -298,6 +320,11 @@ const bookAppointment = async (req, res, next) => {
           : "Appointment booked successfully. The clinic is currently closed. Queue information will be available when the clinic opens.",
     };
 
+    // Fire-and-forget: notify the DOCTOR if this appointment landed
+    // beyond their Free-plan limit. Deliberately after the response
+    // data is built and never awaited into the patient's response —
+    // a failure here must never affect booking, which has already
+    // fully succeeded by this point.
     isAppointmentLockedForPlan(doctorId, populatedAppointment)
       .then((locked) => {
         if (locked) {
@@ -322,6 +349,12 @@ const bookAppointment = async (req, res, next) => {
 
 // 2. Get Patient Appointments
 //
+// Now paginated, searchable (patient name), and status-filterable —
+// same pattern as the doctor side's getDoctorAppointments. `all=true`
+// bypasses pagination entirely and is used by everything on the
+// Patient Dashboard that needs the FULL list (Overview's current
+// appointment card, Queue page, socket room joining by doctorId) —
+// none of that should ever be truncated to one page.
 const getPatientAppointments = async (req, res, next) => {
   try {
     const patient = await Patient.findOne({ user: req.user._id });
@@ -344,6 +377,9 @@ const getPatientAppointments = async (req, res, next) => {
     const match = { patient: patient._id };
 
     if (!returnAll && status && status !== "all") {
+      // "upcoming" groups the two active statuses together, matching
+      // the existing patient dashboard's own filter tabs (All /
+      // Upcoming / Completed / Cancelled).
       if (status === "upcoming") {
         match.status = { $in: ["waiting", "in-progress"] };
       } else if (["completed", "cancelled"].includes(status)) {
@@ -391,6 +427,10 @@ const getPatientAppointments = async (req, res, next) => {
       queueByDoctor[q.doctor.toString()] = q;
     }
 
+    // Patient view is completely unaffected by lock status — a
+    // patient's own appointment always shows their real live queue
+    // position, regardless of whether the doctor can currently serve
+    // it. Nothing about locking is ever computed or exposed here.
     const data = appointments.map((appt) => {
       const isActive =
         appt.status === "waiting" || appt.status === "in-progress";
@@ -435,6 +475,18 @@ const getPatientAppointments = async (req, res, next) => {
 };
 
 // 3. Get Doctor Appointments  (doctor only)
+//
+// Now server-side paginated, searchable (patient name / appointment
+// ID), and status-filterable, on top of the existing lock/redaction
+// behavior. Still annotates every appointment with `locked` and, for
+// locked ones, REDACTS sensitive fields server-side (patientName,
+// patientPhone, populated patient/user details, consultationFee,
+// paymentStatus) before they ever leave the server — the frontend
+// blur is a UX layer on top of this, not the privacy boundary.
+//
+// Response shape changed from a bare array to { appointments,
+// pagination } — this is a breaking change to the previous contract,
+// intentionally, since pagination metadata has to live somewhere.
 const getDoctorAppointments = async (req, res, next) => {
   try {
     const doctor = await Doctor.findOne({ user: req.user._id });
@@ -453,9 +505,16 @@ const getDoctorAppointments = async (req, res, next) => {
     }
     const { startOfDay, endOfDay } = bounds;
 
- 
+    // `all=true` bypasses pagination entirely and returns every
+    // appointment for the day — used internally by queue/overview
+    // logic (Live Queue, Serve, token lookups, counts) which all
+    // need the FULL day's list, not a page of it. Search/status
+    // filters are ignored in this mode; the paginated list UI never
+    // sends this flag.
     const returnAll = req.query.all === "true";
 
+    // Only supported page sizes are allowed — reject anything else
+    // outright rather than silently clamping to an unexpected value.
     const ALLOWED_LIMITS = [10, 20, 50];
     const limit = req.query.limit ? parseInt(req.query.limit, 10) : 10;
     if (!returnAll && !ALLOWED_LIMITS.includes(limit)) {
@@ -491,6 +550,11 @@ const getDoctorAppointments = async (req, res, next) => {
     const subscription = await Subscription.findOne({ doctor: doctor._id });
     const unlimited = isUnlimitedPlan(subscription);
 
+    // Lock rank depends on position among ALL of that day's
+    // appointments by tokenNumber — not just the filtered/paginated
+    // subset — so this has to be computed against the full,
+    // unfiltered day before search/status/pagination are applied.
+    // Cheap: bounded to a single clinic day, projection-only.
     const rankByToken = new Map();
     if (!unlimited) {
       const allTokensForDay = await Appointment.find({
@@ -505,6 +569,9 @@ const getDoctorAppointments = async (req, res, next) => {
 
     const total = await Appointment.countDocuments(match);
     const totalPages = returnAll ? 1 : Math.max(1, Math.ceil(total / limit));
+    // An out-of-range page (e.g. filters changed, records were
+    // deleted) moves to the nearest valid page rather than returning
+    // a blank result.
     if (page > totalPages) page = totalPages;
 
     let query = Appointment.find(match)
@@ -582,6 +649,11 @@ const updateAppointmentStatus = async (req, res, next) => {
     if (appointment.doctor.toString() !== doctor._id.toString()) {
       throw new ApiError(403, "You are not allowed to update this appointment");
     }
+
+    // A doctor should not be able to bypass the Serve lock by driving
+    // status transitions directly through this endpoint either —
+    // moving a locked appointment to in-progress is the same
+    // restricted action as Serve, just via a different route.
     if (status === "in-progress") {
       const locked = await isAppointmentLockedForPlan(doctor._id, appointment);
       if (locked) {
@@ -603,6 +675,12 @@ const updateAppointmentStatus = async (req, res, next) => {
     appointment.status = status;
     await appointment.save();
 
+    // Post-commit, non-transactional. This endpoint is the OTHER
+    // path (besides Serve/nextPatient) that can complete the
+    // doctor's last active appointment — specifically "Complete
+    // Current Patient" when there's no next patient to advance to.
+    // Also relevant for a status change to "cancelled" via this
+    // route, if ever used that way.
     syncQueueEmptyState(doctor._id).catch((err) =>
       console.error("syncQueueEmptyState failed after status update:", err),
     );
@@ -648,6 +726,9 @@ const cancelAppointment = async (req, res, next) => {
     appointment.status = "cancelled";
     await appointment.save();
 
+    // Post-commit, non-transactional — a patient cancelling their
+    // waiting/in-progress appointment can just as validly empty a
+    // doctor's queue as a normal completion can.
     syncQueueEmptyState(appointment.doctor).catch((err) =>
       console.error("syncQueueEmptyState failed after patient cancel:", err),
     );
@@ -703,6 +784,59 @@ const markAppointmentPaid = async (req, res, next) => {
   }
 };
 
+// GET /appointments/monthly-summary?month=YYYY-MM  (doctor)
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+
+const getMonthlySummary = async (req, res, next) => {
+  try {
+    const doctor = await Doctor.findOne({ user: req.user._id });
+    if (!doctor) {
+      throw new ApiError(403, "Only a doctor can view this");
+    }
+
+    const { month } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      throw new ApiError(
+        400,
+        'month is required in "YYYY-MM" format, e.g. 2026-09',
+      );
+    }
+
+    const [year, mon] = month.split("-").map(Number);
+    if (mon < 1 || mon > 12) {
+      throw new ApiError(400, "month must be between 01 and 12");
+    }
+
+    // Start of this PKT month, and start of the NEXT PKT month
+    // (exclusive upper bound) — both expressed as the equivalent UTC
+    // instant, since appointmentDate is stored in UTC.
+    const startUTC = new Date(Date.UTC(year, mon - 1, 1) - PKT_OFFSET_MS);
+    const endUTC = new Date(Date.UTC(year, mon, 1) - PKT_OFFSET_MS);
+
+    const appointments = await Appointment.find({
+      doctor: doctor._id,
+      appointmentDate: { $gte: startUTC, $lt: endUTC },
+    })
+      .select("consultationFee paymentStatus")
+      .lean();
+
+    const totalAppointments = appointments.length;
+    const totalRevenue = appointments
+      .filter((a) => a.paymentStatus === "paid")
+      .reduce((sum, a) => sum + (a.consultationFee || 0), 0);
+
+    return res.status(200).json(
+      new ApiResponse(
+        200,
+        { month, totalAppointments, totalRevenue },
+        "Monthly summary fetched",
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
+};
+
 export {
   bookAppointment,
   getPatientAppointments,
@@ -710,4 +844,5 @@ export {
   updateAppointmentStatus,
   cancelAppointment,
   markAppointmentPaid,
+  getMonthlySummary,
 };

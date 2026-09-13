@@ -1,7 +1,7 @@
 
 :root {
   --ink: #1c2333;
-  --green: #17a673;
+  --green: #17a768;
   --green-tint: #e6f7f0;
   --red: #e0473e;
   --red-tint: #fdecec;
@@ -72,7 +72,7 @@ button {
   --panel-bg: #f6f7fa;
   --card-bg: #ffffff;
 
-  --blue: #3d6df2;
+  --blue: #1769e8;
   --blue-dark: #2f57d1;
   --blue-tint: #e9f0ff;
 
@@ -138,7 +138,7 @@ h2 {
 }
 
 .b-clinic {
-  color: var(--navy);
+  color: var(--blue);
 }
 
 .b-flow {
@@ -751,30 +751,8 @@ h2 {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 64px;
+  margin-bottom: 60px;
 }
-
-.brand-mark  img {
-width: 55px;
-    height: auto;
-    display: block;
-}
-
-.brand-mark svg {
-  width: 18px;
-  height: 18px;
-}
-
-.brand-name {
-  font-weight: 800;
-  font-size: 19px;
-  letter-spacing: -0.01em;
-}
-
-.brand-name span {
-  color: var(--reg-blue);
-}
-
 .hero {
   font-family: sans-serif;
   font-weight: 600;

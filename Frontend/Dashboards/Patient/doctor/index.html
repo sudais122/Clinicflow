@@ -194,6 +194,39 @@
           grid-template-columns: 1fr;
         }
       }
+
+      /* Back link on the dedicated Analytics pages */
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 13.5px;
+        font-weight: 600;
+        color: var(--muted);
+        margin-bottom: 10px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .back-link:hover {
+        color: var(--blue);
+      }
+      .back-link svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Global refresh button */
+      #globalRefreshBtn.spinning svg {
+        animation: globalRefreshSpin 0.8s linear infinite;
+      }
+      @keyframes globalRefreshSpin {
+        from {
+          transform: rotate(0deg);
+        }
+        to {
+          transform: rotate(360deg);
+        }
+      }
     </style>
   </head>
   <body>
@@ -364,6 +397,23 @@
                 /></svg
               ><span class="count-badge" id="notifCount"></span>
             </button>
+                                    <button class="btn btn-ghost" id="globalRefreshBtn" title="Refresh dashboard" aria-label="Refresh dashboard">
+              <svg
+                width="17"
+                height="17"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path
+                  d="M3 12a9 9 0 0 1 15.3-6.4M21 12a9 9 0 0 1-15.3 6.4M18.5 3v5h-5M5.5 21v-5h5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              Refresh
+            </button>
             <button class="user-menu" id="userBtn">
               <span class="uname" id="topDoctorName"></span
               ><svg
@@ -447,6 +497,7 @@
             <div id="apptPageSummary"></div>
             <div id="apptPageTrendsPreview"></div>
           </div>
+          <div id="apptMonthlyFilter"></div>
           <div class="card filter-bar">
             <div class="fb-top">
               <div class="date-nav">
@@ -531,6 +582,12 @@
         <section class="view" id="view-appointments-analytics" hidden>
           <div class="page-head">
             <div>
+              <a href="#appointments" data-view="appointments" class="back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                Back to Appointments
+              </a>
               <h1>Appointment Analytics</h1>
               <p class="lead">A closer look at your appointment volume over time.</p>
             </div>
@@ -646,6 +703,7 @@
             <div id="revenuePageSummary"></div>
             <div id="revenuePageTrendsPreview"></div>
           </div>
+          <div id="revenueMonthlyFilter"></div>
           <div id="revenueWrap"></div>
         </section>
 
@@ -653,6 +711,12 @@
         <section class="view" id="view-revenue-analytics" hidden>
           <div class="page-head">
             <div>
+              <a href="#revenue" data-view="revenue" class="back-link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                Back to Revenue
+              </a>
               <h1>Revenue Analytics</h1>
               <p class="lead">A closer look at how your clinic revenue changes over time.</p>
             </div>

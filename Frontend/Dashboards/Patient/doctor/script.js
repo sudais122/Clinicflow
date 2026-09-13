@@ -37,6 +37,7 @@ const ENDPOINTS = {
   notificationReadAll: () => `${API_BASE}/notifications/read-all`,
   appointmentAnalytics: (range) => `${API_BASE}/appointments/analytics?range=${encodeURIComponent(range)}`,
   revenueAnalytics: (range) => `${API_BASE}/revenue/analytics?range=${encodeURIComponent(range)}`,
+  monthlySummary: (month) => `${API_BASE}/appointments/monthly-summary?month=${encodeURIComponent(month)}`,
 };
 
 /* ---------- fetch helpers ---------- */
@@ -159,6 +160,20 @@ const STATE = {
   notifications: [],
   appointmentTrends: { range: "7d", data: [], loading: false, error: false, loaded: false },
   revenueTrends: { range: "7d", data: [], loading: false, error: false, loaded: false },
+  // Independent of appointmentTrends/revenueTrends above — those
+  // power the existing 7/30/90-day charts and are untouched by this.
+  // This is the separate month-picker feature ("September 2026" ->
+  // total appointments + total revenue for that whole month), shared
+  // between the Appointments and Revenue pages via one state object
+  // so picking a month on either page keeps both in sync.
+  monthlyFilter: {
+    month: new Date().toISOString().slice(0, 7), // "YYYY-MM", defaults to the current month
+    totalAppointments: 0,
+    totalRevenue: 0,
+    loading: false,
+    error: false,
+    loaded: false,
+  },
   revenue: {
     range: "28",
     from: "",
@@ -1782,6 +1797,14 @@ async function openRevenueView() {
   renderRevenueSummaryCardInto("revenuePageSummary", () => {
     $("#revenueWrap")?.scrollIntoView({ behavior: "smooth", block: "start" });
   });
+
+  // Monthly filter — same shared state as the Appointments page.
+  renderMonthlySummaryCard("revenueMonthlyFilter");
+  if (!STATE.monthlyFilter.loaded) {
+    await loadMonthlySummary();
+    renderMonthlySummaryCard("revenueMonthlyFilter");
+  }
+
   const renderRevPreview = () =>
     renderTrendPreviewCard(
       "revenuePageTrendsPreview",
@@ -1831,9 +1854,9 @@ function renderRevenueAnalyticsSummary() {
   const peak = t.data.reduce((max, d) => (d.revenue > max.revenue ? d : max), t.data[0]);
   el.innerHTML = `
     <div class="stat-grid mt24">
-      <div class="stat"><div class="st-top">Total Revenue</div><div class="st-val" style="font-size:26px;">PKR ${total.toLocaleString()}</div></div>
+      <div class="stat"><div class="st-top">Total Revenue</div><div class="st-val" style="font-size:26px;">PKR ${Math.round(total).toLocaleString()}</div></div>
       <div class="stat"><div class="st-top">Average per Day</div><div class="st-val" style="font-size:26px;">PKR ${Math.round(avg).toLocaleString()}</div></div>
-      <div class="stat"><div class="st-top">Peak Day</div><div class="st-val" style="font-size:19px;">${peak.date} (PKR ${peak.revenue.toLocaleString()})</div></div>
+      <div class="stat"><div class="st-top">Peak Day</div><div class="st-val" style="font-size:19px;">${peak.date} (PKR ${Math.round(peak.revenue).toLocaleString()})</div></div>
     </div>`;
 }
 
@@ -2616,6 +2639,53 @@ function refreshAll() {
   syncTopbarIdentity();
 }
 
+/* ============================================================
+   GLOBAL REFRESH BUTTON — hard refresh, re-fetches from the server
+   rather than just re-rendering from STATE (that's what refreshAll()
+   above already does, and is reused internally here too).
+   ============================================================ */
+function getCurrentViewName() {
+  const active = $$(".view").find((v) => !v.hidden);
+  return active ? active.id.replace("view-", "") : "overview";
+}
+
+async function refreshDashboard() {
+  const btn = $("#globalRefreshBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("spinning");
+  }
+
+  try {
+    // Core data every view depends on in some way.
+    await loadAll(STATE.selectedDate);
+    await Promise.allSettled([loadSubscription(), loadNotifications()]);
+
+    // Reset lazy-load flags for page-specific data rather than
+    // duplicating each page's fetch logic here — showView() below
+    // calls the same open*View() functions used for normal
+    // navigation, and those already check these flags and refetch
+    // when false. This keeps refresh behavior identical to a fresh
+    // visit to whichever page is currently open.
+    STATE.revenue.loaded = false;
+    STATE.appointmentTrends.loaded = false;
+    STATE.revenueTrends.loaded = false;
+    STATE.monthlyFilter.loaded = false;
+
+    showView(getCurrentViewName());
+    toast("Dashboard refreshed", "All data has been updated.");
+  } catch (err) {
+    toast("Couldn't refresh the dashboard", err.message, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove("spinning");
+    }
+  }
+}
+
+$("#globalRefreshBtn").addEventListener("click", refreshDashboard);
+
 /* ---------- helpers ---------- */
 const label = (s) =>
   ({
@@ -2950,6 +3020,15 @@ async function loadAppointmentTrends() {
   } finally {
     t.loading = false;
     renderAppointmentTrendsCard();
+    // Previously missing — this function is what actually mutates
+    // t.data/t.loaded, but only the chart was told to re-render. The
+    // summary stats block (#apptAnalyticsSummary) never got told to
+    // refresh here, so changing the date range left it showing the
+    // PREVIOUS range's numbers, or nothing at all depending on load
+    // order. renderAppointmentAnalyticsSummary() is a no-op if the
+    // container isn't on the page, so this is safe to call
+    // unconditionally.
+    renderAppointmentAnalyticsSummary();
   }
 }
 
@@ -3006,6 +3085,16 @@ async function openAppointmentsView() {
     console.warn("Subscription refresh failed:", err.message);
   }
   loadAppointmentsPage(); // fetches + renders the paginated table itself
+
+  // Monthly filter — independent of the 7/30/90-day trends below.
+  // Renders immediately from whatever's cached, then loads on first
+  // visit only (switching pages afterward re-renders from STATE, no
+  // re-fetch, unless the doctor changes the month).
+  renderMonthlySummaryCard("apptMonthlyFilter");
+  if (!STATE.monthlyFilter.loaded) {
+    await loadMonthlySummary();
+    renderMonthlySummaryCard("apptMonthlyFilter");
+  }
 
   renderApptSummaryCardInto("apptPageSummary", () => {
     $("#apptTableWrap")?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3070,12 +3159,107 @@ function renderAppointmentAnalyticsSummary() {
   el.innerHTML = `
     <div class="stat-grid mt24">
       <div class="stat"><div class="st-top">Total Appointments</div><div class="st-val">${total}</div></div>
-      <div class="stat"><div class="st-top">Average per Day</div><div class="st-val">${avg.toFixed(1)}</div></div>
+      <div class="stat"><div class="st-top">Average per Day</div><div class="st-val">${Math.round(avg)}</div></div>
       <div class="stat"><div class="st-top">Peak Day</div><div class="st-val" style="font-size:19px;">${peak.date} (${peak.count})</div></div>
     </div>`;
 }
 
 /* ---------- Revenue Trends (in the Revenue view) ---------- */
+/* ============================================================
+   MONTHLY FILTER — "September 2026" -> total appointments + total
+   revenue for that whole month. Separate feature from the 7/30/90-
+   day trend charts above; does not touch them. Shared between the
+   Appointments and Revenue pages via STATE.monthlyFilter, so
+   changing the month on one page keeps the other in sync even
+   though only one page is visible at a time.
+   ============================================================ */
+async function loadMonthlySummary() {
+  const m = STATE.monthlyFilter;
+  m.loading = true;
+  m.error = false;
+  try {
+    const res = await apiGet(ENDPOINTS.monthlySummary(m.month));
+    m.totalAppointments = res.data?.totalAppointments ?? 0;
+    m.totalRevenue = res.data?.totalRevenue ?? 0;
+    m.loaded = true;
+  } catch (err) {
+    m.error = true;
+    console.warn("Monthly summary failed:", err.message);
+  } finally {
+    m.loading = false;
+  }
+}
+
+// "2026-09" -> "September 2026"
+function monthLabel(monthStr) {
+  const [y, mo] = monthStr.split("-").map(Number);
+  return new Date(Date.UTC(y, mo - 1, 1)).toLocaleDateString("en-US", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+}
+
+// Reusable — same card rendered into either #apptMonthlyFilter or
+// #revenueMonthlyFilter. Whichever container isn't currently on the
+// visible page still exists in the DOM (just hidden via the parent
+// section's `hidden` attribute), so re-rendering both after a month
+// change is harmless and keeps them in sync.
+function renderMonthlySummaryCard(containerId) {
+  const el = $("#" + containerId);
+  if (!el) return;
+  const m = STATE.monthlyFilter;
+
+  const body = m.loading
+    ? `<div class="empty-state" style="padding:20px 10px;"><p>Loading…</p></div>`
+    : m.error
+      ? `<div class="empty-state" style="padding:20px 10px;"><h3>Couldn't load the monthly summary.</h3><button class="btn btn-ghost" data-monthly-retry="${containerId}">Retry</button></div>`
+      : `<div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:16px;">
+          <div>
+            <div style="color:var(--muted);font-size:13px;">Total Appointments</div>
+            <div style="font-family:var(--fd);font-size:27px;font-weight:800;">${m.totalAppointments}</div>
+          </div>
+          <div>
+            <div style="color:var(--muted);font-size:13px;">Total Revenue</div>
+            <div style="font-family:var(--fd);font-size:27px;font-weight:800;">PKR ${Math.round(m.totalRevenue).toLocaleString()}</div>
+          </div>
+        </div>`;
+
+  el.innerHTML = `
+    <div class="card" style="padding:22px 24px;margin-bottom:24px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">
+        <div>
+          <div class="sc-title" style="font-size:18px;">Monthly Summary</div>
+          <div class="sc-sub">${monthLabel(m.month)}</div>
+        </div>
+        <input type="month" class="date-input" data-monthly-input="${containerId}" value="${m.month}" aria-label="Select month">
+      </div>
+      ${body}
+    </div>`;
+
+  const input = el.querySelector(`[data-monthly-input="${containerId}"]`);
+  if (input) {
+    input.onchange = async (e) => {
+      const val = e.target.value;
+      if (!val) return;
+      STATE.monthlyFilter.month = val;
+      await loadMonthlySummary();
+      // Update both possible containers — see the comment above this
+      // function for why that's safe and desirable.
+      renderMonthlySummaryCard("apptMonthlyFilter");
+      renderMonthlySummaryCard("revenueMonthlyFilter");
+    };
+  }
+  const retryBtn = el.querySelector(`[data-monthly-retry="${containerId}"]`);
+  if (retryBtn) {
+    retryBtn.onclick = async () => {
+      await loadMonthlySummary();
+      renderMonthlySummaryCard("apptMonthlyFilter");
+      renderMonthlySummaryCard("revenueMonthlyFilter");
+    };
+  }
+}
+
 async function loadRevenueTrends() {
   const t = STATE.revenueTrends;
   t.loading = true;
@@ -3091,6 +3275,9 @@ async function loadRevenueTrends() {
   } finally {
     t.loading = false;
     renderRevenueTrendsCard();
+    // Same fix as loadAppointmentTrends — the summary block was
+    // never told to refresh here, only the chart was.
+    renderRevenueAnalyticsSummary();
   }
 }
 
