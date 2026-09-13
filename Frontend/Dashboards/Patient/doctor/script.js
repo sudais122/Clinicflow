@@ -2382,7 +2382,7 @@ function openPaymentModal(mode = "upgrade") {
 
   const payInstructions = `
     <div style="background:var(--blue-tint);border:1px solid #d9e6ff;border-radius:14px;padding:16px 18px;margin:20px 0;font-size:13.5px;color:var(--sub);line-height:1.6;">
-      <b>Easypaisa:</b> 03XX-XXXXXXX (ClinicFlow) &nbsp;·&nbsp; <b>Bank:</b> Account title / number here<br>
+      <b>Easypaisa:</b> 0319-9439818 (MUHAMMAD SUDAIS) &nbsp;·&nbsp; <b>Bank:</b> MUHAMMAD SUDAIS: number here<br>
       Send <b>PKR 4,500</b>, then upload a screenshot of the confirmation below.
     </div>`;
 
