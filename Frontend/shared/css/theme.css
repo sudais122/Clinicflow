@@ -1,0 +1,165 @@
+:root {
+  /*Brand identity */
+  --brand-blue: #1769e8;
+  --brand-green: #12c98b;
+
+  /* ---------- UI accent colors --------- */
+  --blue: #2563eb;
+  --blue-strong: #1d4ed8;
+  --blue-hover: #1d4ed8;
+  --blue-soft: #eaf1ff;
+  --blue-tint: #f2f6ff;
+
+  --green: #16a34a;
+  --green-strong: #17a768;
+  --green-soft: #e7f7ee;
+  --green-tint: #eafbf5; 
+  --green-text: #15803d;
+
+  --amber: #f59e0b;
+  --amber-soft: #fef3e2;
+  --amber-text: #b45309;
+  --orange: var(--amber); 
+
+  --red: #ef4444;
+  --red-soft: #fdecec;
+  --red-text: #dc2626;
+
+  --ink: #0f172a;
+  --sub: #334155;
+  --muted: #64748b;
+  --faint: #94a3b8;
+
+  --line: #e9edf2;
+  --line-soft: #f1f4f8;
+  --border: var(--line); 
+
+  --bg: #f6f8fb;
+  --card: #ffffff;
+  --white: #ffffff;
+  --soft: #f7faf9; 
+
+  /* ---------- Shadows ---------- */
+  --sh-sm: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.05);
+  --sh-md: 0 6px 20px rgba(15, 23, 42, 0.06);
+  --sh-lg: 0 20px 50px rgba(15, 23, 42, 0.14);
+  --shadow-sm: var(--sh-sm);
+  --shadow-md: var(--sh-md);
+  --shadow-lg: var(--sh-lg);
+
+  /* Gradient */
+  --grad: linear-gradient(135deg, var(--brand-blue), var(--brand-green));
+
+  /* ---------- Fonts ---------- */
+  --fd: Calibri, sans-serif;
+  --fb: Calibri, sans-serif;
+  --fm: "IBM Plex Mono", monospace;
+
+  --sbw: 256px; 
+}
+
+/* Global base — identical across all three files already, so this section just needs to exist ONCE instead of three times */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--fb);
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.55;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--fd);
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.mono {
+  font-family: var(--fm);
+}
+
+.eyebrow {
+  font-family: var(--fm);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+  font-weight: 500;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.brand > a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.brand img {
+  width: 50px;
+  height: 50px;
+  object-fit: contain;
+  display: block;
+}
+
+.brand > span {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--fb);
+  font-size: 23px;
+  font-weight: 750;
+  line-height: 1;
+  letter-spacing: -0.7px;
+}
+
+.b-clinic {
+  color: var(--brand-blue);
+}
+
+.b-flow {
+  color: var(--brand-green);
+}
+
+@media (max-width: 768px) {
+  .brand > a,
+  .brand img {
+    width: 36px;
+    height: 36px;
+  }
+  .brand > span {
+    font-size: 21px;
+  }
+  .brand img {
+    height: 35px;
+    width: auto;
+  }
+}
