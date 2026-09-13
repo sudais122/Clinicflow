@@ -652,7 +652,7 @@ function renderOverview() {
     .join("");
 
   renderLiveQueueCard($("#liveQueueCard"), { withActions: true });
-  renderSequence($("#seqList"));
+  renderSeqSection("seqCard");
 
   // Replaces the old single-column revenue card + full appointments
   // table with the new Appointments|Trends and Revenue|Trends card
@@ -804,7 +804,9 @@ function renderTrendPreviewCard(containerId, featureKey, title, gateDescription,
         state.data.map((d) => ({ label: d.date, value: d[valueKey] || 0, dateISO: d.dateISO })),
         { formatValue },
       )
-    : `<div class="empty-state" style="padding:30px 10px;"><p>${state.loading ? "Loading chart…" : "No data yet."}</p></div>`;
+    : state.loading
+      ? `<div class="mini-loading" aria-busy="true" aria-label="Loading chart"><span class="mini-spinner"></span></div>`
+      : `<div class="empty-state" style="padding:30px 10px;"><p>No data yet.</p></div>`;
 
   const rangeLabel = { "7d": "7 days", "30d": "30 days", "90d": "3 months" }[state.range] || "7 days";
 
@@ -869,11 +871,14 @@ function renderLiveQueueCard(el, { withActions }) {
   }
 }
 
-function renderSequence(el) {
+// Pure — builds the token-row list HTML (or the genuine empty state
+// when the queue is loaded but has no appointments). No DOM access,
+// no loading-state concerns; renderSeqSection() below is the only
+// thing that decides whether this or the loading state gets shown.
+function seqListInnerHTML() {
   const tokens = STATE.appointments.map((a) => a.token).sort((a, b) => a - b);
   if (!tokens.length) {
-    el.innerHTML = `<div class="empty-state"><p>No appointments yet.</p></div>`;
-    return;
+    return `<div class="empty-state seq-fade-in"><p>No appointments yet.</p></div>`;
   }
   const startIdx = Math.max(
     0,
@@ -904,7 +909,36 @@ function renderSequence(el) {
     }
     out += `<div class="seq-row ${cls}"><span class="seq-tok">#${n}</span><span class="seq-name">${nameFor(n)}</span><span class="seq-status ${lcls}">${label}</span></div>`;
   }
-  el.innerHTML = out;
+  return `<div class="seq-fade-in">${out}</div>`;
+}
+
+// Standalone loading markup — no heading, no subtitle, no card
+// internals. This is a completely different render than the real
+// card content, not a spinner dropped inside it.
+function seqLoadingOnlyHTML() {
+  return `<div class="seq-loading-only" aria-busy="true" aria-label="Loading data">
+    <span class="seq-spinner"></span>
+    <div class="seq-loading-text">Loading data...</div>
+  </div>`;
+}
+
+// The ONLY function that writes into #seqCard / #qcSeqCard. Owns the
+// entire card's contents, header included — so "loading" and "real"
+// are two fully separate renders of the whole card, never a hybrid
+// where the header/card shows while a spinner sits inside it.
+function renderSeqSection(containerId, { loading = false } = {}) {
+  const el = $("#" + containerId);
+  if (!el) return;
+
+  if (loading) {
+    el.innerHTML = seqLoadingOnlyHTML();
+    return;
+  }
+
+  el.innerHTML = `
+    <h2>Token Sequence</h2>
+    <div class="sub">Patients are served in token order.</div>
+    ${seqListInnerHTML()}`;
 }
 
 /* ---------- CLINIC OPEN / CLOSE ---------- */
@@ -1014,7 +1048,7 @@ function renderQueue() {
       "Completing the current token moves the queue forward.";
   }
 
-  renderSequence($("#qcSeqList"));
+  renderSeqSection("qcSeqCard");
 }
 
 async function serveNext() {
@@ -2656,6 +2690,16 @@ async function refreshDashboard() {
     btn.classList.add("spinning");
   }
 
+  // Whole-card loading state — header and all — never a spinner
+  // dropped inside the still-visible card. renderSeqSection() is the
+  // single source of truth for both this and the real content below.
+  if (!$("#view-overview").hidden) {
+    renderSeqSection("seqCard", { loading: true });
+  }
+  if (!$("#view-queue").hidden) {
+    renderSeqSection("qcSeqCard", { loading: true });
+  }
+
   try {
     // Core data every view depends on in some way.
     await loadAll(STATE.selectedDate);
@@ -2992,7 +3036,7 @@ function wireTrendRangeButtons(prefix, onChange) {
 }
 
 function trendBody(state, valueKey, formatValue, emptyMsg, retryId) {
-  if (state.loading) return `<div class="empty-state"><p>Loading chart…</p></div>`;
+  if (state.loading) return `<div class="mini-loading" aria-busy="true" aria-label="Loading chart"><span class="mini-spinner"></span></div>`;
   if (state.error) {
     return `<div class="empty-state"><h3>We couldn't load your analytics.</h3><button class="btn btn-ghost" id="${retryId}">Retry</button></div>`;
   }
@@ -3211,7 +3255,7 @@ function renderMonthlySummaryCard(containerId) {
   const m = STATE.monthlyFilter;
 
   const body = m.loading
-    ? `<div class="empty-state" style="padding:20px 10px;"><p>Loading…</p></div>`
+    ? `<div class="mini-loading" aria-busy="true" aria-label="Loading monthly summary"><span class="mini-spinner"></span></div>`
     : m.error
       ? `<div class="empty-state" style="padding:20px 10px;"><h3>Couldn't load the monthly summary.</h3><button class="btn btn-ghost" data-monthly-retry="${containerId}">Retry</button></div>`
       : `<div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:16px;">
@@ -3542,6 +3586,11 @@ function renderAccountBlocked({ title, message, tone = "warn" }) {
     });
 }
 
+function hidePageLoader() {
+  const el = $("#pageLoader");
+  if (el) el.classList.add("hidden");
+}
+
 async function init() {
   renderFAQ();
   try {
@@ -3559,6 +3608,10 @@ async function init() {
       window.location.href = "../../../Auth/login/login.html";
       return;
     }
+    // Non-auth error — not redirecting, so the dashboard (in whatever
+    // partial state it's in) is about to be shown. The loader must
+    // not stay up forever in that case.
+    hidePageLoader();
   }
 
   if (DOCTOR.isSuspended) {
@@ -3607,6 +3660,7 @@ async function init() {
   }
   renderNotifs();
   syncTopbarIdentity();
+  hidePageLoader();
   const h = location.hash.replace("#", "");
   showView(TITLES[h] ? h : "overview");
   initSocket();
