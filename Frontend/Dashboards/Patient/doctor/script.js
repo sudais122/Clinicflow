@@ -1833,8 +1833,11 @@ async function openRevenueView() {
   });
 
   // Monthly filter — same shared state as the Appointments page.
+  // Skips fetching entirely when locked (Free plan) — no reason to
+  // hit the backend for data the doctor can't see, same as
+  // customRevenueRange's handling elsewhere in this file.
   renderMonthlySummaryCard("revenueMonthlyFilter");
-  if (!STATE.monthlyFilter.loaded) {
+  if (canAccessFeature("monthlyAnalytics") && !STATE.monthlyFilter.loaded) {
     await loadMonthlySummary();
     renderMonthlySummaryCard("revenueMonthlyFilter");
   }
@@ -2770,7 +2773,7 @@ function hasProAccess() {
 // sites need to check. Anything not listed is treated as a normal
 // Free-plan feature (always allowed) — this only tightens access,
 // it never needs to be consulted to loosen it.
-const PRO_FEATURES = new Set(["customRevenueRange", "appointmentTrends", "revenueTrends"]);
+const PRO_FEATURES = new Set(["customRevenueRange", "appointmentTrends", "revenueTrends", "monthlyAnalytics"]);
 
 function canAccessFeature(featureKey) {
   if (!PRO_FEATURES.has(featureKey)) return true;
@@ -3133,9 +3136,10 @@ async function openAppointmentsView() {
   // Monthly filter — independent of the 7/30/90-day trends below.
   // Renders immediately from whatever's cached, then loads on first
   // visit only (switching pages afterward re-renders from STATE, no
-  // re-fetch, unless the doctor changes the month).
+  // re-fetch, unless the doctor changes the month). Skips the fetch
+  // entirely when locked, same as customRevenueRange elsewhere.
   renderMonthlySummaryCard("apptMonthlyFilter");
-  if (!STATE.monthlyFilter.loaded) {
+  if (canAccessFeature("monthlyAnalytics") && !STATE.monthlyFilter.loaded) {
     await loadMonthlySummary();
     renderMonthlySummaryCard("apptMonthlyFilter");
   }
@@ -3244,6 +3248,31 @@ function monthLabel(monthStr) {
   });
 }
 
+// Blurred preview for the locked state — mimics the real card's
+// shape (month label + two stat numbers) so it reads as a genuine
+// preview of the feature, not a generic placeholder. Same approach
+// as customRevenuePreviewHTML() above.
+function monthlyAnalyticsPreviewHTML() {
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:14px;">
+      <div>
+        <div class="sc-title" style="font-size:18px;">Monthly Summary</div>
+        <div class="sc-sub">September 2026</div>
+      </div>
+      <input type="month" class="date-input" disabled value="2026-09" aria-hidden="true">
+    </div>
+    <div style="display:flex;gap:32px;flex-wrap:wrap;margin-top:16px;">
+      <div>
+        <div style="color:var(--muted);font-size:13px;">Total Appointments</div>
+        <div style="font-family:var(--fd);font-size:27px;font-weight:800;">84</div>
+      </div>
+      <div>
+        <div style="color:var(--muted);font-size:13px;">Total Revenue</div>
+        <div style="font-family:var(--fd);font-size:27px;font-weight:800;">PKR 84,000</div>
+      </div>
+    </div>`;
+}
+
 // Reusable — same card rendered into either #apptMonthlyFilter or
 // #revenueMonthlyFilter. Whichever container isn't currently on the
 // visible page still exists in the DOM (just hidden via the parent
@@ -3252,6 +3281,22 @@ function monthLabel(monthStr) {
 function renderMonthlySummaryCard(containerId) {
   const el = $("#" + containerId);
   if (!el) return;
+
+  // Practice-only, via the SAME canAccessFeature/proFeatureGate
+  // system every other locked feature in this file uses — no
+  // separate plan-checking logic. When the doctor's plan changes
+  // (Free -> Practice or back), this naturally re-evaluates on the
+  // next render, exactly like customRevenueRange/appointmentTrends/
+  // revenueTrends already do — nothing extra needed for that.
+  if (!canAccessFeature("monthlyAnalytics")) {
+    el.innerHTML = `<div style="margin-bottom:24px;">${proFeatureGate("monthlyAnalytics", {
+      title: "Monthly Analytics",
+      description: "Track your monthly appointments and revenue with Practice.",
+      previewHTML: monthlyAnalyticsPreviewHTML(),
+    })}</div>`;
+    return;
+  }
+
   const m = STATE.monthlyFilter;
 
   const body = m.loading

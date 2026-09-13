@@ -2333,16 +2333,6 @@ h3 {
   background: linear-gradient(180deg, rgba(246, 248, 251, .35), rgba(246, 248, 251, .88));
 }
 
-.pf-gate-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--sh-md);
-  padding: 28px 30px;
-  max-width: 380px;
-  width: 100%;
-  text-align: center;
-}
 
 .pf-gate-card svg {
   width: 26px;
@@ -2501,10 +2491,6 @@ h3 {
 }
 
 .pf-gate-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  box-shadow: var(--sh-md);
   padding: 24px 26px;
   max-width: 340px;
   width: 100%;
