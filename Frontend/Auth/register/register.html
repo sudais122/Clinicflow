@@ -1,294 +1,606 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ClinicFlow — Create Account</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,600;0,700;1,500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../../shared/css/Theme.css">
-<link rel="stylesheet" href="../css/auth.css">
-    <link rel="icon" type="image/png" sizes="32x32" href="../../images/favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="../../images/favicon-16x16.png">
-<link rel="apple-touch-icon" sizes="180x180" href="../../apple-touch-icon.png">
-</head>
-<body>
-<div class="app">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ClinicFlow — Create Account</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,600;0,700;1,500&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="../../shared/css/Theme.css" />
+    <link rel="stylesheet" href="../css/auth.css" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="../../images/favicon-32x32.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="../../images/favicon-16x16.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="../../apple-touch-icon.png"
+    />
+  </head>
+  <body>
+    <div class="app">
+      <!-- LEFT MARKETING PANEL -->
+      <div class="left"> 
+          <a class="af-brand" href="../../index.html">
+            <img src="../../images/logo.png" alt="ClinicFlow" />
+            <span style="font-size: x-large"
+              ><span class="b-clinic">Clinic</span
+              ><span class="b-flow">Flow</span></span
+            >
+          </a>
 
-  <!-- LEFT MARKETING PANEL -->
-  <div class="left">
-    <div class="brand">
-                <a class="af-brand" href="../../index.html">
-          <img src="../../images/logo.png" alt="ClinicFlow" />
-          <span
-            style="font-size: x-large;"><span class="b-clinic">Clinic</span
-            ><span class="b-flow">Flow</span></span
-          >
-        </a>
-    </div>
+        <h1 class="hero">
+          Healthcare appointments,<br />without the
+          <em>waiting uncertainty.</em>
+        </h1>
+        <p class="sub">
+          ClinicFlow helps patients track their appointments and helps clinics
+          manage their live patient queue.
+        </p>
 
-    <h1 class="hero">Healthcare appointments,<br>without the <em>waiting uncertainty.</em></h1>
-    <p class="sub">ClinicFlow helps patients track their appointments and helps clinics manage their live patient queue.</p>
-
-    <div class="features">
-      <div class="feature">
-        <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
-        <p>Strict token-number queueing — no time-slot guesswork.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
-        <p>Live updates when the queue moves or a delay is added.</p>
-      </div>
-      <div class="feature">
-        <div class="feature-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m9 12 2 2 4-4"/></svg></div>
-        <p>One workspace for clinic status, patients and appointments.</p>
-      </div>
-    </div>
-
-    <div class="queue-card">
-      <div class="queue-label">NOW SERVING</div>
-      <div class="queue-row">
-        <div class="queue-num">#14</div>
-        <div class="queue-status">In progress</div>
-      </div>
-      <div class="queue-sub">Next up · Token #15 · 6 waiting</div>
-    </div>
-
-    <div class="foot-note">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
-      Secure access to your ClinicFlow account.
-    </div>
-  </div>
-
-  <!-- RIGHT PANEL -->
-  <div class="right">
-    <div class="panel">
-
-      <!-- STEP 0: choose account type -->
-      <div id="step-select" class="type-select">
-        <h1>Create your account</h1>
-        <p class="lede">Choose how you'll use ClinicFlow to get started.</p>
-
-        <div class="type-cards">
-          <button class="type-card" onclick="showStep('patient')">
-            <div class="type-ico patient">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+        <div class="features">
+          <div class="feature">
+            <div class="feature-ico">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <line x1="8" y1="6" x2="21" y2="6" />
+                <line x1="8" y1="12" x2="21" y2="12" />
+                <line x1="8" y1="18" x2="21" y2="18" />
+                <line x1="3" y1="6" x2="3.01" y2="6" />
+                <line x1="3" y1="12" x2="3.01" y2="12" />
+                <line x1="3" y1="18" x2="3.01" y2="18" />
+              </svg>
             </div>
-            <div class="type-copy">
-              <h3>I'm a Patient</h3>
-              <p>Book appointments, track your token number and get live queue updates.</p>
+            <p>Strict token-number queueing — no time-slot guesswork.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-ico">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
             </div>
-            <svg class="type-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
-
-          <button class="type-card" onclick="showStep('doctor')">
-            <div class="type-ico doctor">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V2"/><path d="M9 2h6"/><rect x="4" y="10" width="16" height="12" rx="2"/><path d="M12 14v4M10 16h4"/></svg>
+            <p>Live updates when the queue moves or a delay is added.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-ico">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="9" />
+                <path d="m9 12 2 2 4-4" />
+              </svg>
             </div>
-            <div class="type-copy">
-              <h3>I'm a Doctor</h3>
-              <p>Set up your clinic, manage your live patient queue and appointments.</p>
-            </div>
-            <svg class="type-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-          </button>
+            <p>One workspace for clinic status, patients and appointments.</p>
+          </div>
         </div>
 
-        <div class="signin-line">Already have an account? <a href="../login/login.html">Sign in</a></div>
+        <div class="queue-card">
+          <div class="queue-label">NOW SERVING</div>
+          <div class="queue-row">
+            <div class="queue-num">#14</div>
+            <div class="queue-status">In progress</div>
+          </div>
+          <div class="queue-sub">Next up · Token #15 · 6 waiting</div>
+        </div>
+
+        <div class="foot-note">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+          >
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+          </svg>
+          Secure access to your ClinicFlow account.
+        </div>
       </div>
 
-      <!-- STEP: patient form — wired to register.js -->
-      <div id="step-patient" class="form-card">
-        <button type="button" class="back-link" onclick="showStep('select')">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          Change account type
-        </button>
-        <h1>Create your patient account</h1>
-        <p class="lede">Join ClinicFlow and manage your appointments with ease.</p>
+      <!-- RIGHT PANEL -->
+      <div class="right">
+        <div class="panel">
+          <!-- STEP 0: choose account type -->
+          <div id="step-select" class="type-select">
+            <h1>Create your account</h1>
+            <p class="lede">Choose how you'll use ClinicFlow to get started.</p>
 
-        <div id="alert" class="alert"></div>
+            <div class="type-cards">
+              <button class="type-card" onclick="showStep('patient')">
+                <div class="type-ico patient">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M20 21a8 8 0 0 0-16 0" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                </div>
+                <div class="type-copy">
+                  <h3>I'm a Patient</h3>
+                  <p>
+                    Book appointments, track your token number and get live
+                    queue updates.
+                  </p>
+                </div>
+                <svg
+                  class="type-arrow"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
 
-        <form id="registerForm" novalidate>
-          <div class="section-label">Account Information</div>
-          <div class="field full" id="f-fullname">
-            <label for="fullname">Full Name</label>
-            <input type="text" id="fullname" name="fullname" placeholder="Ayesha Khan">
-            <div class="err"></div>
-          </div>
-          <div class="field full" id="f-email">
-            <label for="reg-email">Email Address</label>
-            <input type="email" id="reg-email" name="email" placeholder="you@example.com">
-            <div class="err"></div>
-          </div>
-          <div class="field full" id="f-phone">
-            <label for="phone">Phone Number</label>
-            <input type="tel" id="phone" name="phone" placeholder="03XXXXXXXXX">
-            <div class="err"></div>
-          </div>
-          <div class="field full" id="f-password">
-            <label for="reg-password">Password</label>
-            <div class="pw-wrap">
-              <input type="password" id="reg-password" name="password" placeholder="Create a strong password">
-              <span class="eye"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+              <button class="type-card" onclick="showStep('doctor')">
+                <div class="type-ico doctor">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="M9 2v4a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2V2" />
+                    <path d="M9 2h6" />
+                    <rect x="4" y="10" width="16" height="12" rx="2" />
+                    <path d="M12 14v4M10 16h4" />
+                  </svg>
+                </div>
+                <div class="type-copy">
+                  <h3>I'm a Doctor</h3>
+                  <p>
+                    Set up your clinic, manage your live patient queue and
+                    appointments.
+                  </p>
+                </div>
+                <svg
+                  class="type-arrow"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M9 18l6-6-6-6" />
+                </svg>
+              </button>
             </div>
-            <div class="err"></div>
-          </div>
 
-          <div class="section-label">Personal Details</div>
-          <div class="grid2">
-            <div class="field" id="f-dob">
-              <label for="dob">Date of Birth</label>
-              <input type="date" id="dob" name="dateOfBirth">
-              <div class="err"></div>
-            </div>
-            <div class="field" id="f-gender">
-              <label for="gender">Gender</label>
-              <select id="gender" name="gender">
-                <option value="">Select gender</option>
-                <option value="female">Female</option>
-                <option value="male">Male</option>
-                <option value="other">Other</option>
-              </select>
-              <div class="err"></div>
+            <div class="signin-line">
+              Already have an account? <a href="../login/login.html">Sign in</a>
             </div>
           </div>
-          <div class="field full" id="f-blood">
-            <label for="bloodGroup">Blood Group</label>
-            <select id="bloodGroup" name="bloodGroup">
-              <option value="">Select blood group</option>
-              <option>A+</option><option>A-</option><option>B+</option><option>B-</option>
-              <option>AB+</option><option>AB-</option><option>O+</option><option>O-</option>
-            </select>
-            <div class="err"></div>
-          </div>
 
-          <button type="submit" class="submit-btn" id="submitBtn">Create Patient Account</button>
-        </form>
+          <!-- STEP: patient form — wired to register.js -->
+          <div id="step-patient" class="form-card">
+            <button
+              type="button"
+              class="back-link"
+              onclick="showStep('select')"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              Change account type
+            </button>
+            <h1>Create your patient account</h1>
+            <p class="lede">
+              Join ClinicFlow and manage your appointments with ease.
+            </p>
 
-        <div class="signin-line">Already have an account? <a href="../login/login.html">Sign In</a></div>
-      </div>
+            <div id="alert" class="alert"></div>
 
-      <!-- STEP: doctor form — now wired to register-doctor.js -->
-      <div id="step-doctor" class="form-card">
-        <button type="button" class="back-link" onclick="showStep('select')">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-          Change account type
-        </button>
-        <h1>Create your doctor account</h1>
-        <p class="lede">Set up your clinic and manage your patient queue with ClinicFlow.</p>
-
-        <div id="doctorAlert" class="alert"></div>
-
-        <form id="registerDoctorForm" novalidate>
-          <div class="section-label">Account Information</div>
-          <div class="grid2">
-            <div class="field" id="f-dr-fullname">
-              <label for="dr-fullname">Full Name</label>
-              <input type="text" id="dr-fullname" name="fullname" placeholder="Hassan Qureshi">
-              <div class="hint">No need to add "Dr." — we'll add it automatically.</div>
-              <div class="err"></div>
-            </div>
-            <div class="field" id="f-dr-email">
-              <label for="dr-email">Email Address</label>
-              <input type="email" id="dr-email" name="email" placeholder="you@example.com">
-              <div class="err"></div>
-            </div>
-            <div class="field" id="f-dr-phone">
-              <label for="dr-phone">Phone Number</label>
-              <input type="tel" id="dr-phone" name="phone" placeholder="03XXXXXXXXX">
-              <div class="err"></div>
-            </div>
-            <div class="field" id="f-dr-password">
-              <label for="dr-password">Password</label>
-              <div class="pw-wrap">
-                <input type="password" id="dr-password" name="password" placeholder="Create a strong password">
-                <span class="eye"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+            <form id="registerForm" novalidate>
+              <div class="section-label">Account Information</div>
+              <div class="field full" id="f-fullname">
+                <label for="fullname">Full Name</label>
+                <input
+                  type="text"
+                  id="fullname"
+                  name="fullname"
+                  placeholder="Ayesha Khan"
+                />
+                <div class="err"></div>
               </div>
-              <div class="err"></div>
+              <div class="field full" id="f-email">
+                <label for="reg-email">Email Address</label>
+                <input
+                  type="email"
+                  id="reg-email"
+                  name="email"
+                  placeholder="you@example.com"
+                />
+                <div class="err"></div>
+              </div>
+              <div class="field full" id="f-phone">
+                <label for="phone">Phone Number</label>
+                <input
+                  type="tel"
+                  id="phone"
+                  name="phone"
+                  placeholder="03XXXXXXXXX"
+                />
+                <div class="err"></div>
+              </div>
+              <div class="field full" id="f-password">
+                <label for="reg-password">Password</label>
+                <div class="pw-wrap">
+                  <input
+                    type="password"
+                    id="reg-password"
+                    name="password"
+                    placeholder="Create a strong password"
+                  />
+                  <span class="eye"
+                    ><svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+                      <circle cx="12" cy="12" r="3" /></svg
+                  ></span>
+                </div>
+                <div class="err"></div>
+              </div>
+
+              <div class="section-label">Personal Details</div>
+              <div class="grid2">
+                <div class="field" id="f-dob">
+                  <label for="dob">Date of Birth</label>
+                  <input type="date" id="dob" name="dateOfBirth" />
+                  <div class="err"></div>
+                </div>
+                <div class="field" id="f-gender">
+                  <label for="gender">Gender</label>
+                  <select id="gender" name="gender">
+                    <option value="">Select gender</option>
+                    <option value="female">Female</option>
+                    <option value="male">Male</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <div class="err"></div>
+                </div>
+              </div>
+              <div class="field full" id="f-blood">
+                <label for="bloodGroup">Blood Group</label>
+                <select id="bloodGroup" name="bloodGroup">
+                  <option value="">Select blood group</option>
+                  <option>A+</option>
+                  <option>A-</option>
+                  <option>B+</option>
+                  <option>B-</option>
+                  <option>AB+</option>
+                  <option>AB-</option>
+                  <option>O+</option>
+                  <option>O-</option>
+                </select>
+                <div class="err"></div>
+              </div>
+
+              <button type="submit" class="submit-btn" id="submitBtn">
+                Create Patient Account
+              </button>
+            </form>
+
+            <div class="signin-line">
+              Already have an account? <a href="../login/login.html">Sign In</a>
             </div>
           </div>
 
-          <div class="section-label">Clinic Information</div>
-          <div class="grid2">
-            <div class="field" id="f-specialization">
-              <label for="specialization">Specialization</label>
-              <input type="text" id="specialization" name="specialization" placeholder="General Physician">
-              <div class="err"></div>
-            </div>
-            <div class="field" id="f-clinicName">
-              <label for="clinicName">Clinic Name</label>
-              <input type="text" id="clinicName" name="clinicName" placeholder="Care Point Clinic">
-              <div class="err"></div>
-            </div>
-          </div>
-          <div class="field full" id="f-clinicAddress">
-            <label for="clinicAddress">Clinic Address</label>
-            <input type="text" id="clinicAddress" name="clinicAddress" placeholder="24-B, Model Town Link Road, Lahore">
-            <div class="err"></div>
-          </div>
-          <div class="field full" id="f-consultationFee">
-            <label for="consultationFee">Consultation Fee (PKR)</label>
-            <input type="number" id="consultationFee" name="consultationFee" min="0" placeholder="3200">
-            <div class="err"></div>
-          </div>
+          <!-- STEP: doctor form — now wired to register-doctor.js -->
+          <div id="step-doctor" class="form-card">
+            <button
+              type="button"
+              class="back-link"
+              onclick="showStep('select')"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              Change account type
+            </button>
+            <h1>Create your doctor account</h1>
+            <p class="lede">
+              Set up your clinic and manage your patient queue with ClinicFlow.
+            </p>
 
-          <div class="section-label professional">Professional Details</div>
-          <div class="grid2">
-            <div class="field" id="f-licenseNumber">
-              <label for="licenseNumber">License Number</label>
-              <input type="text" id="licenseNumber" name="licenseNumber" placeholder="PMC-12345-P">
-              <div class="hint">Your PMDC / PMC registration number.</div>
-              <div class="err"></div>
-            </div>
-            <div class="field" id="f-experience">
-              <label for="experience">Years of Experience</label>
-              <input type="number" min="0" max="70" id="experience" name="experience" placeholder="e.g. 8">
-              <div class="err"></div>
+            <div id="doctorAlert" class="alert"></div>
+
+            <form id="registerDoctorForm" novalidate>
+              <div class="section-label">Account Information</div>
+              <div class="grid2">
+                <div class="field" id="f-dr-fullname">
+                  <label for="dr-fullname">Full Name</label>
+                  <input
+                    type="text"
+                    id="dr-fullname"
+                    name="fullname"
+                    placeholder="Hassan Qureshi"
+                  />
+                  <div class="hint">
+                    No need to add "Dr." — we'll add it automatically.
+                  </div>
+                  <div class="err"></div>
+                </div>
+                <div class="field" id="f-dr-email">
+                  <label for="dr-email">Email Address</label>
+                  <input
+                    type="email"
+                    id="dr-email"
+                    name="email"
+                    placeholder="you@example.com"
+                  />
+                  <div class="err"></div>
+                </div>
+                <div class="field" id="f-dr-phone">
+                  <label for="dr-phone">Phone Number</label>
+                  <input
+                    type="tel"
+                    id="dr-phone"
+                    name="phone"
+                    placeholder="03XXXXXXXXX"
+                  />
+                  <div class="err"></div>
+                </div>
+                <div class="field" id="f-dr-password">
+                  <label for="dr-password">Password</label>
+                  <div class="pw-wrap">
+                    <input
+                      type="password"
+                      id="dr-password"
+                      name="password"
+                      placeholder="Create a strong password"
+                    />
+                    <span class="eye"
+                      ><svg
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      >
+                        <path
+                          d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"
+                        />
+                        <circle cx="12" cy="12" r="3" /></svg
+                    ></span>
+                  </div>
+                  <div class="err"></div>
+                </div>
+              </div>
+
+              <div class="section-label">Clinic Information</div>
+              <div class="grid2">
+                <div class="field" id="f-specialization">
+                  <label for="specialization">Specialization</label>
+                  <input
+                    type="text"
+                    id="specialization"
+                    name="specialization"
+                    placeholder="General Physician"
+                  />
+                  <div class="err"></div>
+                </div>
+                <div class="field" id="f-clinicName">
+                  <label for="clinicName">Clinic Name</label>
+                  <input
+                    type="text"
+                    id="clinicName"
+                    name="clinicName"
+                    placeholder="Care Point Clinic"
+                  />
+                  <div class="err"></div>
+                </div>
+              </div>
+              <div class="field full" id="f-clinicAddress">
+                <label for="clinicAddress">Clinic Address</label>
+                <input
+                  type="text"
+                  id="clinicAddress"
+                  name="clinicAddress"
+                  placeholder="24-B, Model Town Link Road, Lahore"
+                />
+                <div class="err"></div>
+              </div>
+              <div class="field full" id="f-consultationFee">
+                <label for="consultationFee">Consultation Fee (PKR)</label>
+                <input
+                  type="number"
+                  id="consultationFee"
+                  name="consultationFee"
+                  min="0"
+                  placeholder="3200"
+                />
+                <div class="err"></div>
+              </div>
+
+              <div class="section-label professional">Professional Details</div>
+              <div class="grid2">
+                <div class="field" id="f-licenseNumber">
+                  <label for="licenseNumber">License Number</label>
+                  <input
+                    type="text"
+                    id="licenseNumber"
+                    name="licenseNumber"
+                    placeholder="PMC-12345-P"
+                  />
+                  <div class="hint">Your PMDC / PMC registration number.</div>
+                  <div class="err"></div>
+                </div>
+                <div class="field" id="f-experience">
+                  <label for="experience">Years of Experience</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="70"
+                    id="experience"
+                    name="experience"
+                    placeholder="e.g. 8"
+                  />
+                  <div class="err"></div>
+                </div>
+              </div>
+              <div class="field full" id="f-bio">
+                <label for="bio"
+                  >Bio
+                  <span style="font-weight: 400; color: var(--ink-soft)"
+                    >(optional)</span
+                  ></label
+                >
+                <textarea
+                  maxlength="1000"
+                  id="bio"
+                  name="bio"
+                  placeholder="Tell patients a bit about your background, expertise and approach to care..."
+                  oninput="
+                    document.getElementById('bioCount').textContent =
+                      1000 - this.value.length
+                  "
+                ></textarea>
+                <div class="char-count">
+                  <span id="bioCount">1000</span> characters remaining
+                </div>
+                <div class="err"></div>
+              </div>
+
+              <button
+                type="submit"
+                class="submit-btn green"
+                id="submitBtnDoctor"
+              >
+                Create Doctor Account
+              </button>
+            </form>
+
+            <div class="signin-line">
+              Already have an account? <a href="../login/login.html">Sign In</a>
             </div>
           </div>
-          <div class="field full" id="f-bio">
-            <label for="bio">Bio <span style="font-weight:400;color:var(--ink-soft)">(optional)</span></label>
-            <textarea maxlength="1000" id="bio" name="bio" placeholder="Tell patients a bit about your background, expertise and approach to care..." oninput="document.getElementById('bioCount').textContent = 1000 - this.value.length"></textarea>
-            <div class="char-count"><span id="bioCount">1000</span> characters remaining</div>
-            <div class="err"></div>
-          </div>
-
-          <button type="submit" class="submit-btn green" id="submitBtnDoctor">Create Doctor Account</button>
-        </form>
-
-        <div class="signin-line">Already have an account? <a href="../login/login.html">Sign In</a></div>
+        </div>
       </div>
-
     </div>
-  </div>
-</div>
 
-<!-- Toast notifications -->
-<div id="toasts" class="toast-stack"></div>
+    <!-- Toast notifications -->
+    <div id="toasts" class="toast-stack"></div>
 
-<!-- Full-screen success overlay — click anywhere (backdrop, button,
+    <!-- Full-screen success overlay — click anywhere (backdrop, button,
      or press Escape) to dismiss and continue to sign in. -->
-<div id="successOverlay" class="success-overlay">
-  <div class="success-modal">
-    <div class="success-icon">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+    <div id="successOverlay" class="success-overlay">
+      <div class="success-modal">
+        <div class="success-icon">
+          <svg
+            width="32"
+            height="32"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2.4"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <path d="M20 6 9 17l-5-5" />
+          </svg>
+        </div>
+        <h2 id="successTitle">Account created successfully</h2>
+        <p id="successMessage"></p>
+        <button type="button" class="submit-btn green" id="successCloseBtn">
+          Continue to Sign In
+        </button>
+        <div class="success-dismiss-hint">
+          Click anywhere outside this box to dismiss
+        </div>
+      </div>
     </div>
-    <h2 id="successTitle">Account created successfully</h2>
-    <p id="successMessage"></p>
-    <button type="button" class="submit-btn green" id="successCloseBtn">Continue to Sign In</button>
-    <div class="success-dismiss-hint">Click anywhere outside this box to dismiss</div>
-  </div>
-</div>
 
-<script src="../config.js"></script>
-<script src="../auth.js"></script>
-<script src="./register.js"></script>
-<script>
-  function showStep(step){
-    document.getElementById('step-select').style.display = step === 'select' ? 'block' : 'none';
-    document.getElementById('step-patient').classList.toggle('active', step === 'patient');
-    document.getElementById('step-doctor').classList.toggle('active', step === 'doctor');
-    document.querySelector('.right').scrollTo(0,0);
-  }
-</script>
-</body>
+    <script src="../config.js"></script>
+    <script src="../auth.js"></script>
+    <script src="./register.js"></script>
+    <script>
+      function showStep(step) {
+        document.getElementById("step-select").style.display =
+          step === "select" ? "block" : "none";
+        document
+          .getElementById("step-patient")
+          .classList.toggle("active", step === "patient");
+        document
+          .getElementById("step-doctor")
+          .classList.toggle("active", step === "doctor");
+        document.querySelector(".right").scrollTo(0, 0);
+      }
+    </script>
+  </body>
 </html>

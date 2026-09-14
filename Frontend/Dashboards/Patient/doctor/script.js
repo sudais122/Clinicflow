@@ -2320,7 +2320,7 @@ function renderSubscription() {
       <div class="card plan ${s.plan === "Free" ? "current" : ""}">
         <div class="ph"><span class="pname">Free</span>${s.plan === "Free" ? '<span class="curtag">Current plan</span>' : ""}</div>
         <div class="price">PKR 0 <small>per month</small></div>
-        <ul>${["Up to 25 tokens per clinic day", "Live queue with real-time updates", "Basic appointment management", "Email support"].map((f) => `<li><span class="ck">✓</span> ${f}</li>`).join("")}</ul>
+  <ul>${["Up to 25 tokens per clinic day", "Live queue with real-time updates", "Full appointment management", "7 & 28-day revenue view"].map((f) => `<li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 6 9 17l-5-5"/></svg></span> ${f}</li>`).join("")}</ul>
       </div>
       <div class="card plan ${isActivePractice ? "current" : ""}">
         <div class="ph">
@@ -2334,7 +2334,7 @@ function renderSubscription() {
           }
         </div>
         <div class="price">PKR 4,500 <small>per month</small></div>
-        <ul>${["Unlimited tokens per clinic day", "Advanced queue delay controls", "Patient notifications", "Priority support"].map((f) => `<li><span class="ck">✓</span> ${f}</li>`).join("")}</ul>
+<ul>${["Unlimited tokens per clinic day", "Appointment & revenue trend charts", "Custom date-range revenue analytics", "Monthly appointment & revenue summaries"].map((f) => `<li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" width="15" height="15"><path d="M20 6 9 17l-5-5"/></svg></span> ${f}</li>`).join("")}</ul>
         ${practiceButton}
       </div>
     </div>

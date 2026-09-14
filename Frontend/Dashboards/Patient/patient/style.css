@@ -1,16 +1,4 @@
-/* ===========================================================
-   ClinicFlow — Patient Dashboard
-   Colors, fonts, base resets, and the .brand wordmark now live in
-   theme.css — load that BEFORE this file. Everything below is
-   page-specific layout and components only.
 
-   NOTE: this file previously had TWO separate, conflicting .brand
-   blocks (one using var(--blue)/var(--green-strong) for a text-only
-   logo, another hardcoding #1769e8/#12c98b for an image-based logo).
-   Both are removed — theme.css's single .brand block covers this now.
-   =========================================================== */
-
-/* ---------- app shell ---------- */
 .app {
     display: grid;
     grid-template-columns: var(--sbw) 1fr;
@@ -2226,7 +2214,22 @@
     font-weight: 700;
     color: var(--blue-strong);
 }
+/*----logout section styling ---- */
+#logoutBtn,
+#logoutBtn2 {
+  color: var(--red-text);
+}
 
+#logoutBtn:hover,
+#logoutBtn2:hover {
+  background: var(--red-soft);
+  color: var(--red-text);
+}
+
+#logoutBtn svg,
+#logoutBtn2 svg {
+  color: var(--red-text);
+}
 /* ---------- PAGINATION ---------- */
 .pg-wrap {
     display: flex;
