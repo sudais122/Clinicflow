@@ -7,7 +7,7 @@
     "dev": "nodemon --legacy-watch src/index.js",
     "start": "node src/index.js",
     "lint": "eslint .",
-    "test": "jest" 
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +20,7 @@
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.7.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.9.4",
     "multer": "^2.2.0",

@@ -100,7 +100,6 @@ const io = new IntersectionObserver(
 );
 revealEls.forEach((el) => io.observe(el));
 
-
 const menuBtn = document.getElementById("menuBtn");
 const mobileMenu = document.getElementById("mobileMenu");
 

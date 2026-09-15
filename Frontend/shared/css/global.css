@@ -1,13 +1,12 @@
 /* ===========================================================
-   ClinicFlow — Landing Page (global.css)
-   Colors, fonts, base resets, and the .brand wordmark now live in
+   PatientFlow — Landing Page (global.css)
+   Colors, fonts, base resets, and the .brand wordmark live in
    theme.css — load that BEFORE this file. Everything below is
    page-specific layout and components only.
 
    ONE INTENTIONAL OVERRIDE KEPT: this page uses a white body
    background instead of theme.css's default --bg (the dashboards'
-   off-white). See the small override block right after the imports
-   note below.
+   off-white).
    =========================================================== */
 
 html {
@@ -28,8 +27,6 @@ html {
   }
 }
 
-/* Landing page intentionally uses a white background instead of
-   theme.css's default --bg (the dashboards' off-white). */
 body {
   background: var(--white);
   font-feature-settings: "cv02", "cv03", "cv04";
@@ -41,7 +38,8 @@ body {
   padding: 0 28px;
 }
 
-.grad-text {
+.grad-text,
+.b-flow {
   background: var(--grad);
   -webkit-background-clip: text;
   background-clip: text;
@@ -55,7 +53,7 @@ body {
   background: var(--border);
 }
 
-/* ---------- Buttons (simple + premium) ---------- */
+/* ---------- Buttons ---------- */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -79,7 +77,6 @@ body {
   transition: transform 0.18s ease;
 }
 
-/* Primary: solid brand blue, no gradient, no glow */
 .btn-primary {
   background: var(--blue);
   color: #fff;
@@ -93,7 +90,6 @@ body {
   transform: translateX(3px);
 }
 
-/* Ghost: quiet outline that firms up on hover */
 .btn-ghost {
   background: #fff;
   color: var(--ink);
@@ -102,6 +98,12 @@ body {
 
 .btn-ghost:hover {
   border-color: var(--ink);
+}
+
+.btn-lg {
+  font-size: 15px;
+  padding: 13px 22px;
+  border-radius: 10px;
 }
 
 .btn:focus-visible {
@@ -172,32 +174,28 @@ header.nav.scrolled {
 }
 
 @media (max-width: 860px) {
-
   .nav-links,
   .nav-cta .login {
     display: none;
   }
 }
 
-/* logo mark */
 .mark {
   width: 30px;
   height: 30px;
   flex: none;
 }
 
-/* ---------- Hero (subtle premium background) ---------- */
+/* ---------- Hero ---------- */
 .hero {
   position: relative;
   overflow: hidden;
   padding: 92px 0 76px;
-  /* soft on-brand color wash */
   background:
     radial-gradient(60% 50% at 15% 0%, var(--blue-tint) 0%, transparent 60%),
     radial-gradient(50% 45% at 90% 20%, var(--green-tint) 0%, transparent 55%);
 }
 
-/* faint grid that fades out toward the edges */
 .hero::before {
   content: "";
   position: absolute;
@@ -212,7 +210,6 @@ header.nav.scrolled {
   z-index: 0;
 }
 
-/* keep hero content above the background layers */
 .hero-grid {
   position: relative;
   z-index: 1;
@@ -241,7 +238,7 @@ header.nav.scrolled {
 }
 
 .hero h1 {
-  font-size: clamp(44px, 6vw, 80px);
+  font-size: clamp(44px, 6vw, 76px);
   font-weight: 800;
 }
 
@@ -249,7 +246,7 @@ header.nav.scrolled {
   font-size: 19px;
   color: var(--muted);
   margin: 24px 0 34px;
-  max-width: 30ch;
+  max-width: 36ch;
 }
 
 .hero-actions {
@@ -272,25 +269,24 @@ header.nav.scrolled {
   display: flex;
   gap: 34px;
   margin-top: 48px;
+  flex-wrap: wrap;
 }
 
 .hero-stats .stat .n {
   font-family: var(--fd);
   font-weight: 700;
-  font-size: 30px;
+  font-size: 24px;
   letter-spacing: -0.02em;
 }
 
 .hero-stats .stat .l {
   font-family: var(--fm);
   font-size: 11.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--faint);
   margin-top: 3px;
 }
 
-/* hero visual */
 .hero-visual {
   position: relative;
   height: 440px;
@@ -451,7 +447,6 @@ header.nav.scrolled {
 }
 
 @keyframes bob {
-
   0%,
   100% {
     transform: translateY(0);
@@ -490,7 +485,44 @@ section {
   margin-top: 16px;
 }
 
-/* problem */
+/* ---------- Proof ---------- */
+.proof-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 60px;
+  align-items: center;
+}
+
+.proof-copy h2 {
+  font-size: clamp(28px, 3.6vw, 38px);
+  margin-top: 16px;
+}
+
+.proof-copy p {
+  color: var(--muted);
+  font-size: 16.5px;
+  margin-top: 18px;
+  max-width: 46ch;
+}
+
+.quote-slot {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.quote-slot .quote {
+  font-size: 15px;
+  color: var(--ink);
+}
+
+.quote-slot .who {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ---------- Problem ---------- */
 .problem-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -536,6 +568,47 @@ section {
   font-size: 14.5px;
 }
 
+.problem-visual {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.pv-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 18px;
+  box-shadow: var(--shadow-sm);
+}
+
+.pv-card.pv-2 {
+  margin-left: 28px;
+}
+
+.pv-card.pv-3 {
+  margin-left: 56px;
+}
+
+.pv-ic {
+  font-size: 20px;
+  flex: none;
+}
+
+.pv-t {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.pv-d {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+
 .stat-panel {
   background: #fff;
   border: 1px solid var(--border);
@@ -556,8 +629,8 @@ section {
 .stat-row .big {
   font-family: var(--fd);
   font-weight: 800;
-  font-size: 46px;
-  letter-spacing: -0.03em;
+  font-size: 30px;
+  letter-spacing: -0.02em;
 }
 
 .stat-row .big.blue {
@@ -571,9 +644,9 @@ section {
 .stat-row .lbl {
   font-family: var(--fm);
   font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--faint);
+  margin-top: 6px;
 }
 
 .motion-line {
@@ -592,7 +665,7 @@ section {
   font-size: 15px;
 }
 
-/* features */
+/* ---------- Solution / features ---------- */
 .feature {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -600,16 +673,16 @@ section {
   align-items: center;
 }
 
-.feature+.feature {
+.feature + .feature {
   margin-top: 60px;
 }
 
 .feature .num {
   font-family: var(--fm);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--blue);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
 }
 
 .feature h3 {
@@ -636,7 +709,6 @@ section {
   min-height: 260px;
 }
 
-/* mini calendar viz */
 .cal-head {
   display: flex;
   justify-content: space-between;
@@ -698,7 +770,6 @@ section {
   background: var(--green-tint);
 }
 
-/* status list viz */
 .status-item {
   display: flex;
   align-items: center;
@@ -941,7 +1012,7 @@ section {
   margin-top: 2px;
 }
 
-/* how it works */
+/* ---------- How it works ---------- */
 .steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -982,7 +1053,7 @@ section {
   }
 }
 
-/* pricing */
+/* ---------- Pricing ---------- */
 .price-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1020,8 +1091,7 @@ section {
 .plan .pname {
   font-family: var(--fm);
   font-size: 12px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  letter-spacing: 0.1em;
   color: var(--muted);
 }
 
@@ -1029,8 +1099,7 @@ section {
   float: right;
   font-family: var(--fm);
   font-size: 10.5px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  letter-spacing: 0.08em;
   color: #fff;
   background: var(--grad);
   padding: 3px 9px;
@@ -1081,7 +1150,7 @@ section {
   }
 }
 
-/* faq */
+/* ---------- FAQ ---------- */
 .faq-item {
   border-bottom: 1px solid var(--border);
 }
@@ -1150,7 +1219,7 @@ section {
   max-width: 62ch;
 }
 
-/* final CTA */
+/* ---------- Final CTA ---------- */
 .cta {
   position: relative;
   overflow: hidden;
@@ -1196,7 +1265,7 @@ section {
   right: -40px;
 }
 
-/* footer */
+/* ---------- Footer ---------- */
 footer.site {
   background: var(--white);
   border-top: 1px solid var(--border);
@@ -1229,8 +1298,7 @@ footer.site {
 .foot-col h4 {
   font-family: var(--fm);
   font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  letter-spacing: 0.1em;
   color: var(--faint);
   margin-bottom: 14px;
   font-weight: 500;
@@ -1278,8 +1346,8 @@ footer.site {
 }
 
 @media (max-width: 900px) {
-
   .hero-grid,
+  .proof-grid,
   .problem-grid,
   .feature {
     grid-template-columns: 1fr;
@@ -1292,6 +1360,18 @@ footer.site {
   .hero-visual {
     height: 380px;
     order: -1;
+  }
+
+  .problem-visual {
+    order: -1;
+  }
+
+  .pv-card.pv-2 {
+    margin-left: 14px;
+  }
+
+  .pv-card.pv-3 {
+    margin-left: 28px;
   }
 
   .hero-stats {
@@ -1323,19 +1403,17 @@ footer.site {
   transform: none;
 }
 
-
-[data-reveal].d1 {
+[data-reveal="d1"] {
   transition-delay: 0.08s;
 }
 
-[data-reveal].d2 {
+[data-reveal="d2"] {
   transition-delay: 0.16s;
 }
 
-[data-reveal].d3 {
+[data-reveal="d3"] {
   transition-delay: 0.24s;
 }
-
 
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] {
@@ -1373,7 +1451,6 @@ footer.site {
   flex-direction: column;
   gap: 4px;
 
-  /* animated states */
   max-height: 0;
   opacity: 0;
   transform: translateY(-10px);
@@ -1394,7 +1471,6 @@ footer.site {
   padding: 18px 28px 26px;
 }
 
-/* stagger the items in when the menu opens */
 .mobile-menu a.m-link,
 .mobile-menu .m-actions {
   opacity: 0;
@@ -1439,7 +1515,6 @@ footer.site {
   .menu-btn { display: block; }
   .nav-links,
   .nav-cta { display: none; }
-  .menu-btn { display: block; }
 }
 
 @media (prefers-reduced-motion: reduce) {

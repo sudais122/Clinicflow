@@ -38,7 +38,7 @@ const TEST_USER = {
   fullname: "QA Test Patient",
   email: `qa.auth.test.${RUN_ID}@example.com`,
   password: "TestPass123!",
-  phone: "03001234567",
+  phone: "03000000011",
   dateOfBirth: "1995-06-15",
   gender: "male",
   bloodGroup: "O+",

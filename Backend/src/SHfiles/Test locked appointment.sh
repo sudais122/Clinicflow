@@ -1,13 +1,13 @@
 BASE_URL="http://localhost:8000"
-PATIENT_EMAIL="sudais@gmail.com"                 # ADJUST
+PATIENT_EMAIL="khansb17798@gmail.com"                 # ADJUST
 PATIENT_PASSWORD="Patient@123"                       # ADJUST
 DOCTOR_EMAIL="test1@gmail.com"                     # ADJUST
 DOCTOR_PASSWORD="Doctor@123"                        # ADJUST
-DOCTOR_ID="6a927024329273fb37f41c01"      # ADJUST
-APPOINTMENT_DATE="2026-08-14"                         # ADJUST
+DOCTOR_ID="6aa8d3ebfdbd6e73741092fb"      # ADJUST
+APPOINTMENT_DATE="2026-09-15"                         # ADJUST
 PATIENT_COOKIES="./patient_cookies.txt"
 DOCTOR_COOKIES="./doctor_cookies.txt"
-LIMIT=25
+LIMIT=11
 TOTAL=$((LIMIT + 1))  # book one past the limit
 
 echo "=== Step 1: Login as patient ==="

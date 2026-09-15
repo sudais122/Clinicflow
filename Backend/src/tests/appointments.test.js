@@ -13,10 +13,7 @@ import { Queue } from "../models/queue.models.js";
 
 const CONFIG = {
   BASE_URL: process.env.BASE_URL || "http://localhost:8000",
-  // Your app.js never calls mongoose.connect() itself (that must live
-  // in a server-startup file I haven't seen) — set this to whatever
-  // env var / literal URI your real startup file actually uses.
-  MONGO_URI: process.env.MONGO_URI || process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/patientflow",
+  MONGODB_URI: process.env.MONGODB_URI || process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/patientflow",
 };
 
 const RUN_ID = Date.now();
@@ -73,7 +70,7 @@ async function registerDoctor(suffix) {
     fullname: `QA Test Doctor ${suffix}`,
     email: `qa.appt.doctor.${suffix}.${RUN_ID}@example.com`,
     password: "TestPass123!",
-    phone: `030${String(RUN_ID).slice(-8)}`, // 03 + 9 digits, unique-ish per run
+phone: `03${String(RUN_ID).slice(-8)}${suffix.charCodeAt(0) % 10}`, 
     clinicName: `QA Test Clinic ${suffix}`,
     clinicAddress: "123 Test Street, Test City, Test Province",
     specialization: "General Medicine",
@@ -374,7 +371,7 @@ async function cleanup() {
 }
 
 async function main() {
-  await mongoose.connect(CONFIG.MONGO_URI);
+  await mongoose.connect(CONFIG.MONGODB_URI);
   console.log("Connected to MongoDB for direct verification/cleanup.");
 
   let failed = 1;
