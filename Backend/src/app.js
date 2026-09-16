@@ -17,6 +17,7 @@ import reportRoutes from "./routes/reports.routes.js";
 import revenueRoutes from "./routes/Revenue.routes.js";
 import paymentRoutes from "./routes/Payment.routes.js";
 import notification from "./routes/Notification.routes.js"
+import logger from "./utils/looger.js";
 
 //admin
 import adminRouter from "./routes/admin.routes.js";
@@ -74,6 +75,16 @@ app.use("/admin/payments", adminPaymentRouter);
 
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
+
+  logger.error({
+    message: err.message || "Internal Server Error",
+    method: req.method,
+    url: req.originalUrl,
+    statusCode,
+    userId: req.user?._id || req.user?.email || null,
+    ip: req.ip,
+    stack: err.stack,
+  });
 
   return res.status(statusCode).json({
     success: false,

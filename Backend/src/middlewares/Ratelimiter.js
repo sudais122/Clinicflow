@@ -1,5 +1,5 @@
 
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 const RATE_LIMIT_ENABLED = process.env.RATE_LIMIT_ENABLED !== "false";
 const RELAXED_MULTIPLIER = 1000;
@@ -22,7 +22,7 @@ function makeIpLimiter({ windowMs, max }) {
     standardHeaders: true, 
     legacyHeaders: false,
     handler: rateLimitHandler,
-    keyGenerator: (req) => req.ip,
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
   });
 }
 
@@ -33,7 +33,7 @@ function makeUserLimiter({ windowMs, max }) {
     standardHeaders: true,
     legacyHeaders: false,
     handler: rateLimitHandler,
-    keyGenerator: (req) => (req.user?._id ? String(req.user._id) : req.ip),
+    keyGenerator: (req) => (req.user?._id ? String(req.user._id) : ipKeyGenerator(req.ip)),
   });
 }
 
