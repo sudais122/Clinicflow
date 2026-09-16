@@ -1331,7 +1331,9 @@ function apptTableHTML(list) {
         const paid = a.paymentStatus === "paid";
         const paymentCell = paid
           ? `<span class="pill completed"><span class="d"></span> Paid</span>`
-          : `<button class="btn btn-ghost" style="padding:6px 12px;font-size:12.5px;" data-markpaid="${a.id}" data-token="${a.token}">Mark Paid</button>`;
+          : a.status === "cancelled"
+            ? `<span class="pill" style="background:var(--line-soft);color:var(--muted);">Not applicable</span>`
+            : `<button class="btn btn-ghost" style="padding:6px 12px;font-size:12.5px;" data-markpaid="${a.id}" data-token="${a.token}">Mark Paid</button>`;
         return `<tr>
       <td class="tk">#${a.token}</td><td class="pt">${a.patient}</td><td class="dt">${a.date}</td>
       <td><span class="pill ${a.status}"><span class="d"></span> ${label(a.status)}</span></td>
@@ -1443,7 +1445,7 @@ function openDetails(tok) {
       </span></div>
       ${paid && a.paidAt ? `<div class="so-row"><span class="k">Paid At</span><span class="v">${new Date(a.paidAt).toLocaleString("en-US", { timeZone: "Asia/Karachi", hour: "numeric", minute: "2-digit", hour12: true })}</span></div>` : ""}
     </div>
-    ${!paid ? `<button class="btn btn-primary" style="width:100%;margin-top:14px" id="markPaidBtn" data-appt-id="${a.id}">Mark as Paid</button>` : ""}`;
+    ${!paid && a.status !== "cancelled" ? `<button class="btn btn-primary" style="width:100%;margin-top:14px" id="markPaidBtn" data-appt-id="${a.id}">Mark as Paid</button>` : ""}`;
   $("#slideover").innerHTML = `
     <div class="so-head"><div class="so-title">Appointment details</div>
       <button class="modal-close" id="soClose"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12" stroke-linecap="round"/></svg></button></div>

@@ -1,11 +1,3 @@
-/* PatientFlow — Auto-Reset Queue Test Suite
-   Same placement as other test scripts: src/scripts/, same depth as controllers/.
-   Run: node src/scripts/test-auto-reset.js
-
-   Time is "simulated" by backdating queueEmptyAt directly in Mongo,
-   then calling the REAL runAutoResetCycle() function — not a mock,
-   not waiting 15 real minutes. */
-
 import mongoose from "mongoose";
 
 import { User } from "../models/user.models.js";

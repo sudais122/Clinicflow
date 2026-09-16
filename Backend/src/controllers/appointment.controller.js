@@ -684,6 +684,10 @@ const markAppointmentPaid = async (req, res, next) => {
       throw new ApiError(403, "You are not allowed to update this appointment");
     }
 
+    if (appointment.status === "cancelled") {
+      throw new ApiError(400, "A cancelled appointment cannot be marked as paid");
+    }
+
     if (appointment.paymentStatus === "paid") {
       throw new ApiError(400, "Appointment is already marked as paid");
     }

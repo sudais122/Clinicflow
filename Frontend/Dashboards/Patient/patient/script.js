@@ -2423,6 +2423,10 @@
       socket.disconnect();
     });
   }
+  function hidePageLoader() {
+  const el = $("#pageLoader");
+  if (el) el.classList.add("hidden");
+}
   /* ---------------- INIT ---------------- */
   async function init() {
     showView(location.hash.replace("#", "") || "overview");
@@ -2451,6 +2455,7 @@
 
     const hash = location.hash.replace("#", "");
     showView(TITLES[hash] ? hash : "overview");
+    hidePageLoader();
   }
 
   /* ---------------- REPORT A PROBLEM ---------------- */

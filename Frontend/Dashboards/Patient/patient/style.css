@@ -2298,6 +2298,30 @@
     display: flex;
     gap: 5px;
 }
+#pageLoader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#pageLoader.hidden {
+  display: none;
+}
+.page-loader-spinner {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 4px solid var(--line-soft);
+  border-top-color: var(--blue);
+  animation: pageLoaderSpin 0.8s linear infinite;
+}
+@keyframes pageLoaderSpin {
+  to { transform: rotate(360deg); }
+}
+
 @media (max-width: 640px) {
     .pg-desktop {
         display: none;

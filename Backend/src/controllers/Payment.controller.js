@@ -3,7 +3,7 @@ import { Doctor } from "../models/doctor.models.js"; // needed to resolve req.us
 import { Payment, PAID_PLANS, PAYMENT_METHODS } from "../models/Payment.models.js";
 import { Subscription } from "../models/subscription.models.js"; // ADJUST path if different
 import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
-import ApiResponse from "../utils/ApiResponse.js"; // ADJUST if this lives elsewhere
+import ApiResponse from "../utils/apiresponse.js"; // ADJUST if this lives elsewhere
 
 // Keep this in sync with whatever price you show on the Subscription
 // page (the frontend's Practice plan shows PKR 4,500/month).
