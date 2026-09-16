@@ -2427,6 +2427,39 @@
   const el = $("#pageLoader");
   if (el) el.classList.add("hidden");
 }
+function getCurrentViewName() {
+  const active = $$(".view").find((v) => !v.hidden);
+  return active ? active.id.replace("view-", "") : "overview";
+}
+
+async function refreshDashboard() {
+  const btn = $("#globalRefreshBtn");
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("spinning");
+  }
+  try {
+    await loadUser();
+    syncUserChrome();
+    await loadAppointments();
+    syncQueueRooms();
+    await loadMyReports();
+    renderNotifs();
+    renderFAQ();
+    renderMyReports();
+    showView(getCurrentViewName());
+    toast("Dashboard refreshed", "All data has been updated.");
+  } catch (err) {
+    toast("Couldn't refresh the dashboard", err.message, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove("spinning");
+    }
+  }
+}
+
+$("#globalRefreshBtn").addEventListener("click", refreshDashboard);
   /* ---------------- INIT ---------------- */
   async function init() {
     showView(location.hash.replace("#", "") || "overview");

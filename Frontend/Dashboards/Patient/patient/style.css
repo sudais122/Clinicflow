@@ -2335,3 +2335,10 @@
         padding: 14px 16px;
     }
 }
+#globalRefreshBtn.spinning svg {
+  animation: globalRefreshSpin 0.8s linear infinite;
+}
+@keyframes globalRefreshSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
