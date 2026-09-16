@@ -10,11 +10,25 @@
       href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Inter:wght@400;450;500;600&family=IBM+Plex+Mono:wght@500&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="../../../shared/css/Theme.css">
+    <link rel="stylesheet" href="../../../shared/css/Theme.css" />
     <link rel="stylesheet" href="./style.css" />
-        <link rel="icon" type="image/png" sizes="32x32" href="../../../images//favicon-32x32.png">
-<link rel="icon" type="image/png" sizes="16x16" href="../../../images/favicon-16x16.png">
-<link rel="apple-touch-icon" sizes="180x180" href="../../../apple-touch-icon.png">
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="../../../images//favicon-32x32.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="16x16"
+      href="../../../images/favicon-16x16.png"
+    />
+    <link
+      rel="apple-touch-icon"
+      sizes="180x180"
+      href="../../../apple-touch-icon.png"
+    />
     <style>
       .revenue-toolbar-row {
         display: flex;
@@ -171,7 +185,9 @@
         flex-direction: column;
         justify-content: space-between;
         min-height: 270px;
-        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease;
       }
       .summary-card:hover {
         border-color: #cbd5e1;
@@ -475,7 +491,12 @@
             <span class="page-title" id="pageTitle">Overview</span>
           </div>
           <div class="topbar-right">
-            <button class="btn btn-ghost" id="globalRefreshBtn" title="Refresh dashboard" aria-label="Refresh dashboard">
+            <button
+              class="btn btn-ghost"
+              id="globalRefreshBtn"
+              title="Refresh dashboard"
+              aria-label="Refresh dashboard"
+            >
               <svg
                 width="17"
                 height="17"
@@ -561,7 +582,11 @@
           <div class="ov-grid">
             <div class="card lq-card" id="liveQueueCard"></div>
             <div class="card seq-card" id="seqCard">
-              <div class="seq-loading-only" aria-busy="true" aria-label="Loading data">
+              <div
+                class="seq-loading-only"
+                aria-busy="true"
+                aria-label="Loading data"
+              >
                 <span class="seq-spinner"></span>
                 <div class="seq-loading-text">Loading data...</div>
               </div>
@@ -677,14 +702,29 @@
         <section class="view" id="view-appointments-analytics" hidden>
           <div class="page-head">
             <div>
-              <a href="#appointments" data-view="appointments" class="back-link">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+              <a
+                href="#appointments"
+                data-view="appointments"
+                class="back-link"
+              >
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="m15 18-6-6 6-6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
                 </svg>
                 Back to Appointments
               </a>
               <h1>Appointment Analytics</h1>
-              <p class="lead">A closer look at your appointment volume over time.</p>
+              <p class="lead">
+                A closer look at your appointment volume over time.
+              </p>
             </div>
           </div>
           <div id="apptTrendsWrap"></div>
@@ -751,7 +791,11 @@
               <div class="serve-note" id="serveNote"></div>
             </div>
             <div class="card serve-card" id="qcSeqCard">
-              <div class="seq-loading-only" aria-busy="true" aria-label="Loading data">
+              <div
+                class="seq-loading-only"
+                aria-busy="true"
+                aria-label="Loading data"
+              >
                 <span class="seq-spinner"></span>
                 <div class="seq-loading-text">Loading data...</div>
               </div>
@@ -808,13 +852,24 @@
           <div class="page-head">
             <div>
               <a href="#revenue" data-view="revenue" class="back-link">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="m15 18-6-6 6-6" stroke-linecap="round" stroke-linejoin="round" />
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="m15 18-6-6 6-6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
                 </svg>
                 Back to Revenue
               </a>
               <h1>Revenue Analytics</h1>
-              <p class="lead">A closer look at how your clinic revenue changes over time.</p>
+              <p class="lead">
+                A closer look at how your clinic revenue changes over time.
+              </p>
             </div>
           </div>
           <div id="revenueTrendsWrap"></div>
@@ -982,7 +1037,7 @@
     <!-- toasts -->
     <div class="toast-wrap" id="toasts"></div>
 
-    <script src="./config.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script src="./api.js"></script>
     <script src="./script.js"></script>
   </body>
